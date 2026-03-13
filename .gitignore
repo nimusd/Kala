@@ -1,3 +1,16 @@
+.claude/
+/build/
+build/
+CLAUDE.md
+/docs/
+Claude-companion.md
+Claude-sounit-builder.md
+
+
+
+
+
+
 # Prerequisites
 *.d
 
