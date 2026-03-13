@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Reed</title>
+  </head>
+  <body>
+    <h1 id="reed-documentation">Reed Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Reed container is a <strong>digital waveguide physical
+        model</strong> of a conical-bore reed instrument, based on the
+      <em>Saxofony</em> algorithm developed by Perry R. Cook and Gary P.
+      Scavone in the Synthesis ToolKit (STK) and extended with the nonlinear
+      waveguide technique by Romain Michon. It models the interaction between
+      a reed and a conical air column: a ReedTable nonlinearity drives two
+      coupled delay lines split at the blow position, filtered through a
+      OneZero loss filter, producing a tone that blends the character of
+      soprano saxophone, clarinet, and oboe depending on the parameter
+      settings.</p>
+    <p>Because the model is <strong>self-oscillating</strong>, it produces a
+      continuous pitched tone for the full duration of any note. The pitch is
+      tracked continuously, so pitch curves and portamento in the Score Canvas
+      work without artifacts. Legato transitions preserve the bore's vibrating
+      state, allowing smooth slurs between notes. The optional nonlinear
+      allpass section (Michon extension) adds harmonic richness inside the
+      waveguide feedback loop, pushing the timbre toward richer, brasier, or
+      more complex territory.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) — Core sound generation</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 18%">
+        <col style="width: 14%">
+        <col style="width: 12%">
+        <col style="width: 56%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>breathPressure</code></td>
+          <td>Control</td>
+          <td>0.70</td>
+          <td>Breath pressure driving the reed (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>reedStiffness</code></td>
+          <td>Control</td>
+          <td>0.50</td>
+          <td>Reed spring stiffness — shapes the slope of the reed table
+            (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>reedAperture</code></td>
+          <td>Control</td>
+          <td>0.50</td>
+          <td>Reed resting opening — sets the offset of the reed table (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>blowPosition</code></td>
+          <td>Control</td>
+          <td>0.20</td>
+          <td>Normalised position of the reed in the bore (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Control</td>
+          <td>0.20</td>
+          <td>Breath turbulence noise amplitude (0.0–0.4)</td>
+        </tr>
+        <tr>
+          <td><code>vibratoFreq</code></td>
+          <td>Control</td>
+          <td>5.735</td>
+          <td>Vibrato oscillator frequency in Hz (0.0–12.0)</td>
+        </tr>
+        <tr>
+          <td><code>vibratoGain</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Vibrato depth — 0.0 disables vibrato entirely (0.0–0.5)</td>
+        </tr>
+        <tr>
+          <td><code>nlType</code></td>
+          <td>Control</td>
+          <td>0</td>
+          <td>Nonlinear modulation source: 0–4 (see Nonlinear Section)</td>
+        </tr>
+        <tr>
+          <td><code>nlAmount</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Depth of nonlinear filtering — 0.0 fully bypasses it (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>nlFreqMod</code></td>
+          <td>Control</td>
+          <td>10.0</td>
+          <td>Modulation frequency in Hz, used by NL types 3 and 4 (0–200 Hz)</td>
+        </tr>
+        <tr>
+          <td><code>nlAttack</code></td>
+          <td>Control</td>
+          <td>0.10</td>
+          <td>Ramp-in time for the nonlinearity at note start (0.001–2.0 s)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before synthesis. 1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down. Any ratio works — the system is
+            tuning-agnostic. Can be driven by LFO (vibrato), Envelope Engine
+            (pitch glide), or Physics System (spring pitch wobble).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 20%">
+        <col style="width: 60%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Generated reed instrument tone</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 18%">
+        <col style="width: 8%">
+        <col style="width: 12%">
+        <col style="width: 14%">
+        <col style="width: 48%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>breathPressure</code></td>
+          <td>Float</td>
+          <td>0.70</td>
+          <td>0.0–1.0</td>
+          <td>Overall blowing strength</td>
+        </tr>
+        <tr>
+          <td><code>reedStiffness</code></td>
+          <td>Float</td>
+          <td>0.50</td>
+          <td>0.0–1.0</td>
+          <td>Reed table slope coefficient</td>
+        </tr>
+        <tr>
+          <td><code>reedAperture</code></td>
+          <td>Float</td>
+          <td>0.50</td>
+          <td>0.0–1.0</td>
+          <td>Reed table offset / resting opening</td>
+        </tr>
+        <tr>
+          <td><code>blowPosition</code></td>
+          <td>Float</td>
+          <td>0.20</td>
+          <td>0.0–1.0</td>
+          <td>Split point of the two bore delay lines</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Float</td>
+          <td>0.20</td>
+          <td>0.0–0.4</td>
+          <td>Breath noise / breathiness</td>
+        </tr>
+        <tr>
+          <td><code>vibratoFreq</code></td>
+          <td>Float</td>
+          <td>5.735</td>
+          <td>0.0–12.0 Hz</td>
+          <td>Vibrato rate in Hz</td>
+        </tr>
+        <tr>
+          <td><code>vibratoGain</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–0.5</td>
+          <td>Vibrato depth (0.0 = off)</td>
+        </tr>
+        <tr>
+          <td><code>nlType</code></td>
+          <td>Int</td>
+          <td>0</td>
+          <td>0–4</td>
+          <td>Nonlinear modulation source selector</td>
+        </tr>
+        <tr>
+          <td><code>nlAmount</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Nonlinearity depth (0 = bypassed)</td>
+        </tr>
+        <tr>
+          <td><code>nlFreqMod</code></td>
+          <td>Float</td>
+          <td>10.0</td>
+          <td>0–200 Hz</td>
+          <td>Oscillator frequency for NL types 3 &amp; 4</td>
+        </tr>
+        <tr>
+          <td><code>nlAttack</code></td>
+          <td>Float</td>
+          <td>0.10</td>
+          <td>0.001–2.0 s</td>
+          <td>Nonlinearity envelope ramp-in time</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before synthesis (1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="how-it-works">How It Works</h2>
+    <p>The algorithm is a <strong>split digital waveguide</strong> simulation
+      of a conical-bore reed instrument (Cook &amp; Scavone, STK Saxofony).
+      The bore is modelled as two delay lines split at the blow position; the
+      reed is modelled by a clamped linear function (ReedTable); a OneZero
+      filter models high-frequency losses at the open end. Each sample is
+      computed as follows:</p>
+    <pre><code>breathP      = breathPressure × envelope
+             + noiseGain × noise()
+             + vibratoGain × 0.1 × sin(vibratoPhase)
+
+d0           = delay0.lastOut        (open-end segment)
+d1           = delay1.lastOut        (reed-end segment)
+
+[NL allpass applied to d0 if nlAmount &gt; 0]
+
+temp         = −0.95 × oneZeroFilter( d0 )   (open-end reflection)
+output       = temp − d1                      (pressure at blow point)
+pressureDiff = breathP − output
+reedCoeff    = reedTable( pressureDiff )
+
+delay1.tick( temp )
+delay0.tick( breathP − pressureDiff × reedCoeff − temp )
+
+return output × 0.3</code></pre>
+    <p>The key components are:</p>
+    <ul>
+      <li><strong>Delay 0 (open-end segment)</strong>: A
+        linearly-interpolating delay line modelling the longer bore section from
+        the blow position to the open bell end. Its length is proportional to
+        <code>(1 − blowPosition) × totalDelay</code>.</li>
+      <li><strong>Delay 1 (reed-end segment)</strong>: A shorter delay line
+        modelling the bore from the blow position back to the reed. Length is
+        <code>blowPosition × totalDelay</code>, where
+        <code>totalDelay = sampleRate / pitch − 1.5</code> (the 1.5 compensates
+        for the OneZero filter's phase delay).</li>
+      <li><strong>ReedTable</strong>: A clamped linear function modelling the
+        reed valve:
+        <code>clamp(offset + slope × pressureDiff, −1, 1)</code>, where
+        <code>offset = 0.4 + 0.6 × reedAperture</code> and
+        <code>slope = 0.1 + 0.4 × reedStiffness</code>. This approximation of
+        Smith's 1986 clarinet reed model is the primary nonlinear oscillation
+        mechanism.</li>
+      <li><strong>OneZero filter</strong>: A simple one-zero FIR low-pass
+        <code>y[n] = 0.5 × (x[n] + x[n−1])</code> applied to the open-end
+        output, modelling high-frequency absorption at the bell.</li>
+      <li><strong>Nonlinear allpass (Michon extension)</strong>: A first-order
+        allpass filter applied to the open-end delay output (d0) before the
+        OneZero filter, inside the waveguide feedback loop. See
+        <a href="#nonlinear-section">Nonlinear Section</a> below.</li>
+    </ul>
+    <h2 id="breath-envelope">Breath Envelope</h2>
+    <p>A simple <strong>attack/release envelope</strong> is applied to the
+      breath pressure based on note progress:</p>
+    <ul>
+      <li><strong>Attack</strong>: 8% of note duration — ramps from 0 to full
+        breath pressure. Simulates the onset of blowing. Skipped for legato
+        notes.</li>
+      <li><strong>Sustain</strong>: Full breath pressure.</li>
+      <li><strong>Release</strong>: Last 5% of note duration — ramps back to
+        zero. Simulates stopping the breath.</li>
+    </ul>
+    <p>This envelope affects only the <em>internal</em> excitation; the
+      overall dynamics of the note are controlled by the Score Canvas as
+      usual.</p>
+    <h2 id="nonlinear-section">Nonlinear Section (Michon Extension)</h2>
+    <p>When <code>nlAmount &gt; 0</code>, a <strong>first-order nonlinear
+        allpass filter</strong> is applied to the open-end delay output on each
+      sample, before the OneZero reflection filter:</p>
+    <pre><code>H(z) = (θ + z⁻¹) / (1 + θ·z⁻¹)
+y[n] = θ·(x[n] − y[n−1]) + x[n−1]</code></pre>
+    <p>Because it is placed <em>inside</em> the waveguide loop (not as a
+      post-processing effect), the allpass genuinely modifies the bore
+      resonance — each round trip the signal passes through it, accumulating
+      harmonic content with every reflection. The allpass coefficient θ is
+      derived from one of five modulation sources, scaled by
+      <code>nlAmount</code> and the ramp-in envelope, then clamped to
+      (−0.999, 0.999) for stability:</p>
+    <table>
+      <colgroup>
+        <col style="width: 8%">
+        <col style="width: 24%">
+        <col style="width: 68%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Source</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0</td>
+          <td>Open-end signal</td>
+          <td>Direct signal-dependent modulation. Thickens tone and adds subtle
+            harmonic richness that tracks the bore vibration. The most
+            natural-sounding
+            type for reed-like timbres.</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>Leaky average of open-end signal</td>
+          <td>Slow, DC-like drift of the allpass coefficient. Produces a gentle
+            tonal shift over time rather than per-sample modulation.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Open-end signal²</td>
+          <td>Always positive; responds to energy bursts in the bore. Asymmetric
+            modulation that emphasises the attack and forte moments.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Sine wave at <code>nlFreqMod</code> Hz</td>
+          <td>Periodic, independent tremolo-like modulation. At low
+            <code>nlFreqMod</code> values produces slow tonal wobble; at higher
+            values produces audible sidebands.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Sine wave at pitch Hz</td>
+          <td>Sine locked to the fundamental frequency. Produces harmonically
+            coherent waveshaping that tracks pitch — consistent timbre across
+            the register.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The <code>nlAttack</code> parameter ramps the effect from zero to
+      full depth over the specified number of seconds at the start of each
+      note. This prevents a hard click when the nonlinearity switches on and
+      allows the bore tone to establish itself before the effect is
+      applied.</p>
+    <p class="tip"><strong>Tip:</strong> Start with <code>nlType = 0</code>
+      at low <code>nlAmount</code> (0.05–0.15) for the most musical,
+      natural-sounding
+      extension — it adds upper harmonics that give the model more of the
+      characteristic cutting quality of a conical-bore instrument. Types 3 and 4
+      at
+      higher amounts produce more overtly electronic or FM-like timbres.</p>
+    <h2 id="parameter-guide">Parameter Guide</h2>
+    <h3 id="breath-pressure">Breath Pressure</h3>
+    <p>Controls the overall driving force of the simulated breath and is the
+      primary volume control.</p>
+    <ul>
+      <li><strong>Below ~0.55</strong>: Insufficient to sustain oscillation at
+        most reed settings — the model underblows</li>
+      <li><strong>0.60–0.75</strong>: Lighter, more clarinet-like tone —
+        stable with a prominent fundamental</li>
+      <li><strong>0.75–0.85</strong>: Full-bodied tone with good harmonic
+        content (default 0.70)</li>
+      <li><strong>Above 0.90</strong>: Risk of instability or overblowing,
+        especially at high pitches</li>
+    </ul>
+    <h3 id="reed-stiffness">Reed Stiffness</h3>
+    <p>Controls the slope of the ReedTable function, determining how sharply
+      the reed valve transitions between open and closed states.</p>
+    <ul>
+      <li><strong>0.2–0.4</strong>: Soft reed — gradual transition, rounder
+        tone with a strong fundamental</li>
+      <li><strong>0.4–0.6</strong>: Balanced reed character (default 0.5)</li>
+      <li><strong>0.7–0.9</strong>: Stiff reed — abrupt valve action, brighter
+        and more nasal tone with more upper harmonics</li>
+    </ul>
+    <h3 id="reed-aperture">Reed Aperture</h3>
+    <p>Sets the resting opening of the reed — the offset in the ReedTable
+      function. This determines how much of the breath pressure range is
+      "seen" by the reed as open vs. closed.</p>
+    <ul>
+      <li><strong>0.2–0.4</strong>: Nearly closed at rest — requires higher
+        breath pressure to open; produces a more focused, darker tone</li>
+      <li><strong>0.5–0.6</strong>: Moderate opening (default 0.5)</li>
+      <li><strong>0.7–0.9</strong>: Wide opening — the reed is biased open;
+        softer articulation and a more hollow quality</li>
+    </ul>
+    <h3 id="blow-position">Blow Position</h3>
+    <p>Determines the split point of the two bore delay lines. This is the
+      most distinctive parameter of the model — it sets which part
+      of the bore each delay line represents.</p>
+    <ul>
+      <li><strong>0.05–0.15</strong>: Near the reed end — the shorter reed
+        segment dominates; bright, clarinet-like tone with strong odd harmonics</li>
+      <li><strong>0.20–0.30</strong>: Balanced split; fuller harmonic content
+        more reminiscent of soprano saxophone (default 0.20)</li>
+      <li><strong>0.40–0.60</strong>: Near-equal split; produces a rounder,
+        more oboe-like tone</li>
+      <li><strong>Above 0.6</strong>: Increasingly unstable — the open-end
+        segment becomes very short</li>
+    </ul>
+    <h3 id="noise-gain">Noise Gain</h3>
+    <p>Adds breath turbulence noise additively to the breath pressure,
+      simulating the aerodynamic noise of real wind playing.</p>
+    <ul>
+      <li><strong>0.0</strong>: Pure, clean tone</li>
+      <li><strong>0.05–0.15</strong>: Subtle breathiness — natural reed
+        instrument character (default 0.20)</li>
+      <li><strong>0.25–0.40</strong>: Noticeably breathy, airy sound; useful
+        for sul fiato effects</li>
+    </ul>
+    <h3 id="vibrato">Vibrato</h3>
+    <p>Vibrato is disabled by default (<code>vibratoGain = 0.0</code>).
+      When enabled, a sine wave modulates the breath pressure at
+      <code>vibratoFreq</code> Hz with a depth proportional to
+      <code>vibratoGain</code>.</p>
+    <ul>
+      <li>Musical vibrato: <code>vibratoFreq</code> = 4.5–6.5 Hz,
+        <code>vibratoGain</code> = 0.05–0.15</li>
+      <li>Wide vibrato: <code>vibratoFreq</code> = 4.0–5.0 Hz,
+        <code>vibratoGain</code> = 0.15–0.25</li>
+      <li><code>vibratoFreq</code> has no effect when
+        <code>vibratoGain = 0.0</code></li>
+    </ul>
+    <h3 id="nl-amount">NL Amount</h3>
+    <p>The primary nonlinearity control. At 0.0 the nonlinear allpass is
+      completely bypassed. As the value increases, the allpass coefficient
+      modulation grows and the tone becomes progressively richer in upper
+      partials.</p>
+    <ul>
+      <li><strong>0.0</strong>: Pure STK Saxofony model — no nonlinearity</li>
+      <li><strong>0.05–0.15</strong>: Subtle harmonic enrichment — adds
+        brightness and cut</li>
+      <li><strong>0.20–0.40</strong>: Clearly audible tonal thickening and
+        increased upper harmonic content</li>
+      <li><strong>0.5–0.8</strong>: Strong modulation — noticeable waveshaping
+        and spectral spread</li>
+      <li><strong>0.9–1.0</strong>: Aggressive; experimental territory</li>
+    </ul>
+    <h3 id="nl-freq-mod">NL Freq Mod</h3>
+    <p>Only active with <code>nlType = 3</code> (independent sine). For
+      <code>nlType = 4</code> the pitch frequency is used automatically and
+      this parameter is ignored.</p>
+    <ul>
+      <li><strong>0.1–5 Hz</strong>: Very slow sweep — almost static tonal
+        drift</li>
+      <li><strong>5–15 Hz</strong>: Tremolo-rate modulation; audible as a
+        rhythmic tonal pulse</li>
+      <li><strong>30–80 Hz</strong>: Audio-rate sideband generation</li>
+      <li><strong>80–200 Hz</strong>: Rich FM-like sidebands at high
+        <code>nlAmount</code></li>
+    </ul>
+    <h3 id="nl-attack">NL Attack</h3>
+    <p>Ramps the nonlinearity from 0 to full depth at note start. A short
+      attack (0.01–0.05 s) lets the effect appear almost immediately. A long
+      attack (0.5–2.0 s) gradually introduces the nonlinearity as the note
+      progresses.</p>
+    <h2 id="legato-behavior">Legato Behavior</h2>
+    <p>For legato note transitions the bore delay buffers are
+      <strong>preserved</strong>. The oscillation continues uninterrupted from
+      the previous note; only the delay line lengths are updated to the new
+      pitch. The breath attack ramp is skipped so there is no re-onset
+      transient between slurred notes. The nonlinear allpass state (filter
+      memory and oscillator phase) is also preserved.</p>
+    <p>For non-legato notes, all delay lines, the OneZero filter state, and
+      the nonlinear allpass state are fully cleared.</p>
+    <h2 id="tail-behavior">Tail Behavior</h2>
+    <p>The reed tone decays rapidly once blowing stops. In tail mode the
+      breath pressure envelope ramps to zero and the bore delay buffers drain
+      to silence. This typically takes less than 100 ms, after which the audio
+      engine detects silence and closes the tail cleanly. The nonlinear allpass
+      remains active during the tail so the decay character is consistent with
+      the sustained tone.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-reed-tone">Basic Reed Tone</h3>
+    <pre><code>[Reed] → signalOut → [Output]
+  breathPressure: 0.70
+  reedStiffness:  0.50
+  reedAperture:   0.50
+  blowPosition:   0.20
+  noiseGain:      0.20
+  nlAmount:       0.0</code></pre>
+    <h3 id="bright-character">Bright / Cutting Character</h3>
+    <pre><code>breathPressure: 0.72
+reedStiffness:  0.60
+reedAperture:   0.45
+blowPosition:   0.18
+noiseGain:      0.15
+nlType:         0
+nlAmount:       0.10
+nlAttack:       0.08</code></pre>
+    <p>Higher reed stiffness and a lower blow position give more upper
+      harmonics and a brighter, more cutting tone. The type-0 nonlinearity
+      adds further edge without fundamentally changing the character.</p>
+    <h3 id="mellow-character">Mellow / Dark Character</h3>
+    <pre><code>breathPressure: 0.68
+reedStiffness:  0.40
+reedAperture:   0.55
+blowPosition:   0.28
+noiseGain:      0.18</code></pre>
+    <p>A softer reed and higher blow position produce a rounder, darker tone
+      with an oboe-like quality.</p>
+    <h3 id="clarinet-like">Clarinet-Like Tone</h3>
+    <pre><code>breathPressure: 0.75
+reedStiffness:  0.65
+reedAperture:   0.40
+blowPosition:   0.08
+noiseGain:      0.10</code></pre>
+    <p>A very low blow position makes the reed-end segment dominant, which
+      strongly emphasises odd harmonics — giving the characteristic hollow,
+      clarinet-like tone where even harmonics are weak.</p>
+    <h3 id="vibrato-expression">Vibrato Expression</h3>
+    <pre><code>vibratoFreq:  5.2
+vibratoGain:  0.10</code></pre>
+    <p>Or modulate <code>vibratoGain</code> with an Envelope Engine to bring
+      vibrato in gradually over the note.</p>
+    <h3 id="nonlinear-warmth">Nonlinear Warmth (Michon Type 0)</h3>
+    <pre><code>nlType:   0
+nlAmount: 0.10
+nlAttack: 0.12</code></pre>
+    <p>Signal-dependent modulation inside the waveguide loop adds harmonic
+      richness that grows naturally with the bore's own vibration. At this
+      level, the effect is subtle but clearly audible as additional upper
+      partials and a slightly more complex, "alive" tone.</p>
+    <h3 id="harmonic-locking">Harmonic Locking (Michon Type 4)</h3>
+    <pre><code>nlType:   4
+nlAmount: 0.20
+nlAttack: 0.10</code></pre>
+    <p>The modulation sine is locked to the fundamental pitch, so the added
+      harmonics track every note. Gives a consistent, richer timbre across the
+      full pitch range.</p>
+    <h3 id="combining-with-formant-body">Combining with Formant Body</h3>
+    <pre><code>[Reed] → signalOut → [Formant Body] → signalOut → [Output]</code></pre>
+    <p>The Formant Body processor can add vowel-like resonances. Low
+      <code>f1</code>/<code>f2</code> values (300–700 Hz) reinforce the warm
+      lower partials; higher values (800–2000 Hz) bring out nasal qualities.</p>
+    <h3 id="combining-with-reverb">Combining with Reverb</h3>
+    <pre><code>[Reed] → signalOut → [IR Convolution] → signalOut → [Output]
+  wetDry: 0.25–0.45</code></pre>
+    <p>A small room or concert hall IR places the dry physical model in a
+      realistic acoustic context and softens the somewhat clinical quality of
+      the pure waveguide output.</p>
+    <h3 id="pitch-glide-via-envelope">Pitch Glide via Envelope</h3>
+    <pre><code>[Envelope Engine] → controlOut → pitchMultiplier → [Reed]
+  attackTime: 0.08
+  outputMin:  0.97   (start slightly flat)
+  outputMax:  1.0    (arrive at true pitch)</code></pre>
+    <p>The Envelope Engine sweeps the pitch ratio from slightly below 1.0 to
+      1.0 during the attack, creating a subtle pitch glide that mimics the
+      way a real reed player pushes into a note. Because the ratio is
+      tuning-agnostic, the glide depth is a consistent proportional interval
+      at every pitch.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-sound-or-very-faint">No Sound or Very Faint</h3>
+    <ol type="1">
+      <li>Increase <code>breathPressure</code> — must be above ~0.55 to
+        sustain oscillation with typical reed settings</li>
+      <li>Check <code>reedAperture</code> is not too high (above 0.85 biases
+        the reed fully open, reducing the valve action)</li>
+      <li>Ensure <code>blowPosition</code> is not at 0 or 1 (degenerate
+        boundary conditions)</li>
+    </ol>
+    <h3 id="tone-unstable-or-noisy">Tone Unstable or Noisy</h3>
+    <ol type="1">
+      <li>Reduce <code>nlAmount</code> — high values inside the feedback loop
+        can cause instability at borderline operating points</li>
+      <li>Reduce <code>breathPressure</code> slightly; values near 0.90 are
+        prone to overblowing at many pitch/reed combinations</li>
+      <li>Move <code>blowPosition</code> closer to 0.20; extreme values shorten
+        one delay line significantly and can cause aliasing at high pitches</li>
+    </ol>
+    <h3 id="tone-too-clarinet-like">Tone Too Clarinet-Like</h3>
+    <ol type="1">
+      <li>Increase <code>blowPosition</code> toward 0.25–0.35</li>
+      <li>Reduce <code>reedStiffness</code> slightly</li>
+      <li>Add a small <code>nlAmount</code> (0.08–0.15, type 0) to introduce
+        more even harmonics</li>
+    </ol>
+    <h3 id="tone-too-bright-harsh">Tone Too Bright / Harsh</h3>
+    <ol type="1">
+      <li>Reduce <code>reedStiffness</code> toward 0.3–0.4</li>
+      <li>Increase <code>blowPosition</code> slightly</li>
+      <li>Add a Rolloff Processor or LP/HP Filter after the Reed
+        container to attenuate high frequencies</li>
+    </ol>
+    <h3 id="tone-too-dark-lacks-presence">Tone Too Dark / Lacks Presence</h3>
+    <ol type="1">
+      <li>Increase <code>reedStiffness</code> toward 0.6–0.7</li>
+      <li>Reduce <code>blowPosition</code> slightly toward 0.12–0.18</li>
+      <li>Add a small <code>nlAmount</code> (type 0) to enrich upper
+        harmonics</li>
+    </ol>
+    <h3 id="nl-effect-too-abrupt-at-note-start">NL Effect Too Abrupt at
+      Note Start</h3>
+    <ol type="1">
+      <li>Increase <code>nlAttack</code> — a value of 0.3–0.8 s gives the
+        nonlinearity time to fade in smoothly</li>
+      <li>Reduce <code>nlAmount</code> — even small amounts can be
+        surprisingly audible in the attack phase at high reed stiffness</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="pitch-tracking">Pitch Tracking</h3>
+    <p>The total bore delay is recalculated whenever the pitch changes:</p>
+    <pre><code>totalDelay = sampleRate / pitch − 1.5</code></pre>
+    <p>The 1.5 compensates for the combined phase delay of the OneZero filter
+      (0.5 samples at DC) plus one sample of computational latency. The two
+      segment lengths are updated simultaneously:</p>
+    <pre><code>delay0 length = (1 − blowPosition) × totalDelay
+delay1 length =      blowPosition  × totalDelay</code></pre>
+    <h3 id="reed-table">Reed Table</h3>
+    <p>The ReedTable is a clamped linear function approximating Smith's 1986
+      clarinet reed model:</p>
+    <pre><code>offset     = 0.4 + 0.6 × reedAperture
+slope      = 0.1 + 0.4 × reedStiffness
+reedCoeff  = clamp(offset + slope × pressureDiff, −1, 1)</code></pre>
+    <p>When <code>pressureDiff</code> is small (light blowing), the output is
+      near <code>offset</code>; at high differential pressure the reed closes
+      (coefficient approaches −1) or fully opens (coefficient approaches +1).
+      The combination of <code>reedAperture</code> and <code>reedStiffness</code>
+      shapes the entire pressure-to-flow transfer characteristic.</p>
+    <h3 id="no-stk-dependency">No STK Dependency</h3>
+    <p>The model is implemented entirely within Kala
+      (<code>saxophonemodel.h</code> / <code>saxophonemodel.cpp</code>) with
+      no dependency on the STK library. All DSP components — the delay lines,
+      OneZero filter, ReedTable, LCG noise source, vibrato oscillator, and
+      nonlinear allpass — are self-contained.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>saxophonemodel.h</code>, <code>saxophonemodel.cpp</code>. Core
+        algorithm based on STK Saxofony by Perry R. Cook &amp; Gary P. Scavone,
+        1995–2021. Nonlinear extension by Romain Michon.</em></p>
+  </body>
+</html>

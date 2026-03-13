@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Rolloff Processor</title>
+  </head>
+  <body>
+    <h1 id="rolloff-processor-documentation">Rolloff Processor
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Rolloff Processor is a <strong>spectrum shaper</strong> that
+      applies brightness curves to harmonic content. It controls how quickly
+      higher harmonics are attenuated using a power-law formula, with
+      independent control over low and high frequency regions.</p>
+    <p>This is often called the “magic ingredient” that prevents static
+      sound - rolloff is what makes different harmonic configurations sound
+      musically distinct.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Shaping</strong> (Orange) - Transforms spectral character</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>output_amplitude[h] = input_amplitude[h] / h^rolloff</code></pre>
+    <p>Where <code>h</code> is the harmonic number (1, 2, 3, …) and
+      <code>rolloff</code> is the power. Higher rolloff = darker sound (more
+      attenuation of upper harmonics).</p>
+    <p>The dual-band system allows different rolloff powers for low and high
+      harmonics, with smooth blending in between.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>spectrumIn</code></td>
+          <td>Spectrum</td>
+          <td>(empty)</td>
+          <td>Harmonic amplitudes from upstream</td>
+        </tr>
+        <tr>
+          <td><code>lowRolloff</code></td>
+          <td>Control</td>
+          <td>0.3</td>
+          <td>Rolloff power for harmonics below crossover</td>
+        </tr>
+        <tr>
+          <td><code>highRolloff</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Rolloff power for harmonics above crossover</td>
+        </tr>
+        <tr>
+          <td><code>crossover</code></td>
+          <td>Control</td>
+          <td>8</td>
+          <td>Harmonic number where rolloff transitions</td>
+        </tr>
+        <tr>
+          <td><code>transition</code></td>
+          <td>Control</td>
+          <td>4</td>
+          <td>Width of blend zone (in harmonics)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>spectrumOut</code></td>
+          <td>Spectrum</td>
+          <td>Modified harmonic amplitudes</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>lowRolloff</code></td>
+          <td>Float</td>
+          <td>0.3</td>
+          <td>Rolloff power for lower harmonics</td>
+        </tr>
+        <tr>
+          <td><code>highRolloff</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>Rolloff power for upper harmonics</td>
+        </tr>
+        <tr>
+          <td><code>crossover</code></td>
+          <td>Integer</td>
+          <td>8</td>
+          <td>Harmonic number at transition center</td>
+        </tr>
+        <tr>
+          <td><code>transition</code></td>
+          <td>Integer</td>
+          <td>4</td>
+          <td>Number of harmonics to blend across</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="rolloff-power-effects">Rolloff Power Effects</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Rolloff</th>
+          <th>Sound Character</th>
+          <th>Attenuation Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>Very bright</td>
+          <td>No attenuation (all harmonics equal)</td>
+        </tr>
+        <tr>
+          <td>0.3</td>
+          <td>Bright</td>
+          <td>Gentle roll-off</td>
+        </tr>
+        <tr>
+          <td>0.6</td>
+          <td>Balanced</td>
+          <td>Moderate decay</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>Warm</td>
+          <td>-6 dB/octave equivalent</td>
+        </tr>
+        <tr>
+          <td>1.5</td>
+          <td>Soft</td>
+          <td>Strong attenuation</td>
+        </tr>
+        <tr>
+          <td>2.0+</td>
+          <td>Dark</td>
+          <td>Very strong attenuation</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="example-harmonic-attenuation-at-different-powers">Example:
+      Harmonic Attenuation at Different Powers</h3>
+    <p>For the 8th harmonic (h=8): | Rolloff | Multiplier | dB |
+      |———|————|—–| | 0.0 | 1.000 | 0 dB | | 0.5 | 0.354 | -9 dB | | 1.0 |
+      0.125 | -18 dB | | 1.5 | 0.044 | -27 dB | | 2.0 | 0.016 | -36 dB |</p>
+    <h2 id="dual-band-system">Dual-Band System</h2>
+    <h3 id="low-band-harmonics-crossover---transition2">Low Band (harmonics
+      ≤ crossover - transition/2)</h3>
+    <p>Uses <code>lowRolloff</code> power. Typically set lower (brighter) to
+      preserve fundamental character.</p>
+    <h3 id="transition-zone">Transition Zone</h3>
+    <p>Harmonics in this range use cosine-interpolated blend between
+      lowRolloff and highRolloff. Provides smooth, click-free spectral
+      evolution.</p>
+    <h3 id="high-band-harmonics-crossover-transition2">High Band (harmonics
+      ≥ crossover + transition/2)</h3>
+    <p>Uses <code>highRolloff</code> power. Typically set higher (darker) to
+      control brightness and harshness.</p>
+    <h3 id="transition-calculation">Transition Calculation</h3>
+    <div class="sourceCode" id="cb2">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a
+href="#cb2-1" aria-hidden="true" tabindex="-1"></a>transitionStart <span class="op">=</span> crossover <span
+class="op">-</span> transition<span class="op">/</span><span class="dv">2</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>transitionEnd <span
+class="op">=</span> crossover <span class="op">+</span> transition<span class="op">/</span><span
+class="dv">2</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// In transition zone:</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> <span
+class="op">(</span>harmonicNum <span class="op">-</span> transitionStart<span class="op">)</span> <span
+class="op">/</span> <span class="op">(</span>transitionEnd <span class="op">-</span> transitionStart<span
+class="op">)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>blend <span
+class="op">=</span> <span class="fl">0.5</span> × <span class="op">(</span><span
+class="fl">1.0</span> <span class="op">-</span> cos<span class="op">(</span>t × π<span
+class="op">))</span>  <span class="co">// Cosine interpolation</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>effectiveRolloff <span
+class="op">=</span> lowRolloff <span class="op">+</span> <span class="op">(</span>highRolloff <span
+class="op">-</span> lowRolloff<span class="op">)</span> × blend</span></code></pre>
+    </div>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-spectrum-shaping">Basic Spectrum Shaping</h3>
+    <pre><code>Harmonic Generator ──→ spectrumIn ──→ Rolloff Processor ──→ spectrumOut ──→ Spectrum to Signal</code></pre>
+    <h3 id="brightness-modulation">Brightness Modulation</h3>
+    <p>Connect an envelope or LFO to animate brightness over time:</p>
+    <pre><code>Envelope Engine ──→ lowRolloff
+                          │
+Harmonic Generator ──→ Rolloff Processor ──→ Spectrum to Signal</code></pre>
+    <h3 id="multi-stage-shaping">Multi-Stage Shaping</h3>
+    <p>Chain multiple Rolloff Processors for complex curves:</p>
+    <pre><code>Harmonic Generator ──→ Rolloff 1 (overall shape) ──→ Rolloff 2 (fine-tune highs) ──→ Spectrum to Signal</code></pre>
+    <h2 id="preset-suggestions">Preset Suggestions</h2>
+    <h3 id="instrument-characters">Instrument Characters</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>lowRolloff</th>
+          <th>highRolloff</th>
+          <th>crossover</th>
+          <th>transition</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Bright Brass</td>
+          <td>0.2</td>
+          <td>0.8</td>
+          <td>6</td>
+          <td>4</td>
+        </tr>
+        <tr>
+          <td>Warm Strings</td>
+          <td>0.4</td>
+          <td>1.5</td>
+          <td>8</td>
+          <td>4</td>
+        </tr>
+        <tr>
+          <td>Soft Woodwind</td>
+          <td>0.3</td>
+          <td>1.2</td>
+          <td>5</td>
+          <td>3</td>
+        </tr>
+        <tr>
+          <td>Percussive</td>
+          <td>0.1</td>
+          <td>2.0</td>
+          <td>4</td>
+          <td>2</td>
+        </tr>
+        <tr>
+          <td>Dark Pad</td>
+          <td>0.6</td>
+          <td>2.0</td>
+          <td>6</td>
+          <td>6</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="dynamic-expression">Dynamic Expression</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Phase</th>
+          <th>lowRolloff</th>
+          <th>highRolloff</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Attack</td>
+          <td>0.1</td>
+          <td>0.5</td>
+          <td>Bright, cutting</td>
+        </tr>
+        <tr>
+          <td>Sustain</td>
+          <td>0.3</td>
+          <td>1.0</td>
+          <td>Balanced</td>
+        </tr>
+        <tr>
+          <td>Release</td>
+          <td>0.5</td>
+          <td>1.5</td>
+          <td>Softening</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="multiplicative-nature">Multiplicative Nature</h3>
+    <p>Rolloff only attenuates - it never adds harmonics or boosts
+      amplitude. Output amplitudes are always ≤ input amplitudes.</p>
+    <h3 id="crossover-clamping">Crossover Clamping</h3>
+    <p>Crossover is clamped to minimum of 1 (can’t be below the
+      fundamental).</p>
+    <h3 id="transition-width-0">Transition Width 0</h3>
+    <p>Setting transition to 0 creates an abrupt change at the crossover
+      point (no blending).</p>
+    <h3 id="inverted-rolloff">Inverted Rolloff</h3>
+    <p>Setting lowRolloff &gt; highRolloff is valid and creates unusual
+      timbres where upper harmonics are relatively louder than lower ones
+      (within the rolloff curve).</p>
+    <h2 id="comparison-with-other-shapers">Comparison with Other
+      Shapers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 40%">
+        <col style="width: 29%">
+        <col style="width: 29%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Domain</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Rolloff Processor</strong></td>
+          <td>Spectrum</td>
+          <td>Power-law harmonic attenuation</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Signal</td>
+          <td>Resonant filtering at formant frequencies</td>
+        </tr>
+        <tr>
+          <td><strong>Noise Color Filter</strong></td>
+          <td>Signal</td>
+          <td>Frequency-dependent noise shaping</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Rolloff Processor works in the spectrum domain (before conversion to
+      audio), while Formant Body and filters work on the audio signal
+      itself.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="mathematical-foundation">Mathematical Foundation</h3>
+    <p>The rolloff formula <code>1/h^p</code> is equivalent to: - <strong>p
+        = 1.0</strong>: -6 dB per octave (natural harmonic decay) - <strong>p =
+        2.0</strong>: -12 dB per octave - <strong>p = 0.5</strong>: -3 dB per
+      octave</p>
+    <h3 id="cosine-interpolation">Cosine Interpolation</h3>
+    <p>The transition zone uses cosine interpolation which provides: - C0
+      continuity (no amplitude jumps) - C1 continuity (no derivative
+      discontinuities) - Smooth perceptual transition</p>
+    <h3 id="fundamental-handling">Fundamental Handling</h3>
+    <p>The fundamental (h=1) is always divided by 1^p = 1, so it passes
+      through unchanged regardless of rolloff power.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>rolloffprocessor.h</code>,
+        <code>rolloffprocessor.cpp</code></em></p>
+  </body>
+</html>

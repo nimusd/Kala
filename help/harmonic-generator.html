@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Harmonic Generator</title>
+  </head>
+  <body>
+    <h1 id="harmonic-generator-documentation">Harmonic Generator
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Harmonic Generator creates the fundamental harmonic spectrum —
+      the “bones” of sound in Kala. It generates rich harmonic content
+      using additive synthesis, providing the raw material that other
+      containers shape and transform into final sound.</p>
+    <p>When <strong>PADsynth mode</strong> is enabled, the generator
+      additionally pre-computes a large wavetable using the PADsynth
+      algorithm: each harmonic is spread across a frequency-domain band using
+      a configurable profile, then the whole spectrum is inverse-FFT’d into a
+      single-cycle wavetable. This gives sounds a characteristic lush,
+      organic, slightly chorused quality that is difficult to achieve with
+      pure additive synthesis alone. The PADsynth wavetable is passed
+      automatically to a connected Spectrum to Signal container for
+      playback.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Required for any sound
+      generation</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>purity</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Blend between DNA preset and flat spectrum (0.0 = pure DNA, 1.0 =
+            all harmonics equal)</td>
+        </tr>
+        <tr>
+          <td><code>drift</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Per-harmonic detuning for organic quality (0.0–0.1)</td>
+        </tr>
+        <tr>
+          <td><code>digitWindowOffset</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Shifts the reading window into the digit formula's fractional
+            expansion. Only active when a Digit Formula DNA is loaded.
+            Connection weight controls the offset range (e.g. weight 100 →
+            offsets 0–100).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>spectrum</code></td>
+          <td>Spectrum</td>
+          <td>Array of harmonic amplitudes (indexed by harmonic number)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <h3 id="core-parameters">Core Parameters</h3>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>numHarmonics</code></td>
+          <td>Integer</td>
+          <td>64</td>
+          <td>1–maxHarmonics</td>
+          <td>Number of harmonics to generate</td>
+        </tr>
+        <tr>
+          <td><code>dnaSelect</code></td>
+          <td>Integer</td>
+          <td>0</td>
+          <td>−1 to 5</td>
+          <td>DNA preset (see DNA Presets section)</td>
+        </tr>
+        <tr>
+          <td><code>purity</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Blend between DNA preset and flat spectrum</td>
+        </tr>
+        <tr>
+          <td><code>drift</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–driftMax</td>
+          <td>Per-harmonic frequency detuning</td>
+        </tr>
+        <tr>
+          <td><code>digitWindowOffset</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0–9999</td>
+          <td>Base window offset into the digit formula string (inspector
+            spinbox). Acts as the starting point before any port modulation is
+            applied.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="padsynth-parameters-inspector-only">PADsynth Parameters
+      (Inspector Only)</h3>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>padEnabled</code></td>
+          <td>Bool</td>
+          <td>0 (off)</td>
+          <td>0–1</td>
+          <td>Enable PADsynth wavetable generation</td>
+        </tr>
+        <tr>
+          <td><code>padBandwidth</code></td>
+          <td>Float</td>
+          <td>40.0</td>
+          <td>1–200</td>
+          <td>Bandwidth of each harmonic spread in cents</td>
+        </tr>
+        <tr>
+          <td><code>padBandwidthScale</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>How bandwidth grows with harmonic number (0 = uniform, 1 = linear,
+            2
+            = quadratic)</td>
+        </tr>
+        <tr>
+          <td><code>padProfileShape</code></td>
+          <td>Integer</td>
+          <td>0 (Gaussian)</td>
+          <td>0–2</td>
+          <td>Profile shape: 0 = Gaussian, 1 = Raised Cosine, 2 = Square</td>
+        </tr>
+        <tr>
+          <td><code>padFftSize</code></td>
+          <td>Integer</td>
+          <td>262144</td>
+          <td>65536–1048576</td>
+          <td>Wavetable size in samples (must be a power of 2)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="custom-dna-parameters-when-dnaselect-1">Custom DNA Parameters
+      (when dnaSelect = −1)</h3>
+    <table>
+      <colgroup>
+        <col style="width: 36%">
+        <col style="width: 20%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>customDnaCount</code></td>
+          <td>Integer</td>
+          <td>Number of custom harmonic amplitudes stored</td>
+        </tr>
+        <tr>
+          <td><code>customDna_0</code>, <code>customDna_1</code>, …</td>
+          <td>Float</td>
+          <td>Amplitude for each harmonic</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="dna-presets">DNA Presets</h2>
+    <h3 id="vocal-bright">0: Vocal (Bright)</h3>
+    <ul>
+      <li><strong>Harmonic profile</strong>: 1.2 power rolloff</li>
+      <li><strong>Boosts</strong>: Harmonics 3–5 and 8–12 boosted 1.4×</li>
+      <li><strong>Character</strong>: Bright, present, forward</li>
+      <li><strong>Use for</strong>: Lead vocals, bright solo instruments</li>
+    </ul>
+    <h3 id="vocal-warm">1: Vocal (Warm)</h3>
+    <ul>
+      <li><strong>Harmonic profile</strong>: 1.6 power rolloff</li>
+      <li><strong>Boosts</strong>: Harmonics 2–4 boosted 1.5×</li>
+      <li><strong>Character</strong>: Warm, mellow, recessed</li>
+      <li><strong>Use for</strong>: Backing vocals, warm pads, male
+        vocals</li>
+    </ul>
+    <h3 id="brass-trumpet-like">2: Brass (Trumpet-like)</h3>
+    <ul>
+      <li><strong>Harmonic profile</strong>: 1.5 power rolloff</li>
+      <li><strong>Boosts</strong>: Odd harmonics boosted 1.3×</li>
+      <li><strong>Character</strong>: Bright, brassy, buzzy</li>
+      <li><strong>Use for</strong>: Trumpets, trombones, brass sections</li>
+    </ul>
+    <h3 id="reed-clarinet-like">3: Reed (Clarinet-like)</h3>
+    <ul>
+      <li><strong>Harmonic profile</strong>: Dominant odd harmonics (1/n^1.4),
+        very weak even harmonics (0.1/n^2.0)</li>
+      <li><strong>Character</strong>: Hollow, woody, nasal</li>
+      <li><strong>Use for</strong>: Clarinets, oboes, reed instruments</li>
+    </ul>
+    <h3 id="string-violin-like">4: String (Violin-like)</h3>
+    <ul>
+      <li><strong>Harmonic profile</strong>: 1.3 power rolloff</li>
+      <li><strong>Boosts</strong>: Harmonics 5–10 boosted 1.2×</li>
+      <li><strong>Character</strong>: Rich, present mid-range</li>
+      <li><strong>Use for</strong>: Violins, cellos, string sections</li>
+    </ul>
+    <h3 id="pure-sine-test">5: Pure Sine (Test)</h3>
+    <ul>
+      <li><strong>Harmonic profile</strong>: Only fundamental present</li>
+      <li><strong>Character</strong>: Clean, toneless</li>
+      <li><strong>Use for</strong>: Testing, reference tone</li>
+    </ul>
+    <h2 id="custom-dna">Custom DNA</h2>
+    <p>When <code>dnaSelect = −1</code>, the DNA Editor dialog lets you
+      define per-harmonic amplitudes directly. Built-in custom patterns
+      include:</p>
+    <ul>
+      <li><strong>All Harmonics</strong> — standard harmonic series</li>
+      <li><strong>Odd Only</strong> — clarinet-like (1, 3, 5, 7…)</li>
+      <li><strong>Even Only</strong> — hollow timbre (2, 4, 6, 8…)</li>
+      <li><strong>Odd Dominant</strong> — strong odd harmonics, weak even</li>
+      <li><strong>Fundamental+</strong> — near-sine with very weak
+        overtones</li>
+      <li><strong>Octaves Only</strong> — organ-like (1, 2, 4, 8, 16…)</li>
+      <li><strong>Fibonacci Sequence</strong> — harmonics at Fibonacci
+        numbers</li>
+      <li><strong>Prime Numbers</strong> — harmonics at prime numbers</li>
+    </ul>
+    <hr>
+    <h2 id="digit-formula-dna">Digit Formula DNA</h2>
+    <p>Digit Formula is a DNA mode that derives harmonic amplitudes from the
+      decimal digits of a number. Each fractional digit (0–9) maps to an
+      amplitude of <code>digit / 9.0</code>, giving a natural 0–1 range
+      without any explicit scaling. The result is a harmonic spectrum whose
+      shape is defined by the mathematical structure of the number — periodic
+      for rationals, non-repeating for irrationals.</p>
+    <p>Select <strong>Digit Formula</strong> from the Sequence dropdown in
+      the DNA Editor to access this mode.</p>
+    <h3 id="digit-formula-concepts">Concepts</h3>
+    <h4 id="digit-formula-rational">Rational numbers — periodic spectra</h4>
+    <p>Any ratio of two integers produces a <strong>repeating decimal</strong>.
+      For example, 1/7 = 0.<strong>142857</strong>142857142857… — the
+      six-digit period <code>142857</code> repeats forever. Across 64 harmonics
+      this period cycles ~10 times, creating a <em>periodic amplitude lattice</em>:
+      harmonics 1, 7, 13, 19… all share the same amplitude; harmonics 2, 8,
+      14, 20… share another. The periodicity is audibly present as a
+      characteristic timbral grain.</p>
+    <p>Fractions with <strong>prime denominators</strong> produce the longest
+      periods. The period length of 1/<em>p</em> divides <em>p</em>−1, so:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Formula</th>
+          <th>Period</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1/7</td>
+          <td>6 digits</td>
+          <td>Short, strongly periodic</td>
+        </tr>
+        <tr>
+          <td>1/13</td>
+          <td>6 digits</td>
+          <td>Different six-note pattern</td>
+        </tr>
+        <tr>
+          <td>1/17</td>
+          <td>16 digits</td>
+          <td>Two-octave-equivalent cycle</td>
+        </tr>
+        <tr>
+          <td>1/97</td>
+          <td>96 digits</td>
+          <td>No repetition within 64 harmonics — sounds irrational</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Rational digit extraction uses <strong>exact integer arithmetic</strong>
+      (<code>__int128</code> long division) — there is no floating-point
+      precision limit. The window can scroll to digit 9999 and the digits are
+      always correct.</p>
+    <h4 id="digit-formula-irrational">Irrational constants — non-repeating
+      spectra</h4>
+    <p>The built-in constants (π, e, φ, √2, √3, √5) have 120 hardcoded
+      fractional digits each. Every window position gives a genuinely unique
+      harmonic distribution with no repeating structure.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Constant</th>
+          <th>Digits available</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>π (Pi)</td>
+          <td>120</td>
+          <td>Irregular, unpredictable</td>
+        </tr>
+        <tr>
+          <td>e (Euler)</td>
+          <td>120</td>
+          <td>Similar irregularity, different pattern</td>
+        </tr>
+        <tr>
+          <td>φ (Golden Ratio)</td>
+          <td>120</td>
+          <td>Related to Fibonacci — subtle near-periodicity</td>
+        </tr>
+        <tr>
+          <td>√2, √3, √5</td>
+          <td>120</td>
+          <td>Algebraic irrationals, dense and varied</td>
+        </tr>
+      </tbody>
+    </table>
+    <h4 id="digit-formula-window">The window</h4>
+    <p>The <strong>Start digit</strong> spinbox in the DNA Editor selects
+      where in the fractional expansion to begin reading. With 64 harmonics
+      and start = 0, digits 0–63 are used. At start = 64, digits 64–127 are
+      used — a completely different spectrum from the same number. Sliding the
+      window is how you explore the mathematical landscape of a constant or
+      ratio.</p>
+    <h4 id="digit-formula-pad">With PADsynth</h4>
+    <p>Combining Digit Formula DNA with PADsynth is particularly effective.
+      The digit period becomes a harmonic skeleton; PADsynth spreads each
+      harmonic into a frequency-domain cloud. For 1/7, the six period classes
+      become six overlapping spectral blooms at different amplitudes — the
+      periodicity remains audible as a structural grain, but each harmonic has
+      organic width and warmth. Different window positions shift which class
+      gets which amplitude, morphing the instrument while keeping its
+      mathematical DNA.</p>
+    <h3 id="digit-formula-operators">Operators</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Operator</th>
+          <th>Description</th>
+          <th>Precision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>A ÷ B</td>
+          <td>Division — most useful; produces rational with period related to
+            denominator</td>
+          <td>Exact (integer long division)</td>
+        </tr>
+        <tr>
+          <td>A × B</td>
+          <td>Multiplication of two rationals</td>
+          <td>Exact</td>
+        </tr>
+        <tr>
+          <td>A + B, A − B</td>
+          <td>Addition/subtraction</td>
+          <td>Exact</td>
+        </tr>
+        <tr>
+          <td>A²</td>
+          <td>Square of A</td>
+          <td>Exact</td>
+        </tr>
+        <tr>
+          <td>Aᴮ (integer B ≤ 20)</td>
+          <td>Integer power</td>
+          <td>Exact</td>
+        </tr>
+        <tr>
+          <td>√A</td>
+          <td>Square root — irrational for non-perfect-square A</td>
+          <td>~18 digits (long double)</td>
+        </tr>
+        <tr>
+          <td>Aᴮ (non-integer B)</td>
+          <td>Real-valued power</td>
+          <td>~18 digits (long double)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="digit-formula-performance">Window Offset as a Performance Parameter</h3>
+    <p>The <code>digitWindowOffset</code> input port allows the window to
+      be <strong>animated during playback</strong> by a control signal. As the
+      offset shifts, new digit positions are read and harmonic amplitudes
+      update — the timbre morphs continuously through the mathematical
+      landscape of the formula while preserving its fundamental DNA
+      character.</p>
+    <p><strong>Setup:</strong></p>
+    <ol type="1">
+      <li>Set DNA to Digit Formula in the DNA Editor and click OK</li>
+      <li>Add an <strong>Envelope Engine</strong> (set to Score Curve mode)</li>
+      <li>Connect its output to the <code>digitWindowOffset</code> port of the
+        Harmonic Generator</li>
+      <li>Set the <strong>connection weight</strong> to control the sweep range
+        (e.g. weight = 50 → offset sweeps 0 to 50 over the curve)</li>
+      <li>Draw a curve in the score for that note</li>
+    </ol>
+    <pre><code>[Score Curve] → [Envelope Engine (score curve)] → digitWindowOffset → [Harmonic Generator]
+                                                   weight: 50
+                                                   → offset sweeps 0–50 over note duration</code></pre>
+    <p>The <strong>Window Offset</strong> spinbox in the inspector sets the
+      base offset — the static starting position used when no port is
+      connected, or as an additive offset when a port is connected.</p>
+    <p>With 1/7 (period 6) and a sweep of 6 digits, the timbre makes exactly
+      one full period rotation and returns to its starting character — a
+      closed timbral arc. With π and a sweep of 50 digits, the timbre
+      traverses 50 unique harmonic configurations — an open, non-repeating
+      journey.</p>
+    <h3 id="digit-formula-persistence">Persistence</h3>
+    <p>The precomputed digit string (up to 1000 digits) is stored in both
+      <code>.kala</code> project files and <code>.sounit</code> files, so the
+      full window range is always available after loading without any
+      recomputation.</p>
+    <hr>
+    <h2 id="purity-control">Purity Control</h2>
+    <p>Blends between the DNA preset and a flat spectrum:</p>
+    <pre><code>amplitude[h] = dna[h] × (1 − purity) + (1/h) × purity</code></pre>
+    <ul>
+      <li><strong>0.0</strong>: Pure DNA preset — full character</li>
+      <li><strong>1.0</strong>: Flat 1/h spectrum — even harmonic
+        distribution</li>
+      <li><strong>Intermediate</strong>: Weighted blend</li>
+    </ul>
+    <h2 id="drift-control">Drift Control</h2>
+    <p>Adds organic variation through per-harmonic frequency modulation:</p>
+    <pre><code>driftOffset[h] += drift × 0.0001 × sin(phase × 0.023 + h × 1.3)
+harmonicPhase += driftOffset[h] × 2π</code></pre>
+    <ul>
+      <li><strong>0.0</strong>: Perfectly stable harmonics</li>
+      <li><strong>Small values (0.01–0.03)</strong>: Subtle organic
+        beating</li>
+      <li><strong>Higher values</strong>: Pronounced detuning, ensemble-like
+        texture</li>
+    </ul>
+    <hr>
+    <h2 id="padsynth-mode">PADsynth Mode</h2>
+    <p>PADsynth is an algorithm originally from ZynAddSubFX (Paul Nasca).
+      Instead of summing sine waves at integer harmonics, it <strong>spreads
+        each harmonic’s energy across a frequency band</strong> in the FFT
+      domain before converting to a time-domain wavetable. The result is a
+      sound that has a slightly blurred, lush quality — harmonics are no
+      longer infinitely thin spectral lines but have a gentle width, which
+      creates natural-sounding beating and warmth.</p>
+    <h3 id="how-it-works">How It Works</h3>
+    <ol type="1">
+      <li>
+        <p><strong>Start from the DNA harmonic amplitudes</strong> — the
+          same amplitudes used by normal additive synthesis (including purity
+          blend)</p>
+      </li>
+      <li>
+        <p><strong>For each harmonic</strong>, compute a bandwidth in
+          Hz:</p>
+        <pre><code>bw_hz = (2^(padBandwidth/1200) − 1) × fundamental × harmonicNumber^padBandwidthScale</code></pre>
+      </li>
+      <li>
+        <p><strong>Spread the harmonic’s amplitude</strong> across
+          neighboring FFT bins using the chosen profile shape</p>
+      </li>
+      <li>
+        <p><strong>Assign random phases</strong> to each bin (fixed seed 42
+          — deterministic per build)</p>
+      </li>
+      <li>
+        <p><strong>Inverse FFT</strong> the entire frequency-domain buffer →
+          time-domain wavetable</p>
+      </li>
+      <li>
+        <p><strong>Normalize</strong> the wavetable to peak ±1.0</p>
+      </li>
+      <li>
+        <p><strong>Pass the wavetable to Spectrum to Signal</strong> for
+          playback at any pitch</p>
+      </li>
+    </ol>
+    <p>The wavetable is generated <strong>once at graph build time</strong>
+      at a reference pitch of 131 Hz (≈ C3). Spectrum to Signal plays it back
+      at the correct pitch by adjusting its read speed.</p>
+    <h3 id="padbandwidth-harmonic-spread"><code>padBandwidth</code> —
+      Harmonic Spread</h3>
+    <p>Controls the width of each harmonic’s energy spread in cents. One
+      cent = 1/100 of a semitone.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>padBandwidth</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1–5 cents</td>
+          <td>Very narrow — barely different from additive synthesis</td>
+        </tr>
+        <tr>
+          <td>10–20 cents</td>
+          <td>Subtle warmth, slight beating</td>
+        </tr>
+        <tr>
+          <td>40 (default)</td>
+          <td>Noticeable bloom — classic PADsynth character</td>
+        </tr>
+        <tr>
+          <td>80–100 cents</td>
+          <td>Wide spread — lush, heavily chorused</td>
+        </tr>
+        <tr>
+          <td>150–200 cents</td>
+          <td>Very wide — almost noisy, harmonics merge together</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="padbandwidthscale-harmonic-growth"><code>padBandwidthScale</code> —
+      Harmonic Growth</h3>
+    <p>Controls how bandwidth grows with harmonic number:</p>
+    <pre><code>effective_bw = bw_hz × harmonicNumber^padBandwidthScale</code></pre>
+    <table>
+      <colgroup>
+        <col style="width: 70%">
+        <col style="width: 29%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>padBandwidthScale</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>All harmonics have the same absolute bandwidth (Hz)</td>
+        </tr>
+        <tr>
+          <td>1.0 (default)</td>
+          <td>Bandwidth grows linearly with harmonic number — physically
+            realistic
+            (constant cents per harmonic)</td>
+        </tr>
+        <tr>
+          <td>2.0</td>
+          <td>Bandwidth grows quadratically — upper harmonics become very wide
+            and
+            diffuse</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>At <code>scale = 1.0</code>, each harmonic has the same bandwidth
+      <em>in cents</em>, which matches the perceptual model of how musical
+      instruments spread.</p>
+    <h3 id="padprofileshape-spread-shape"><code>padProfileShape</code> —
+      Spread Shape</h3>
+    <p>The profile function determines how each harmonic’s amplitude falls
+      off as you move away from its center frequency.</p>
+    <h4 id="gaussian-default">0: Gaussian (default)</h4>
+    <pre><code>profile(x) = exp(−x² × 2.7726)    [−6 dB at ±1 bw]</code></pre>
+    <p>Smooth, continuous rolloff — no hard edges. The most natural-sounding
+      profile; creates smooth beating. Tails extend beyond the nominal
+      bandwidth (spread ≈ 3× bw to capture the Gaussian tails).</p>
+    <p><strong>Character:</strong> Warm, smooth, organic. The classic
+      PADsynth sound.</p>
+    <h4 id="raised-cosine">1: Raised Cosine</h4>
+    <pre><code>profile(x) = 0.5 × (1 + cos(π × x))    for |x| ≤ 1, else 0</code></pre>
+    <p>Cosine-shaped bell that goes cleanly to zero at the bandwidth
+      boundary. Slightly more defined than Gaussian — the harmonics remain
+      more distinct.</p>
+    <p><strong>Character:</strong> Warm but more focused than Gaussian. Good
+      balance between spread and definition.</p>
+    <h4 id="square">2: Square</h4>
+    <pre><code>profile(x) = 1    for |x| ≤ 1, else 0</code></pre>
+    <p>Flat top within the bandwidth, hard cutoff outside. Creates a more
+      buzzy, less smooth spread — the bins within the bandwidth all have equal
+      amplitude.</p>
+    <p><strong>Character:</strong> Rougher texture, more
+      artificial-sounding. Good for metallic or electronic timbres where a
+      more uniform spread is desirable.</p>
+    <h3 id="connecting-padsynth-to-spectrumtosignal">Connecting PADsynth to
+      SpectrumToSignal</h3>
+    <p>PADsynth output flows through the normal <strong>Spectrum</strong>
+      port connection. When Spectrum to Signal detects an incoming PADsynth
+      wavetable from the Harmonic Generator, it switches automatically to
+      wavetable playback mode:</p>
+    <pre><code>[Harmonic Generator] --spectrum--&gt; [Spectrum to Signal] --&gt; signalOut
+  padEnabled: true                  (auto-detects PADsynth
+  padBandwidth: 40                   wavetable and uses it)</code></pre>
+    <p>No special configuration is needed on the Spectrum to Signal side —
+      wavetable detection is automatic.</p>
+    <p>The wavetable is also propagated through <strong>Spectrum
+        Blender</strong> connections (<code>spectrumA</code> input), so you can
+      blend two PADsynth spectra:</p>
+    <pre><code>[HG 1 - Vocal, PADsynth] --spectrum--&gt; spectrumA -+
+                                                    |--&gt; [Spectrum Blender] --spectrum--&gt; [S2S]
+[HG 2 - String, PADsynth] --spectrum--&gt; spectrumB -+</code></pre>
+    <h3 id="padsynth-workflow">PADsynth Workflow</h3>
+    <ol type="1">
+      <li>Set the DNA preset and harmonic count as usual</li>
+      <li>Open the inspector for the Harmonic Generator</li>
+      <li>Enable <strong>PADsynth</strong> (check
+        <code>padEnabled</code>)</li>
+      <li>Adjust <code>padBandwidth</code> — start around 30–60 cents</li>
+      <li>Choose <code>padProfileShape</code> (Gaussian is a good
+        default)</li>
+      <li>Leave <code>padBandwidthScale</code> at 1.0 unless you want unusual
+        harmonic spread behavior</li>
+      <li><code>padFftSize</code> of 262144 (256k) gives high quality; reduce
+        to 65536 for faster builds</li>
+      <li>Rebuild the graph (PADsynth generates on graph build, not
+        per-sample)</li>
+    </ol>
+    <h3 id="padsynth-cpu-cost">PADsynth CPU Cost</h3>
+    <p>PADsynth generation happens <strong>once at graph build time</strong>
+      — it is not a per-sample cost. A 262144-sample FFT with kiss_fft takes a
+      few tens of milliseconds, transparent to the user. At render time,
+      playback is simply a table lookup in SpectrumToSignal — no additional
+      overhead compared to normal synthesis.</p>
+    <p>The <code>padFftSize</code> setting trades quality for build
+      time:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>padFftSize</th>
+          <th>Quality</th>
+          <th>Build time (approx.)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>65536 (64k)</td>
+          <td>Good</td>
+          <td>Very fast</td>
+        </tr>
+        <tr>
+          <td>262144 (256k, default)</td>
+          <td>High</td>
+          <td>Fast</td>
+        </tr>
+        <tr>
+          <td>524288 (512k)</td>
+          <td>Very high</td>
+          <td>Moderate</td>
+        </tr>
+        <tr>
+          <td>1048576 (1M)</td>
+          <td>Highest</td>
+          <td>Slow</td>
+        </tr>
+      </tbody>
+    </table>
+    <hr>
+    <h2 id="usage-examples">Usage Examples</h2>
+    <h3 id="standard-additive-synthesis">Standard Additive Synthesis</h3>
+    <pre><code>[Harmonic Generator] --spectrum--&gt; [Rolloff Processor] --spectrum--&gt; [Spectrum to Signal] --&gt; Output
+  dnaSelect: 0 (Vocal Bright)
+  numHarmonics: 64</code></pre>
+    <h3 id="padsynth-lush-pad">PADsynth Lush Pad</h3>
+    <pre><code>[Harmonic Generator] --spectrum--&gt; [Spectrum to Signal] --&gt; Output
+  dnaSelect: 1 (Vocal Warm)
+  numHarmonics: 32
+  padEnabled: true
+  padBandwidth: 60
+  padProfileShape: 0 (Gaussian)</code></pre>
+    <h3 id="padsynth-with-rolloff-shaping">PADsynth with Rolloff
+      Shaping</h3>
+    <pre><code>[Harmonic Generator] --spectrum--&gt; [Rolloff Processor] --spectrum--&gt; [Spectrum to Signal] --&gt; Output
+  padEnabled: true
+  padBandwidth: 40</code></pre>
+    <p>The Rolloff Processor shapes the spectrum <em>before</em> PADsynth
+      sees the amplitudes — so rolloff affects the spread width
+      proportionally.</p>
+    <h3 id="digit-formula-static">Digit Formula — Static Timbre</h3>
+    <pre><code>[Harmonic Generator] --spectrum--&gt; [Spectrum to Signal] --&gt; Output
+  dnaSelect: -1 (Custom, Digit Formula)
+  formula: 1 ÷ 97   (96-digit period, no repetition within 64 harmonics)
+  digitWindowOffset: 0</code></pre>
+    <h3 id="digit-formula-padsynth">Digit Formula + PADsynth</h3>
+    <pre><code>[Harmonic Generator] --spectrum--&gt; [Spectrum to Signal] --&gt; Output
+  formula: 1 ÷ 7   (period 142857)
+  padEnabled: true
+  padBandwidth: 20    (narrow → clear periodic grain)
+  padProfileShape: 0  (Gaussian)</code></pre>
+    <p>Try increasing padBandwidth to 80+ to turn the six harmonic classes
+      into broad overlapping clouds.</p>
+    <h3 id="digit-formula-animated">Digit Formula — Animated Window</h3>
+    <pre><code>[Envelope Engine (score curve)] --controlOut--&gt; digitWindowOffset --&gt; [Harmonic Generator]
+                                  weight: 96                              formula: 1 ÷ 97
+                                                                          padEnabled: true</code></pre>
+    <p>With weight=96 and a linear score curve, the window sweeps exactly
+      one full period of 1/97 over the note duration — the timbre makes a
+      complete closed rotation through all 96 harmonic configurations and
+      returns to its starting character.</p>
+    <h3 id="digit-formula-drift">Drift + PADsynth</h3>
+    <p>Both drift and PADsynth add organic movement, but through different
+      mechanisms: - <strong>Drift</strong> adds slow per-harmonic frequency
+      variation at runtime - <strong>PADsynth</strong> bakes harmonic spread
+      into the wavetable at build time</p>
+    <p>Using both together is valid and produces very lush results, though
+      at some point they become redundant. Try PADsynth alone first (drift =
+      0) to hear its characteristic texture before adding drift.</p>
+    <h3 id="purity-modulation-with-padsynth">Purity Modulation with
+      PADsynth</h3>
+    <pre><code>[Drift Engine] --&gt; controlOut --&gt; purity --&gt; [Harmonic Generator] --spectrum--&gt; [S2S]
+                                              padEnabled: true</code></pre>
+    <p><strong>Note:</strong> Changing <code>purity</code> during playback
+      does <strong>not</strong> regenerate the PADsynth wavetable — the
+      wavetable is fixed at graph build time. Purity modulation affects the
+      normal spectrum output (used by the Rolloff Processor, Spectrum Blender,
+      etc.) but not the PADsynth playback.</p>
+    <hr>
+    <h2 id="configuration-preferences">Configuration (Preferences)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Setting</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>maxHarmonics</code></td>
+          <td>64</td>
+          <td>Maximum harmonics allowed</td>
+        </tr>
+        <tr>
+          <td><code>fundamentalHzMin</code></td>
+          <td>10.0</td>
+          <td>Minimum fundamental frequency</td>
+        </tr>
+        <tr>
+          <td><code>fundamentalHzMax</code></td>
+          <td>4000.0</td>
+          <td>Maximum fundamental frequency</td>
+        </tr>
+        <tr>
+          <td><code>rolloffPowerMin</code></td>
+          <td>0.1</td>
+          <td>Minimum rolloff power</td>
+        </tr>
+        <tr>
+          <td><code>rolloffPowerMax</code></td>
+          <td>3.0</td>
+          <td>Maximum rolloff power</td>
+        </tr>
+        <tr>
+          <td><code>driftMax</code></td>
+          <td>0.1</td>
+          <td>Maximum drift amount</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-sound-output">No Sound Output</h3>
+    <ol type="1">
+      <li>Ensure a Spectrum to Signal is connected downstream</li>
+      <li>Check that <code>numHarmonics</code> &gt; 0</li>
+      <li>Verify the note pitch is a valid frequency</li>
+    </ol>
+    <h3 id="padsynth-has-no-effect">PADsynth Has No Effect</h3>
+    <ol type="1">
+      <li>Confirm <code>padEnabled</code> is set to 1 in the inspector</li>
+      <li>Rebuild the graph — PADsynth generates at build time, not
+        dynamically</li>
+      <li>Verify Spectrum to Signal is directly connected (wavetable
+        propagation requires the spectrum connection)</li>
+    </ol>
+    <h3 id="padsynth-sounds-identical-to-normal-synthesis">PADsynth Sounds
+      Identical to Normal Synthesis</h3>
+    <ol type="1">
+      <li>Increase <code>padBandwidth</code> — very small values (&lt; 5
+        cents) are nearly imperceptible</li>
+      <li>Try a large FFT size (262144 or higher) for finer frequency
+        resolution</li>
+    </ol>
+    <h3 id="padsynth-sounds-too-blurry-noisy">PADsynth Sounds Too Blurry /
+      Noisy</h3>
+    <ol type="1">
+      <li>Decrease <code>padBandwidth</code> — reduce toward 10–20 cents</li>
+      <li>Decrease <code>padBandwidthScale</code> toward 0 — keeps upper
+        harmonics from becoming too wide</li>
+      <li>Try Raised Cosine profile (less tail energy than Gaussian)</li>
+    </ol>
+    <h3 id="static-or-boring-sound">Static or Boring Sound</h3>
+    <ol type="1">
+      <li>Try different DNA presets</li>
+      <li>Add Rolloff Processor downstream for brightness control</li>
+      <li>Enable PADsynth for organic texture</li>
+      <li>Add small drift (0.01–0.03) for additional movement</li>
+    </ol>
+    <h3 id="cpu-performance-issues">CPU Performance Issues</h3>
+    <ol type="1">
+      <li>Reduce <code>numHarmonics</code> (16–32 is a good balance)</li>
+      <li>PADsynth itself adds no per-sample cost — only the graph rebuild is
+        affected by <code>padFftSize</code></li>
+      <li>Reduce <code>padFftSize</code> to 65536 if build time is a
+        concern</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="harmonic-amplitude-formula-normal-mode">Harmonic Amplitude
+      Formula (Normal Mode)</h3>
+    <p>Power-law rolloff:
+      <code>amplitude[h] = 1 / harmonicNumber^rolloffPower</code></p>
+    <h3 id="padsynth-bandwidth-formula">PADsynth Bandwidth Formula</h3>
+    <pre><code>bw_hz = (2^(padBandwidth/1200) − 1) × fundamentalHz × harmonicNumber^padBandwidthScale</code></pre>
+    <p>For 40 cents at 131 Hz, harmonic 1:
+      <code>bw_hz ≈ 0.0234 × 131 × 1 ≈ 3.06 Hz</code></p>
+    <h3 id="deterministic-random-phases">Deterministic Random Phases</h3>
+    <p>The PADsynth implementation uses a fixed LCG seed (42) to assign
+      random phases to each frequency bin. This means the wavetable is always
+      the same for a given set of parameters and DNA preset — the result is
+      reproducible across renders.</p>
+    <h3 id="normalization">Normalization</h3>
+    <p>All harmonic amplitudes are normalized so their sum equals 1.0. The
+      PADsynth wavetable is independently normalized to peak ±1.0 after the
+      inverse FFT.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>harmonicgenerator.h</code>,
+        <code>harmonicgenerator.cpp</code></em></p>
+  </body>
+</html>

@@ -1,0 +1,1246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>KalaMain</class>
+ <widget class="QMainWindow" name="KalaMain">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1089</width>
+    <height>1071</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Kala</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout_4">
+    <item>
+     <widget class="QTabWidget" name="MainTab">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="soundEngineTab">
+       <attribute name="title">
+        <string>Sound Engine</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_5">
+        <item>
+         <widget class="QGroupBox" name="groupSounitInfo">
+          <property name="title">
+           <string>Sounit Info</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_sounitInfo">
+           <item>
+            <layout class="QFormLayout" name="formLayout_2">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label">
+               <property name="text">
+                <string>Edit Sounit:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="comboSounitSelector">
+               <property name="maximumSize">
+                <size>
+                 <width>500</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <property name="editable">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="labelSounitName">
+               <property name="text">
+                <string>Name:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLineEdit" name="editSounitName">
+               <property name="maximumSize">
+                <size>
+                 <width>500</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="labelVariation">
+               <property name="text">
+                <string>Variation:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QComboBox" name="comboVariationSelector">
+               <property name="maximumSize">
+                <size>
+                 <width>500</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <property name="editable">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupComment">
+             <property name="title">
+              <string>Comment</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_comment">
+              <item>
+               <widget class="QPlainTextEdit" name="editSounitComment">
+                <property name="placeholderText">
+                 <string>Add a comment...</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupContainerInspector">
+          <property name="title">
+           <string>Container inspector</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_16">
+           <item>
+            <widget class="QFrame" name="frame">
+             <property name="frameShape">
+              <enum>QFrame::Shape::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Shadow::Raised</enum>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_2">
+              <item>
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Instance: </string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignBottom|Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft</set>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="editInstanceName"/>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_4">
+                <property name="text">
+                 <string>Type: </string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignBottom|Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft</set>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelContainerType">
+                <property name="text">
+                 <string>TextLabel</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelContainerDescription">
+                <property name="text">
+                 <string/>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="frame_2">
+             <property name="frameShape">
+              <enum>QFrame::Shape::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Shadow::Raised</enum>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_PortsStacked">
+              <item>
+               <widget class="QGroupBox" name="groupInputs">
+                <property name="title">
+                 <string>Inputs</string>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_10">
+                 <item>
+                  <widget class="QListWidget" name="listWidgetInputs">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupOutputs">
+                <property name="title">
+                 <string>Outputs</string>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_11">
+                 <item>
+                  <widget class="QListWidget" name="listWidgetOutputs">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupConfig">
+             <property name="title">
+              <string>Config</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_9">
+              <item>
+               <widget class="QScrollArea" name="scrollAreaConfig">
+                <property name="widgetResizable">
+                 <bool>true</bool>
+                </property>
+                <widget class="QWidget" name="scrollAreaConfigContents">
+                 <property name="geometry">
+                  <rect>
+                   <x>0</x>
+                   <y>0</y>
+                   <width>308</width>
+                   <height>449</height>
+                  </rect>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_Config">
+                  <property name="spacing">
+                   <number>6</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                 </layout>
+                </widget>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupConnectionInspector">
+          <property name="title">
+           <string>Connection Inspector</string>
+          </property>
+          <layout class="QFormLayout" name="formLayout_3">
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_7">
+             <property name="text">
+              <string>To:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLabel" name="labelConnectionTo">
+             <property name="text">
+              <string>TextLabel</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_8">
+             <property name="text">
+              <string>Function:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="comboConnectionFunction">
+             <property name="editable">
+              <bool>false</bool>
+             </property>
+             <property name="currentText">
+              <string>modulate</string>
+             </property>
+             <property name="currentIndex">
+              <number>5</number>
+             </property>
+             <item>
+              <property name="text">
+               <string>passthrough</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>add</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>multiply</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>substract</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>replace</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>modulate</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Weight:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QDoubleSpinBox" name="spinConnectionWeight"/>
+           </item>
+           <item row="5" column="0">
+            <widget class="QPushButton" name="buttonDisconnect">
+             <property name="text">
+              <string>Disconnect</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLabel" name="labelConnectionFrom">
+             <property name="text">
+              <string>TextLabel</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_6">
+             <property name="text">
+              <string>From:</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="compositionTab">
+       <attribute name="title">
+        <string>Score</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_14">
+        <item>
+         <widget class="QGroupBox" name="groupInspector">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="title">
+           <string>Inspector</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout">
+           <item>
+            <widget class="QTabWidget" name="tabInspector">
+             <property name="currentIndex">
+              <number>0</number>
+             </property>
+             <widget class="QWidget" name="tabNoteInspector">
+              <attribute name="title">
+               <string>Note</string>
+              </attribute>
+              <layout class="QGridLayout" name="gridLayout">
+               <item row="0" column="0">
+                <widget class="QGroupBox" name="positiongroupBox">
+                 <property name="minimumSize">
+                  <size>
+                   <width>200</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                 <property name="title">
+                  <string>Position</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout">
+                  <item>
+                   <widget class="QLabel" name="label_11">
+                    <property name="text">
+                     <string>Start:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QDoubleSpinBox" name="spinNoteStart"/>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="label_14">
+                    <property name="text">
+                     <string>Duration:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QDoubleSpinBox" name="spinNoteDuration"/>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="label_16">
+                    <property name="text">
+                     <string>Pitch:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="spinNotePitch"/>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="noteVariationLabel">
+                    <property name="text">
+                     <string>Variation</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QComboBox" name="noteVariationComboBox"/>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QGroupBox" name="vibratoGroupBox">
+                 <property name="title">
+                  <string>Vibrato</string>
+                 </property>
+                 <layout class="QFormLayout" name="formLayout">
+                  <item row="0" column="0">
+                   <widget class="QCheckBox" name="checkNoteVibrato">
+                    <property name="text">
+                     <string>Vibrato</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="0" colspan="2">
+                   <widget class="QPushButton" name="btnNoteVibratoEdit">
+                    <property name="text">
+                     <string>Edit</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QGroupBox" name="expressiveCurvesGroupBox">
+                 <property name="title">
+                  <string>Expressive Curves</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayoutExpressiveCurves">
+                  <item>
+                   <widget class="QComboBox" name="comboExpressiveCurve"/>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout">
+                    <item>
+                     <widget class="QPushButton" name="btnExpressiveCurveAdd">
+                      <property name="text">
+                       <string>Add</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="btnExpressiveCurveDelete">
+                      <property name="text">
+                       <string>Delete</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="btnExpressiveCurveApply">
+                      <property name="text">
+                       <string>Apply</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupVariations">
+             <property name="title">
+              <string>Sounit Variations</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutVariations">
+              <property name="spacing">
+               <number>4</number>
+              </property>
+              <item>
+               <widget class="QLineEdit" name="editVariationsTrackName">
+                <property name="toolTip">
+                 <string>Track name — edit to rename</string>
+                </property>
+                <property name="placeholderText">
+                 <string>(no track selected)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QListWidget" name="listVariations">
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>100</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayoutVariationButtons">
+                <item>
+                 <widget class="QPushButton" name="btnDeleteVariation">
+                  <property name="enabled">
+                   <bool>false</bool>
+                  </property>
+                  <property name="text">
+                   <string>Delete</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnRenameVariation">
+                  <property name="enabled">
+                   <bool>false</bool>
+                  </property>
+                  <property name="text">
+                   <string>Rename</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupTracks">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>120</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Tracks / Mixer</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutTracks">
+           <property name="spacing">
+            <number>4</number>
+           </property>
+           <property name="leftMargin">
+            <number>4</number>
+           </property>
+           <property name="topMargin">
+            <number>4</number>
+           </property>
+           <property name="rightMargin">
+            <number>4</number>
+           </property>
+           <property name="bottomMargin">
+            <number>4</number>
+           </property>
+           <item>
+            <widget class="QScrollArea" name="scrollAreaMixer">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>0</horstretch>
+               <verstretch>1</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::Shape::NoFrame</enum>
+             </property>
+             <property name="verticalScrollBarPolicy">
+              <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+             </property>
+             <property name="horizontalScrollBarPolicy">
+              <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+             </property>
+             <property name="widgetResizable">
+              <bool>true</bool>
+             </property>
+             <widget class="QWidget" name="scrollAreaMixerContents">
+              <property name="geometry">
+               <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>1029</width>
+                <height>498</height>
+               </rect>
+              </property>
+              <layout class="QHBoxLayout" name="layoutMixerTracks">
+               <property name="spacing">
+                <number>4</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+              </layout>
+             </widget>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnAddTrack">
+             <property name="text">
+              <string>Add Track</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupScale">
+          <property name="title">
+           <string>Scale</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_5">
+           <item>
+            <widget class="QSpinBox" name="spinScaleMarker">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>50</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>1</number>
+             </property>
+             <property name="value">
+              <number>1</number>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelScaleDisplay">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>0:00:000 | Just Intonation | 25.00 Hz</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnScaleEdit">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Edit</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnScaleAdd">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>30</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>+</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupTempo">
+          <property name="title">
+           <string>Tempo</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_Tempo">
+           <item>
+            <widget class="QSpinBox" name="spinTempoMarker">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>50</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>1</number>
+             </property>
+             <property name="value">
+              <number>1</number>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelTempoDisplay">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>0:00:000 | 120 BPM | 4/4</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnTempoEdit">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Edit</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnTempoAdd">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>30</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>+</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="preferencesTab">
+       <attribute name="title">
+        <string>Sound Engine Settings</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_13">
+        <item>
+         <widget class="QLabel" name="label_15">
+          <property name="text">
+           <string>TextLabel</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1089</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionNew_project_Ctrl_N"/>
+    <addaction name="actionOpen_ctrl_o"/>
+    <addaction name="actionSave_ctrl_S"/>
+    <addaction name="actionSave_AS_Ctrl_SHift_S"/>
+    <addaction name="separator"/>
+    <addaction name="actionExport_Audio_Ctrl_E"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit_Alt_F4"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="actionUndo_Ctrl_Z"/>
+    <addaction name="actionRedo_Ctrl_Y"/>
+    <addaction name="separator"/>
+    <addaction name="actionCut_Ctrl_X"/>
+    <addaction name="actionCopy_Ctrl_C"/>
+    <addaction name="actionPaste_Ctrl_V"/>
+    <addaction name="actionDelete_Del"/>
+    <addaction name="separator"/>
+    <addaction name="actionSelect_All_ctrl_A"/>
+    <addaction name="actionDeselect_Esc"/>
+   </widget>
+   <widget class="QMenu" name="menuSound">
+    <property name="title">
+     <string>Sound</string>
+    </property>
+    <widget class="QMenu" name="menuAdd_Container">
+     <property name="title">
+      <string>Add Container</string>
+     </property>
+     <widget class="QMenu" name="menuEssential">
+      <property name="title">
+       <string>Essential</string>
+      </property>
+      <addaction name="actionHarmonic_Generator"/>
+      <addaction name="actionSpectrum_To_Signal"/>
+     </widget>
+     <widget class="QMenu" name="menuShaping">
+      <property name="title">
+       <string>Shaping</string>
+      </property>
+      <addaction name="actionRolloff_Processor"/>
+      <addaction name="actionFormant_Body"/>
+      <addaction name="actionBreth_Turbulance"/>
+      <addaction name="actionNoise_Color_Filter"/>
+     </widget>
+     <widget class="QMenu" name="menuModifiers">
+      <property name="title">
+       <string>Modifiers</string>
+      </property>
+      <addaction name="actionPhysics_System"/>
+      <addaction name="actionEasing_Applicator"/>
+      <addaction name="actionEnvelope_Engine"/>
+      <addaction name="actionDrift_Engine"/>
+     </widget>
+     <addaction name="menuEssential"/>
+     <addaction name="menuShaping"/>
+     <addaction name="menuModifiers"/>
+     <addaction name="actionGate_Processor"/>
+    </widget>
+    <addaction name="actionNew_Sounit"/>
+    <addaction name="actionLoad_Sounit"/>
+    <addaction name="actionSave_Sounit_As"/>
+    <addaction name="separator"/>
+    <addaction name="menuAdd_Container"/>
+    <addaction name="actionDelete_Container_2"/>
+    <addaction name="separator"/>
+   </widget>
+   <widget class="QMenu" name="menuCompose">
+    <property name="title">
+     <string>Score</string>
+    </property>
+    <addaction name="actionNew_track"/>
+    <addaction name="actionDelete_Track"/>
+    <addaction name="separator"/>
+    <addaction name="actionScale_Settings"/>
+    <addaction name="separator"/>
+    <addaction name="actionAssign_Sounit_to_Track"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionCanvas_Window"/>
+    <addaction name="actionFull_Screen_Canvas_F11"/>
+    <addaction name="separator"/>
+    <addaction name="actionZoom_In_Ctrl"/>
+    <addaction name="actionZoom_Out_Crl"/>
+    <addaction name="actionZoom_to_fit_Ctrl_0"/>
+    <addaction name="separator"/>
+    <addaction name="actionSound_Engine_Tab_Ctrl_1"/>
+    <addaction name="actionCompisition_Tab_Ctrl_2"/>
+    <addaction name="actionPreferences_Tab_Ctrl_3"/>
+    <addaction name="actionTablet_mode"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionDocumentation_F1"/>
+    <addaction name="actionKeyboard_Shortcuts"/>
+    <addaction name="separator"/>
+    <addaction name="separator"/>
+    <addaction name="actionAbout_Kala"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
+   <addaction name="menuSound"/>
+   <addaction name="menuCompose"/>
+   <addaction name="menuView"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionNew_project_Ctrl_N">
+   <property name="text">
+    <string>New project (Ctrl + N)</string>
+   </property>
+  </action>
+  <action name="actionOpen_ctrl_o">
+   <property name="text">
+    <string>Open (ctrl +o)</string>
+   </property>
+  </action>
+  <action name="actionOpen_Recent">
+   <property name="text">
+    <string>Open Recent </string>
+   </property>
+  </action>
+  <action name="actionSave_ctrl_S">
+   <property name="text">
+    <string>Save (ctrl + S)</string>
+   </property>
+  </action>
+  <action name="actionSave_AS_Ctrl_SHift_S">
+   <property name="text">
+    <string>Save AS (Ctrl+SHift+S)</string>
+   </property>
+  </action>
+  <action name="actionExport_Audio_Ctrl_E">
+   <property name="text">
+    <string>Export Audio (Ctrl + E)</string>
+   </property>
+  </action>
+  <action name="actionExit_Alt_F4">
+   <property name="text">
+    <string>Exit (Alt + F4)</string>
+   </property>
+  </action>
+  <action name="actionUndo_Ctrl_Z">
+   <property name="text">
+    <string>Undo (Ctrl+Z)</string>
+   </property>
+  </action>
+  <action name="actionRedo_Ctrl_Y">
+   <property name="text">
+    <string>Redo (Ctrl+Y)</string>
+   </property>
+  </action>
+  <action name="actionCut_Ctrl_X">
+   <property name="text">
+    <string>Cut (Ctrl +X)</string>
+   </property>
+  </action>
+  <action name="actionCopy_Ctrl_C">
+   <property name="text">
+    <string>Copy (Ctrl +C)</string>
+   </property>
+  </action>
+  <action name="actionPaste_Ctrl_V">
+   <property name="text">
+    <string>Paste (Ctrl + V)</string>
+   </property>
+  </action>
+  <action name="actionDuplicate_Ctrl_D">
+   <property name="text">
+    <string>Duplicate (Ctrl + D)</string>
+   </property>
+  </action>
+  <action name="actionDelete_Del">
+   <property name="text">
+    <string>Delete (Del)</string>
+   </property>
+  </action>
+  <action name="actionSelect_All_ctrl_A">
+   <property name="text">
+    <string>Select All (ctrl A)</string>
+   </property>
+  </action>
+  <action name="actionDeselect_Esc">
+   <property name="text">
+    <string>Deselect (Esc)</string>
+   </property>
+  </action>
+  <action name="actionNew_Sounit">
+   <property name="text">
+    <string>New Sounit</string>
+   </property>
+  </action>
+  <action name="actionLoad_Sounit">
+   <property name="text">
+    <string>Load Sounit</string>
+   </property>
+  </action>
+  <action name="actionSave_Sounit_As">
+   <property name="text">
+    <string>Save Sounit As</string>
+   </property>
+  </action>
+  <action name="actionHarmonic_Generator">
+   <property name="text">
+    <string>Harmonic Generator</string>
+   </property>
+  </action>
+  <action name="actionSpectrum_To_Signal">
+   <property name="text">
+    <string>Spectrum To Signal</string>
+   </property>
+  </action>
+  <action name="actionRolloff_Processor">
+   <property name="text">
+    <string>Rolloff Processor</string>
+   </property>
+  </action>
+  <action name="actionFormant_Body">
+   <property name="text">
+    <string>Formant Body</string>
+   </property>
+  </action>
+  <action name="actionBreth_Turbulance">
+   <property name="text">
+    <string>Breath Turbulence</string>
+   </property>
+  </action>
+  <action name="actionNoise_Color_Filter">
+   <property name="text">
+    <string>Noise Color Filter</string>
+   </property>
+  </action>
+  <action name="actionPhysics_System">
+   <property name="text">
+    <string>Physics System</string>
+   </property>
+  </action>
+  <action name="actionEasing_Applicator">
+   <property name="text">
+    <string>Easing Applicator</string>
+   </property>
+  </action>
+  <action name="actionEnvelope_Engine">
+   <property name="text">
+    <string>Envelope Engine</string>
+   </property>
+  </action>
+  <action name="actionDrift_Engine">
+   <property name="text">
+    <string>Drift Engine</string>
+   </property>
+  </action>
+  <action name="actionGate_Processor">
+   <property name="text">
+    <string>Gate Processor</string>
+   </property>
+  </action>
+  <action name="actionDelete_Container">
+   <property name="text">
+    <string>Delete Container</string>
+   </property>
+  </action>
+  <action name="actionDelete_Container_2">
+   <property name="text">
+    <string>Delete Container</string>
+   </property>
+  </action>
+  <action name="actionDNA_Library">
+   <property name="text">
+    <string>DNA Library</string>
+   </property>
+  </action>
+  <action name="actionEnvelope_Library">
+   <property name="text">
+    <string>Envelope Library</string>
+   </property>
+  </action>
+  <action name="actionEasing_Library">
+   <property name="text">
+    <string>Easing Library</string>
+   </property>
+  </action>
+  <action name="actionNew_track">
+   <property name="text">
+    <string>New track</string>
+   </property>
+  </action>
+  <action name="actionDelete_Track">
+   <property name="text">
+    <string>Delete Track</string>
+   </property>
+  </action>
+  <action name="actionScale_Settings">
+   <property name="text">
+    <string>Scale Settings</string>
+   </property>
+  </action>
+  <action name="actionAssign_Sounit_to_Track">
+   <property name="text">
+    <string>Assign Sounit to Track</string>
+   </property>
+  </action>
+  <action name="actionCanvas_Window">
+   <property name="text">
+    <string>Canvas Window</string>
+   </property>
+  </action>
+  <action name="actionFull_Screen_Canvas_F11">
+   <property name="text">
+    <string>Full Screen Canvas (F11)</string>
+   </property>
+  </action>
+  <action name="actionZoom_In_Ctrl">
+   <property name="text">
+    <string>Zoom In (Ctrl ++)</string>
+   </property>
+  </action>
+  <action name="actionZoom_Out_Crl">
+   <property name="text">
+    <string>Zoom Out (Crl +-)</string>
+   </property>
+  </action>
+  <action name="actionZoom_to_fit_Ctrl_0">
+   <property name="text">
+    <string>Zoom to fit (Ctrl + 0)</string>
+   </property>
+  </action>
+  <action name="actionSound_Engine_Tab_Ctrl_1">
+   <property name="text">
+    <string>Sound Engine Tab (Ctrl + 1)</string>
+   </property>
+  </action>
+  <action name="actionCompisition_Tab_Ctrl_2">
+   <property name="text">
+    <string>Composition Tab (Ctrl + 2)</string>
+   </property>
+  </action>
+  <action name="actionPreferences_Tab_Ctrl_3">
+   <property name="text">
+    <string>Settings Tab (Ctrl + 3)</string>
+   </property>
+  </action>
+  <action name="actionDocumentation_F1">
+   <property name="text">
+    <string>Documentation (F1)</string>
+   </property>
+  </action>
+  <action name="actionKeyboard_Shortcuts">
+   <property name="text">
+    <string>Keyboard Shortcuts</string>
+   </property>
+  </action>
+  <action name="actionAbout_Kala">
+   <property name="text">
+    <string>About Kala</string>
+   </property>
+  </action>
+  <action name="actionComposition_Settings">
+   <property name="text">
+    <string>Composition Settings</string>
+   </property>
+  </action>
+  <action name="actionTablet_mode">
+   <property name="text">
+    <string>Tablet mode</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

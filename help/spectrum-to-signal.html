@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Spectrum to Signal</title>
+  </head>
+  <body>
+    <h1 id="spectrum-to-signal-documentation">Spectrum to Signal
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>Spectrum to Signal is an <strong>additive synthesis engine</strong>
+      that converts harmonic spectrum data into an audio signal. It maintains
+      phase accumulators for each harmonic and sums sine waves at the
+      specified pitch and its harmonics.</p>
+    <p>This is an <strong>Essential</strong> container - every
+      sound-producing graph must include exactly one Spectrum to Signal to
+      generate audible output.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Required for sound generation</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>For each harmonic h (1, 2, 3, ...):
+    signalOut += amplitude[h] × sin(phase[h])
+    phase[h] += 2π × pitch × h / sampleRate</code></pre>
+    <p>The spectrum provides amplitude for each harmonic. The container
+      maintains phase continuity across samples, generating smooth sine waves
+      that sum to the final audio output.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>spectrumIn</code></td>
+          <td>Spectrum</td>
+          <td>(empty)</td>
+          <td>Harmonic amplitudes from upstream (Harmonic Generator, Rolloff
+            Processor)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before synthesis. 1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down. Connect LFO for vibrato, Envelope
+            Engine for pitch glide.</td>
+        </tr>
+        <tr>
+          <td><code>normalize</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Normalization blend (see below)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Summed audio output (-1.0 to +1.0 range, ideally)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>normalize</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0-1.0</td>
+          <td>Controls amplitude normalization behavior</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before synthesis (1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down). Overridden by connection to <code>pitchMultiplier</code>
+            port.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="normalization-behavior">Normalization Behavior</h2>
+    <p>The normalize parameter controls how the summed output is scaled:</p>
+    <div class="sourceCode" id="cb2">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a
+href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span
+class="op">(</span>normalize <span class="op">&gt;</span> <span class="fl">0.0</span><span
+class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    output <span
+class="op">/=</span> <span class="op">(</span>totalAmplitude × <span class="op">(</span><span
+class="fl">1.0</span> <span class="op">-</span> normalize<span class="op">)</span> <span
+class="op">+</span> normalize<span class="op">)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>normalize</th>
+          <th>Divisor</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>(skipped)</td>
+          <td>Raw sum, no scaling - may clip with many harmonics</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>blend</td>
+          <td>Partial normalization</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>1.0</td>
+          <td>Divides by 1.0 - effectively raw sum</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Practical guidance:</strong> - For controlled input spectra
+      (already normalized): use <code>normalize = 1.0</code> - For
+      unknown/variable spectra: experiment with values around 0.3-0.7 - The
+      default (1.0) passes through the raw sum</p>
+    <h2 id="pitch-multiplier">Pitch Multiplier</h2>
+    <p>The <code>pitchMultiplier</code> port and parameter scale the note's
+      fundamental frequency before synthesis:</p>
+    <pre><code>effectivePitch = notePitch × pitchMultiplier</code></pre>
+    <p>The static slider value is used when the port is unconnected.
+      Connecting a modulator overrides the static value. Use this for
+      vibrato (LFO), pitch glide (Envelope Engine), spring pitch wobble
+      (Physics System), or static transposition (inspector slider).</p>
+    <h2 id="phase-management">Phase Management</h2>
+    <h3 id="phase-accumulators">Phase Accumulators</h3>
+    <p>The container maintains a phase accumulator for each harmonic (up to
+      64 by default). Phases advance continuously:</p>
+    <div class="sourceCode" id="cb3">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a
+href="#cb3-1" aria-hidden="true" tabindex="-1"></a>phases<span class="op">[</span>h<span
+class="op">]</span> <span class="op">+=</span> <span class="dv">2</span>π × pitch × harmonicNumber <span
+class="op">/</span> sampleRate</span></code></pre>
+    </div>
+    <h3 id="phase-wrapping">Phase Wrapping</h3>
+    <p>Phases wrap at <code>2π × 1000</code> to prevent floating-point
+      precision loss during long playback.</p>
+    <h3 id="reset">Reset</h3>
+    <p><code>reset()</code> zeros all phase accumulators. This is called at
+      note start to ensure consistent attack transients.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="minimal-sound-chain">Minimal Sound Chain</h3>
+    <p>The simplest possible sound-producing graph:</p>
+    <pre><code>Harmonic Generator ──→ spectrum ──→ Spectrum to Signal ──→ signalOut ──→ [Audio Output]</code></pre>
+    <h3 id="with-spectrum-shaping">With Spectrum Shaping</h3>
+    <p>Add rolloff processing between generator and converter:</p>
+    <pre><code>Harmonic Generator ──→ Rolloff Processor ──→ Spectrum to Signal ──→ [Audio Output]</code></pre>
+    <h3 id="with-formant-processing">With Formant Processing</h3>
+    <p>Process the signal after conversion:</p>
+    <pre><code>Harmonic Generator ──→ Spectrum to Signal ──→ Formant Body ──→ [Audio Output]</code></pre>
+    <h3 id="pitch-modulation">Pitch Modulation</h3>
+    <p>Add vibrato or other pitch effects via the <code>pitchMultiplier</code>
+      port:</p>
+    <pre><code>LFO ──→ pitchMultiplier
+                │
+Harmonic Generator ──→ Spectrum to Signal ──→ [Audio Output]</code></pre>
+    <h3 id="multiple-spectrum-sources">Multiple Spectrum Sources</h3>
+    <p>Only one Spectrum to Signal can exist, but multiple containers can
+      feed into it through a chain:</p>
+    <pre><code>Harmonic Generator ──→ Rolloff 1 ──→ Rolloff 2 ──→ Spectrum to Signal</code></pre>
+    <h2 id="comparison-with-other-containers">Comparison with Other
+      Containers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 34%">
+        <col style="width: 21%">
+        <col style="width: 25%">
+        <col style="width: 18%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Input</th>
+          <th>Output</th>
+          <th>Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Harmonic Generator</strong></td>
+          <td>(parameters)</td>
+          <td>Spectrum</td>
+          <td>Creates harmonic content</td>
+        </tr>
+        <tr>
+          <td><strong>Rolloff Processor</strong></td>
+          <td>Spectrum</td>
+          <td>Spectrum</td>
+          <td>Shapes harmonic amplitudes</td>
+        </tr>
+        <tr>
+          <td><strong>Spectrum to Signal</strong></td>
+          <td>Spectrum</td>
+          <td>Signal</td>
+          <td>Converts to audio</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Signal</td>
+          <td>Signal</td>
+          <td>Shapes audio with resonances</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Spectrum to Signal is the bridge between the spectrum domain
+      (harmonic amplitudes) and the signal domain (audio waveform).</p>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="harmonic-skipping">Harmonic Skipping</h3>
+    <p>Harmonics with zero amplitude are skipped (no CPU spent on silent
+      components).</p>
+    <h3 id="additive-nature">Additive Nature</h3>
+    <p>The output is a pure sum of sine waves. This creates: - No
+      intermodulation distortion - Linear phase response - Predictable
+      harmonic content</p>
+    <h3 id="amplitude-accumulation">Amplitude Accumulation</h3>
+    <p>With many harmonics at significant amplitudes, the raw sum can exceed
+      ±1.0. Consider: - Using normalized spectra from Harmonic Generator -
+      Applying gain reduction downstream - Experimenting with the normalize
+      parameter</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="additive-synthesis-formula">Additive Synthesis Formula</h3>
+    <p>The output at time t is:</p>
+    <pre><code>signal(t) = Σ [A_n × sin(2π × f × n × t + φ_n)]</code></pre>
+    <p>Where: - A_n = amplitude of harmonic n - f = fundamental frequency
+      (pitch) - n = harmonic number (1, 2, 3, …) - φ_n = accumulated phase for
+      harmonic n</p>
+    <h3 id="cpu-considerations">CPU Considerations</h3>
+    <p>Processing cost scales with active harmonics: - 64 harmonics = 64
+      sine calculations per sample - At 44.1kHz, that’s ~2.8 million sine
+      calls per second - Harmonics with zero amplitude are skipped</p>
+    <h3 id="nyquist-considerations">Nyquist Considerations</h3>
+    <p>The current implementation does not filter harmonics above Nyquist.
+      With high pitches and many harmonics, aliasing may occur. For example: -
+      Pitch = 1000 Hz, 64 harmonics → highest = 64000 Hz - At 44.1kHz sample
+      rate, harmonics above 22050 Hz will alias</p>
+    <p>For high-pitched content, consider using fewer harmonics or accepting
+      some aliasing.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>spectrumtosignal.h</code>,
+        <code>spectrumtosignal.cpp</code></em></p>
+  </body>
+</html>

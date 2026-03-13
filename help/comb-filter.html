@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Comb Filter</title>
+  </head>
+  <body>
+    <h1 id="comb-filter-documentation">Comb Filter Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Comb Filter introduces <strong>delay-based interference
+        effects</strong> — notched cuts (feedforward mode) or resonant metallic
+      peaks (feedback mode) spaced evenly across the frequency spectrum. The
+      delay time is modulatable, enabling flanging and chorus sweeps in
+      feedforward mode, or pitch-shifting resonances in feedback mode. A
+      one-pole damping filter in the delay path tames the high-frequency
+      content for more natural-sounding results.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Filters</strong> (Purple) - Signal processing and spectral
+      shaping</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <p><strong>Feedforward (FIR) mode</strong> — produces evenly-spaced
+      notches:</p>
+    <pre><code>y[n] = x[n] + feedback × x[n-D]</code></pre>
+    <p><strong>Feedback (IIR) mode</strong> — produces resonant peaks
+      (pitched comb):</p>
+    <pre><code>y[n] = x[n] + feedback × y[n-D]</code></pre>
+    <p>Where <code>D</code> is the delay in samples
+      (<code>delayTime × sampleRate / 1000</code>). Peaks/notches appear at
+      integer multiples of <code>1/delayTime</code>, spaced
+      <code>1000/delayTime</code> Hz apart.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>Input audio signal</td>
+        </tr>
+        <tr>
+          <td><code>delayTime</code></td>
+          <td>Control</td>
+          <td>5.0</td>
+          <td>Delay time in milliseconds (0.1–100.0 ms)</td>
+        </tr>
+        <tr>
+          <td><code>feedback</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Delay feedback / comb coefficient (−0.99 to 0.99)</td>
+        </tr>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>High-frequency damping in the delay path (0.0–1.0)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> <code>mode</code> (Feedforward/Feedback) is
+      set via the inspector and is not modulatable.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Processed audio output</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>mode</code></td>
+          <td>Integer</td>
+          <td>0 (Feedforward)</td>
+          <td>0–1</td>
+          <td>Filter topology (inspector only, not modulatable)</td>
+        </tr>
+        <tr>
+          <td><code>delayTime</code></td>
+          <td>Float</td>
+          <td>5.0</td>
+          <td>0.1–100.0</td>
+          <td>Delay time in milliseconds</td>
+        </tr>
+        <tr>
+          <td><code>feedback</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>−0.99–0.99</td>
+          <td>Comb coefficient — controls notch/peak depth</td>
+        </tr>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Amount of one-pole lowpass damping on the delayed signal</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="operating-modes">Operating Modes</h2>
+    <h3 id="feedforward-mode-0">Feedforward (mode = 0)</h3>
+    <p>The delayed input is added back to the direct signal.
+      Constructive/destructive interference creates <strong>evenly spaced
+        notches</strong> in the spectrum. Modulating <code>delayTime</code>
+      sweeps the notch positions — the classic flanger effect.</p>
+    <pre><code>Notch spacing  = 1000 / delayTime  Hz
+First notch at = 500 / delayTime   Hz</code></pre>
+    <p><strong>Example</strong> (delayTime = 5 ms): - First notch: 100 Hz -
+      Notch spacing: 200 Hz - Notches at: 100, 300, 500, 700 Hz…</p>
+    <p><strong>Feedback polarity:</strong> - Positive feedback (&gt; 0):
+      Notches at odd multiples, peak at DC - Negative feedback (&lt; 0):
+      Notches at even multiples (different comb pattern)</p>
+    <h3 id="feedback-mode-1">Feedback (mode = 1)</h3>
+    <p>The delayed <strong>output</strong> is fed back in. This creates
+      <strong>resonant peaks</strong> at the delay frequency and its integer
+      multiples. The filter rings — it has a tail after the input signal
+      stops. High feedback values produce pronounced, metallic resonance.</p>
+    <pre><code>Peak frequency = 1000 / delayTime  Hz  (and harmonics)</code></pre>
+    <p><strong>Example</strong> (delayTime = 5 ms): - Fundamental resonance:
+      200 Hz - Resonant peaks at: 200, 400, 600, 800 Hz…</p>
+    <p>This is essentially a Karplus-Strong-like resonator without the noise
+      excitation — connect a noise burst or impulsive signal to create pitched
+      metallic ringing.</p>
+    <p><strong>Stability:</strong> Feedback values approaching ±1.0 produce
+      extreme resonance. Values at or beyond ±1.0 will cause runaway feedback
+      (the filter becomes unstable). Keep feedback below ±0.99.</p>
+    <h2 id="delay-time-and-frequency-effects">Delay Time and Frequency
+      Effects</h2>
+    <table>
+      <colgroup>
+        <col style="width: 21%">
+        <col style="width: 26%">
+        <col style="width: 52%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>delayTime (ms)</th>
+          <th>Notch/peak spacing</th>
+          <th>Fundamental resonance (feedback mode)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.1</td>
+          <td>10 kHz</td>
+          <td>10 kHz</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>2 kHz</td>
+          <td>2 kHz</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>1 kHz</td>
+          <td>1 kHz</td>
+        </tr>
+        <tr>
+          <td>5.0 (default)</td>
+          <td>200 Hz</td>
+          <td>200 Hz</td>
+        </tr>
+        <tr>
+          <td>10.0</td>
+          <td>100 Hz</td>
+          <td>100 Hz</td>
+        </tr>
+        <tr>
+          <td>25.0</td>
+          <td>40 Hz</td>
+          <td>40 Hz</td>
+        </tr>
+        <tr>
+          <td>100.0</td>
+          <td>10 Hz</td>
+          <td>10 Hz</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="feedback-values">Feedback Values</h2>
+    <table>
+      <colgroup>
+        <col style="width: 21%">
+        <col style="width: 42%">
+        <col style="width: 36%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Feedback</th>
+          <th>Feedforward Effect</th>
+          <th>Feedback Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>No effect (pass-through)</td>
+          <td>No effect</td>
+        </tr>
+        <tr>
+          <td>0.3</td>
+          <td>Gentle notching</td>
+          <td>Light resonance</td>
+        </tr>
+        <tr>
+          <td>0.5 (default)</td>
+          <td>Moderate notching</td>
+          <td>Clear resonance</td>
+        </tr>
+        <tr>
+          <td>0.7–0.8</td>
+          <td>Deep notches</td>
+          <td>Strong, singing resonance</td>
+        </tr>
+        <tr>
+          <td>0.9–0.95</td>
+          <td>Near-complete cancellation at notches</td>
+          <td>Very strong resonance, long ring</td>
+        </tr>
+        <tr>
+          <td>−0.5</td>
+          <td>Shifted notch pattern</td>
+          <td>Phase-inverted resonance</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="damping">Damping</h2>
+    <p>The <code>damping</code> parameter controls a one-pole lowpass filter
+      applied to the delayed signal before it is mixed back. Higher values
+      reduce high-frequency content in the feedback/feedforward path:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Damping</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0 (default)</td>
+          <td>No damping — full bandwidth in delay path</td>
+        </tr>
+        <tr>
+          <td>0.3</td>
+          <td>Gentle HF reduction — slightly warmer comb</td>
+        </tr>
+        <tr>
+          <td>0.6</td>
+          <td>Moderate HF damping — mellow resonance</td>
+        </tr>
+        <tr>
+          <td>0.9</td>
+          <td>Heavy damping — very warm, low-frequency resonance</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>Maximum damping — near-complete HF elimination</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Damping is especially useful in <strong>Feedback mode</strong> to
+      prevent the high-frequency resonances from becoming too harsh. It models
+      the natural energy absorption at the reflection point of a physical
+      system (like a string nut or wall surface).</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="flanging-feedforward-modulated-delay">Flanging (Feedforward,
+      Modulated Delay)</h3>
+    <pre><code>[Any Signal Source] → signalIn → [Comb Filter] → signalOut
+                                   mode: Feedforward
+                                   delayTime: 1.0–5.0 ms
+                                   feedback: 0.6
+                          [LFO] → delayTime
+                            frequency: 0.2 Hz, waveType: Sine</code></pre>
+    <p>The LFO sweeps the delay time, moving the notch comb up and down in
+      frequency — producing the classic flanger sweep.</p>
+    <h3 id="metallic-resonator-feedback-mode">Metallic Resonator (Feedback
+      Mode)</h3>
+    <pre><code>[Noise Color Filter] → signalIn → [Comb Filter] → signalOut
+                                    mode: Feedback
+                                    delayTime: 4.5 ms  (≈ 222 Hz resonance)
+                                    feedback: 0.85
+                                    damping: 0.3</code></pre>
+    <p>A short noise burst through a high-feedback comb produces a metallic
+      ping or bell-like sustain.</p>
+    <h3 id="pitch-tracking-resonator">Pitch-Tracking Resonator</h3>
+    <p>Use Frequency Mapper to set the delay time based on the note’s
+      pitch:</p>
+    <pre><code>[Frequency Mapper] → controlOut → delayTime
+  outputMin: 0.5    (high pitch = short delay = high resonance)
+  outputMax: 20.0   (low pitch = long delay = low resonance)
+  invert: true
+  curveType: Logarithmic</code></pre>
+    <p>With feedback mode, the comb filter’s fundamental resonance
+      approximately tracks the note pitch.</p>
+    <h3 id="chorus-doubling-feedforward-short-delay">Chorus / Doubling
+      (Feedforward, Short Delay)</h3>
+    <pre><code>[Signal Source] → signalIn → [Comb Filter] → signalOut
+                               mode: Feedforward
+                               delayTime: 10–30 ms
+                               feedback: 0.4</code></pre>
+    <p>Short feedforward delays without modulation create a doubling or
+      chorus thickening effect.</p>
+    <h3 id="harmonic-thinning-feedforward-tuned-notches">Harmonic Thinning
+      (Feedforward, Tuned Notches)</h3>
+    <p>Set the delay time so notches fall on unwanted harmonics:</p>
+    <pre><code>If fundamental pitch = 200 Hz and you want to notch every other harmonic:
+  delayTime = 1000 / (2 × 200) = 2.5 ms</code></pre>
+    <p>This notches harmonics 1, 3, 5… leaving harmonics 2, 4, 6… (or vice
+      versa with negative feedback).</p>
+    <h2 id="tail-behavior">Tail Behavior</h2>
+    <p>The Comb Filter produces a <strong>decay tail</strong> (the audio
+      graph recognizes it via <code>hasTail()</code>). In Feedback mode with
+      significant feedback values, the filter continues ringing after the
+      input signal ends. Kala will render additional tail samples after the
+      note to capture this ring-out, so the decay is heard naturally.</p>
+    <h2 id="comparison-with-other-filters">Comparison with Other
+      Filters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 25%">
+        <col style="width: 13%">
+        <col style="width: 25%">
+        <col style="width: 36%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Type</th>
+          <th>Resonance</th>
+          <th>Typical Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Comb Filter (Feedforward)</strong></td>
+          <td>FIR</td>
+          <td>No</td>
+          <td>Flanging, notching, thickening</td>
+        </tr>
+        <tr>
+          <td><strong>Comb Filter (Feedback)</strong></td>
+          <td>IIR</td>
+          <td>Yes (multi-peak)</td>
+          <td>Metallic resonance, pitched ring</td>
+        </tr>
+        <tr>
+          <td><strong>LP/HP Filter</strong></td>
+          <td>IIR biquad</td>
+          <td>Yes (single peak)</td>
+          <td>Smooth brightness control</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>IIR resonator</td>
+          <td>Yes (narrow)</td>
+          <td>Vocal body resonance</td>
+        </tr>
+        <tr>
+          <td><strong>10-Band EQ</strong></td>
+          <td>Parallel bandpass</td>
+          <td>Mild</td>
+          <td>Broad spectral shaping</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-audible-effect">No Audible Effect</h3>
+    <ol type="1">
+      <li>Check that <code>feedback</code> is not 0.0</li>
+      <li>Verify <code>signalIn</code> is connected and producing audio</li>
+      <li>In Feedforward mode with very long delay times (&gt; 50 ms), the
+        effect may be perceived as echo rather than coloration</li>
+    </ol>
+    <h3 id="unstable-runaway-sound">Unstable / Runaway Sound</h3>
+    <ol type="1">
+      <li>Reduce <code>feedback</code> — values near ±0.99 in Feedback mode
+        can cause very long ring-outs or (if modulation pushes the gain above
+        1.0) instability</li>
+      <li>Increase <code>damping</code> to absorb energy in the delay
+        path</li>
+      <li>In Feedback mode, ensure that modulated feedback values never exceed
+        ±0.99</li>
+    </ol>
+    <h3 id="too-harsh-metallic">Too Harsh / Metallic</h3>
+    <ol type="1">
+      <li>Increase <code>damping</code> to soften the high-frequency
+        resonances</li>
+      <li>Reduce <code>feedback</code> for less pronounced resonant peaks</li>
+      <li>Place a LP/HP Filter or 10-Band EQ after the Comb Filter to trim the
+        high end</li>
+    </ol>
+    <h3 id="flanging-not-audible">Flanging Not Audible</h3>
+    <ol type="1">
+      <li>Ensure the LFO or modulation source is connected to
+        <code>delayTime</code> (not feedback)</li>
+      <li>Try delay time ranges of 0.5–5 ms for the most pronounced
+        flanging</li>
+      <li>Increase <code>feedback</code> toward 0.7–0.8 for deeper
+        notches</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="circular-buffer">Circular Buffer</h3>
+    <p>The delay line uses a circular buffer pre-allocated for 100 ms
+      maximum delay time. The write pointer advances each sample; reads use
+      linear interpolation for sub-sample delay accuracy when delay time is
+      modulated.</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p>The delay buffer and damping filter state are zeroed at the start of
+      non-legato notes. For legato transitions, state is preserved so the
+      ring-out from the previous note carries over naturally.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>combfilter.h</code>, <code>combfilter.cpp</code></em></p>
+  </body>
+</html>

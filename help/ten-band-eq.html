@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>10-Band EQ</title>
+  </head>
+  <body>
+    <h1 id="band-eq-documentation">10-Band EQ Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The 10-Band EQ is a <strong>graphic equalizer</strong> with ten
+      parallel bandpass filters at the ISO standard one-octave center
+      frequencies. Each band’s gain is independently controllable and fully
+      modulatable, making it possible to shape the spectrum of any signal
+      dynamically — sculpting formants, boosting harmonics, or suppressing
+      resonances with per-note expressivity.</p>
+    <p>Unlike the Rolloff Processor (which applies a spectral taper to the
+      harmonic domain), the 10-Band EQ operates entirely in the <strong>signal
+        domain</strong> and can be placed anywhere in a signal chain.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Filters</strong> (Purple) - Signal processing and spectral
+      shaping</p>
+    <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAVgAAAIuCAIAAAB1nYdWAAAgAElEQVR4nO2db28U2b3n75vgAeKN+AX4Ce+ARHlsBVAs9YiVcpVFGoQUfCUs+crsNbqT5MElRESGXpA2Ge1OZjyEBWaYWQ/ODkGCeCaby4Bt3E11n7bbxoD3QXd1n1NV3V1d9fvVH/rz1edBGOym01Xn0+ecOuf8/skQQiY+/5T3GyCE5B9EQAhBBIQQREAIMYiAEGIQASHEIAJCiEEEhBCDCAghBhEQQgwiIIQYREAIMYiAEGIQASHEIAJCiEEEhBCDCAghBhEQQgwiIIQYREAIMYiAEGIQASHEIAJCiEEEhBCDCAghBhEQQgwiIIQYREAIMYiAEGIQASHEIAJCiEEEhBCDCAghBhEQQgwiIIQYREAIMYiAEGIQASHEIAJCiEEEhBCDCAghBhEQQsx7JoKG13z65T8+//eHN35+57c//dOvfvzxRz/6I4Aev/rxx7/96Z9u/PzO5//+8OmX/2h4zbwbQcK8JyJoNpuPPvvudz/7LPc7AyaZ3/3ss0effWdKaIP3QQSvXnr/45f3c78JADr84ZdfvHrp5d0sxkvpRfDyWe33H3ye+7UHsPn9B5+//KGWd+MYI+UWgVdvVH9xJ/erDhCm+os7Xr2RdxOJm3KL4M+/Wcv9egMM4s+/Wcu7icRNiUXw4ruXv/4JzwWguPz6Jx+/+O5l3g0lVkosgk//22ruVxpgOJ/922reDSVWSiyC/5j5JPfLDDCc/5j5pNkowePEEosg92sMEIf/939f5N1WRgcRAOjy7Wff5d1WRgcRAOjy1Y3HebeV0UEEALrc/923ebeV0UEEALogAt3kfoEB4oAIdJP7BQaIAyLQTe4XOAt+/vTV4eH3l/J+G5ACRKCbZFfl06+i2tWlF4d+Xt0cuYvpzurzQyfPn95Quo2GiuDTrw6DCb6T4FvFKdmDCHQz/iX55vvIxnDpxeGhWf35Hz/6UbfhjXLBndXnh4dffeO8rJILRopgyL/bsVv/fUb9F9AHEehmnIvhfDG67erO6nOn5d+4aQ4PX3w68tWCDcxXiSyJRXDpRXTvJpbpQBJEoJtxLsY333ebU+9/+Pz86atAGx49LC++CO6sPh/oiBimA0kQgW4SXZWgCKJaxTffj/jODIog9CLdMUg3gZ98/vSG/QPBjrrdeTGrlxKJYPjXPhOQ2YIIdJPoqkSJIGqCbQwRhNrVjZum/0e3Td64aQ4PD/vWCLbYb74/DL7ykBm+gSIY0UMZaTqQBBHoJtFViSuCoTNqoacGQ6ffPv2q/wM3bppAE7Ubc8SbufRihAjcdJs3IigSiEA3ia7KeD0C/ws8MMsYNMWnXx2GGp4ri8FN3RpWRPVEks0RIIIigQh0k+iqqMwRBP5L54u69wrDv/OtNxD17yYTAXMERQIR6CbRVQk9NQh/eSZ4amD3/0MvGFsEcj0CnhoUCUSgm0RXJSSC0PdwknUE9n8JisBZbjRUBBENuzM2SbyOIOIXWUeQOYhAN4muSlgE7gRerG7z0DkCt6V15/PiiaD7mCD9U4P+K7ttnpWFeYAIdJPoqkSI4CN3UjDG4HnUXgNr58L3l+IPDf740Y/6jb/7suPuNYia7xj1M6ALItBN7he4nPTVwAAhGxCBbnK/wABxQAS6yf0CA8QBEegm9wsMEAdOMdZN7hcYIA7UNdBN7hcYIA5UOtINtQ+h+Fyh9qF2qIYMxYdqyOp58d3LX//k49yvNMAgfv2Tj1989zLvhhIrJRaBMebPv1nL/WIDDOLPv1nLu4nETblF4NUb1V+wPA6KyH//r//bqzfybiJxU24RGGNePqv9/oPPc7/qADa//+Dzlz/U8m4cY6T0IjDGvHrp/eGXX+R+7QE6/OGXX7x66eXdLMbL+yACY4xpmkcr3/3uZ5/lfhPAJPO7n332aOU7U4LHhcG8LyIwxhjT8JpPH/zn7Y8e3vjnO789+adf/ZhnCqDLr3788W9P/unGP9+5/dHDpw/+s+GV0AHGmPdMBISQZEEEhBBEQAhBBIQQgwgIIQYREEIMIiCEGERACDGIgBBi3j8RtFo7u+12e29/b39/b/81gD777b393Xa71drJ+/ZPnvdHBDs7O+09Gj/kSXtvf2enlDp4H0TQarV22+3cbwKADrvtdqvVyrtZjJf3QAQtOgJQNNp7+8aUyQWlF0G7vZf7VQcI027v5d04xki5RcCIAIrMbruddxOJmxKLoNVq5X6lAYZTlsmCEotgd5fuABSd3d1ydApKLII95gih+Ozt591QYqXMIsj9GgPEoBQrCxABgC6IQDe5X2CAOOzs7ObdVkYHEQDosrOLCDST+wUGiAMi0E3iC9NuHjSfvK0/OKzffQ/x1t61fnizt5fu9t173frhjbf2Lvf/O/nz4LD55G27eYAICpokV6X92vztbf1e3veWPt7qu91awnt3t3bgraIAl3uH5m9v99qIoHgZuyOw83qyvuLuHbaevRn3U2o9ezMJokyGt/auvYMICpbxLLD7ejK/5cZyQevZm9zfcMHxVt+1dxFBkTLWxWh8O4kWqN89rN87jDlG2K0d0BeIQ+Pbd4igQBnji+7FRH/ReavvRs8d7k1ojykZrRdj9LMQgW7iXom916++nvRbvPXDiBu39cNEu3JcXn0dw62IQDyNerP+rLn9pLH5yNtY8zYejmbzL42tvzZqT82r79u1e29zv3XyxVsb0ZudrGlUCXa24z6UQQQCabxqbq834rT84Wx9vVufbB3stYbdrLm/vdLRfPoWEWQUb6MZ8/s/Ft80tr+c3Dt+Z2vYN1jub690eA/jThkiglSpP2uKKcDi5YP93O+hXBj+HDH3t1c6Xj1ABPrxNlQs0GEy+wXm74hAGESgm8Yr0RFB1BhhAucLzPfDxrS5v70yggh0IzI7OJytr3Zzv40yBhGIgwgU06grDgpsJu2ZIiIQBxEoRmmOMMzLLydr1hARiIMIFLP9RH1c0B0dfN3K/U7KEkQgDiJQzOajLCyw8dDbXG3mfidlCSIQBxEoRvd5gc03jdzvJIflpekjx04taL3+eyKChcrRI8fnl/N+G3cP64hANRlZ4KG38dCLeb1Xzxw/eqRS1b6xXBFUTxw7OrW0Kvf62iLI6FOKFMHy0vSRY0f76L+Nu4d1RKAaRND5IyKIJiSC6oljR92e1OqZ40ePHJs+sx7/Zasnjh098cm4bwYRKKaAIsiIkosgI1wRrJ45Hj1SWKgcHWechQgQQWFABHFwRPDJqcHf/GN9gIigBCJ4fu/bPyz+yy9mT8/MzMzMnJytnL94+X/9n3s1FREsVMJDzXCnt9Md7XBqwbkdV88cPzq1tHr3k1O913HvMPt3nZcdJoJPTh05dmqh2+k9euRYggkzQRFYb6P/JjP6lGwRDJ84tP42LIX+u3Wu+HjzC4hAMW5brT2+tnjmpzMR+el/+ddr3z2XFYF7Y1VPRIpgfX4q2ESPBm5x+35aXpq2v7WWl6b7d7z7UqNEYP8r1RNjT4lJiSD4aZyIFIHap2RdoxGzEtbnOUwEvc+THkGhYltg7dfnTkZJwM8Hl6rPBUXgf00NvfUXKsGbz72Jw6PWYX1U+9VGisC+U8d/1iglgkFtJqNPCRHopLgieP7p8tlhFuj0C+Zu3ZHtEUTcEPZNE3W/RnZ6B95z9UDXutceYgwNBv2jWYpg0Jx8Rp/SeCKIMTRABMaYAotg43/+cmhvwM/swoPEA4QBd09wrGjdNOvzU+E7ZpxbvOOaqI5uWUTQ/39xxGldGX1K480RDBQTIgiksCK4/2+RUwMR44OrXwuKoMv6/NSxqG+elLd4qPWWVATWe4iaUtX8lMZ6auC/h5EdEERQVBHcvvlhPA/MzCytyIvAaXv2TRPRHV2oBKfBYt/i1RPlGxo4WN3vjD6lMdYRBH7Mfj8d0SOCfhCBfS9W+rfUwLHoJ6eOjJoPH3iLhyfAyyeC3sOUoY1f7VOKvbLQ+bg6Iz67gzBw9IcIihF/05H+0CC06Sh6diriLrGefh+pVMebBnOfnJdwaDDoCX9Gn1KcvQaRTx+s9QLTZ9YHv1vWERQj/jZk9clCuW3I4VZaRPJeWViOT2ksEIFiegeTxHt8eO76SsJxgdjBJEXaGDuEnEVQkk9pLBCBYqyjykYvKJq7+iSZBTYSH1XmLHoLLYkrMJmKoLSf0lggAsW4h5fW1q7MKy0xTnp4qT30DU5TFZlsewRl/ZTGAhHoJnCcubvpaOb07NkLi2k3HXGceeZzBO8hiEA3TQqcKIAIxEEE6qHkmTiIQBxEkEUogioLIhAHEWQUb5Oy6GIgAnEQQXbxthtbjwRKnmyumvr9g9xvnRxBBOIggozibdAjEAMRiIMIsghzBLIgAnEQgXp4aiAOIhAHEeimwToCBRCBOIhAN4GVhRqwshARpAcRKMbda6BI0r0GZQURiIMIFKM0Rxgm4e7D0oIIxEEEiumdR6A+OpA6j6AkIAJxEIFi/BOK1JE7oagcIAJxEIFidJ8X2ITOLMz2OK2xDx1MCSIQBxEoJiMLPPQ2Io4zL4II1uenVI70QgTiIALFTLQIuqfxIoJygAgUM6kisM/2QgTlABEoZkJF0CsZZNUOkgURiIMIFBNuru6ZhSdnK+cvXk57ZuFwEdiVTtzee6dUVlQhjW7JTesHQmU27NIgpxYGzBEggvKACBTjttXa42uLSqcYDxLB9NTxfvt0K/bVFyrBznzv0O5AZa7A3wbKeIVKgPVBBOUBESjGtsDIugaXqs/FRRAohjmkKp5Tt2uhElWBz67z7b7IoKP+EUF5QASK6Y8IYlU6mrt1R3mOYEDVzWDxv3BTt34xqtguQ4PSgwgU47dS9dqHCUTQnTtwiurGEcH6/BQieA9BBIrxW6l+NeQxRFCp3g1WK66PIQJ6BO8niEAx3VZ6++aH8TwwM7O0ojlH0C9PHhRB5wFBLBFETDQEpiF7IILygAgUk78IrNbeGQv4f3Q04T9ijCWC7u/y1OD9AhEoxt90pD80GLjpyF4s4LbJ7hLgbhuOPzTovbg1xcjQoPQgAsX425DVJwvZhowIUoIIFNM7mCTe48Nz11cSjgs4mAQRpAQRKMY6qmz0gqK5q0+SWWCDo8oQQWoQgWLcw0tra1fmlZYYc3gpIkgJItBN4Dhzd9PRzOnZsxcW02464jhzRJAeRKCbJgVOFEAE4iAC9VDyTBxEIA4iyCIUQZUFEYiDCDKKt0lZdDEQgTiIILt4242tRwIlTzZXTf3+Qe63To4gAnEQQUbxNugRiIEIxEEEWYQ5AlkQgTiIQD08NRAHEYiDCHTTYB2BAohAHESgm8DKQg1YWYgI0oMIFOPuNVCEvQaIICWIQDFKc4Rh2H2ICFKCCBTTO49AfXTAeQSIIB2IQDH+CUXqcEIRIkgJIlCM7vMCm4FnFmZzGw04s1ANRCAOIlBMRhZ46G0UqhqyW0BJQxCIQBxEoJjJFIFTAWVQyYN0IAJxEIFiJlQECwOqqsiBCMRBBIqZTBEEGFKCOTGIQBxEoJhwc3XPLDw5Wzl/8XLaMwuHi8CvYhQertu1T9wv7W6BE+sHQl/p9izAqQVEUHoQgWLctlp7fG1R6RTjQSKYnjreb5+B4fpCxWq6bqHEhYpbGSlQRnF9fipeybPeDweLpqYFEYiDCBRjW2BkXYNL1efiIgi0wCFfzqtnjvfb9kLl6Fi1kpeXpgeIoHrimHh3oI4IFEAEiumPCGJVOpq7dUd5jiBYwtDp4UuXRe/0FKh9WA4QgWL8Vqpe+zCBCLpzB05B5DgiiOzqh0TQqbAq/bCgByIQBxEoxm+l+tWQxxBBpXq321DH6PyP1SPoTDFIzwvYIAJxEIFiuq309s0P43lgZmZpRXOOoP9IPyiCzgOCWCKImGhwpiFVZgcDIAJxEIFi8heB1do7YwH/j44m/EeMsUTQ/d1BTw2Wl6Z15gVsEIE4iEAx/qYj/aHBwE1H9mIBt312hvF+G44/NOi9uDXFaA0NrJe1kV1ljAjEQQSK8bchq08Wsg0ZEaQEESimdzBJvMeH566vJBwXcDAJIkgJIlCMdVTZ6AVFc1efJLPABkeVIYLUIALFuIeX1tauzCstMebwUkSQEkSgm8Bx5u6mo5nTs2cvLKbddMRx5oggPYhAN00KnCiACMRBBOqh5Jk4iEAcRJBFKIIqCyIQBxFkFG+TsuhiIAJxEEF28bYbW48ESp5srpr6/YPcb50cQQTiIIKM4m3QIxADEYiDCLIIcwSyIAJxEIF6eGogDiIQBxHopsE6AgUQgTiIQDeBlYUasLIQEaQHESjG3WugCHsNEEFKEIFilOYIw7D7EBGkBBEopncegfrogPMIEEE6EIFi/BOK1OGEIkSQEkSgGN3nBTYDzyzM5jYaVvtQA0QgDiJQTEYWeOhtFKoacrd0Yq9Eqvy/iAjEQQSKmUwRVE/0T0B2z1AXAxGIgwgUM5kicKEacjlABIpBBPXoEmlpQQTiIALFhJure2bhydnK+YuX055ZOFwEfhWjcJURu/aJW7C0W+DE+oFQOVO7jPKphRE9AvF5REQgDiJQjNtWa4+vLSqdYjxIBNNTxwNzePYfrfbpFkrszva5Nc763+rr81ODS5659KstioIIxEEEirEtMLKuwaXqc3ERBPrkEfVL7b/qtdiFytGxaiUvL007Iuh3JZSeKSICcRCBYvojgliVjuZu3VGeIwiWMHR6+GJl0S06AxOGBsUHESjGb6XqtQ8TiKA7d+AURI4jgsinAMMmC4d0QxKDCMRBBIrxW6l+NeQxRFCp3u125sfo/CftEQR+VwpEIA4iUEy3ld6++WE8D8zMLK1ozhH0p+6CIuiM6mOJIOIbPjAN6UKPoBQgAsXkLwKrtbuL/BxN+I8YY4mg+7uDnhosL03b9gnNO4qACMRBBIrxNx3pDw0GbjqyFwu4/fPlpWlrfUH8oUHvxa0pRnto4C5PkB4UdEAE4iACxfjbkNUnC9mGjAhSgggU0zuYJN7jw3PXVxKOCziYBBGkBBEoxjqqbPSCormrT5JZYIOjyhBBahCBYtzDS2trV+aVlhhzeCkiSAki0E3gOHN309HM6dmzFxbTbjriOHNEkB5EoJsmBU4UQATiIAL1UPJMHEQgDiLIIhRBlQURiIMIMoq3SVl0MRCBOIggu3jbja1HAiVPNldN/f5B7rdOjiACcRBBRvE26BGIgQjEQQRZhDkCWRCBOIhAPTw1EAcRiIMIdNNgHYECiEAcRKCbwMpCDVhZiAjSgwgU4+41UIS9BoggJYhAMUpzhGHYfYgIUoIIFNM7j0B9dMB5BIggHYhAMf4JRepwQhEiSAkiUIzu8wKbgWcWZnMbDT3OXAFEIA4iUExGFnjobRS1GrJ7dLIYiEAcRKCYiRdB8Eh1KRCBOIhAMRMugl5FdkRQfBCBYiZbBJ+cOnJ8fiFYW00ERCAOIlBMuLm6ZxaenK2cv3g57ZmFw0XQ+1oOVSVzK5H0Kxf1CpxYP2D/7d3DultG+dRChAi6JRJDRRZFQATiIALFuG219vjaotIpxoNEMD11vN8+AxUKFypW03ULJS5U3CJFgTKK6/NTg0ue9V8hutqqCIhAHESgGNsCI+saXKo+FxdBoAjqkHqkq2eO99t2qGDhiIJoy0vTjgisUQkiKAmIQDH9EUGsSkdzt+4ozxGEKpTbPXyhsujr81PWDyCCkoAIFOO3UvXahwlE0J07cAoixxGB286tf6sjgmCnAxGUBESgGL+V6ldDHkME0UP3+NWQh/YI7CrJAaKHJMlABOIgAsV0W+ntmx/G88DMzNKK5hxB9YQ/yRcUQecBQSwRREw0BKYhbegRlAREoJj8RWA1Qne1r6MJ/xFjLBF0f3f4U4MeiKAkIALF+JuO9IcGAzcd2YsFnGnCThPtrS+IPzTovbjV5x+86QgRlAREoBh/G7L6ZCHbkBFBShCBYnoHk8R7fHju+krCcQEHkyCClCACxVhHlY1eUDR39UkyC2xwVBkiSA0iUIx7eGlt7cq80hJjDi9FBClBBLoJHGfubjqaOT179sJi2k1HHGeOCNKDCHTTpMCJAohAHESgHkqeiYMIxEEEWYQiqLIgAnEQQUbxNimLLgYiEKR27+3LB/u1p2brr43Nv8SrxLHmbT7ytp806s+ajXoz77YVTKFFYIzxthtbjwRKnmyumvr9g9xvoBxBBCLU7r3d+npXYHy63mi+KpAOCi0Cb4MegRiIID3bX7ze+EauEtea520WxQXFFQFzBLIggpS8fLCvcUPWnxXCBQUVAU8NxEEEadj+4rXeDVmEfkERRdBgHYECiCAxtXtvJUcEYda83OcLiiiCwMpCDVhZiAjiIzI7OJzt9Ua+ja5wInD3GijCXgNEEIfavbfZ3JD5PlMsnAiU5gjDsPsQEcRBaY4wTL6zhoUTQe88Am04jwARxGHr61Y2N+T2kzxHB4UTgX9CkTqcUIQI4rCxmlEXdeuRl2O7K5wIdJ8X2Aw8szCbO2zwmYU6IIJk6D4vsFlDBFYy+tAfehuFqoZsHYs6qIZqShBBMrK8IXNsd4gg2DjzE4F7YrI0iCAZiCCfIAIlEEEyEEE+mVARhMsiSIMIkoEI8kn403HPLDw5Wzl/8XLaMwuHi8CvYhQuRmTXPnGH8d2WbP1AaJBvl1E+tYAIykGWN2SO7a7gIqg9vraodIrxIBFMTx1326fTXC0vuIUSFypuZaRAGcX1+alhJc9s9QwshZYORJCMLG/IHNtdkUUwuq7BpepzcREEiqBG1C+1/6rXthcqR8eqlby8ND2owXecEqyenBZEkIwsb8gc211xRRCv0tHcrTvCIogqi+5M49k9fImy6FH3X+gfTQ8iSEaWN2SO7a6wIlCvfZhABN0OvFMQOY4I1uenxhSBQh1URJCMLG/IHNtdYUWgXw15DBFUqlGNM3415LF7BIigMGR5Q+bY7ooqgts3P4z3sc/MLK2IiiDQYqsn/Em+YOPsPCCIJYKIiYbANKTLkImJxCCCZGR5Q+bY7hCBTXcyv9faO2MB/4+OJvx5/lgi6P7u4KcG1RPW7w51RGIQQTIQQT7xNx3p98QGbjqyFwu4M3bWjoDpM+vxhwa9F7emGJ2hgTsBqbLEEBEkw990pH9DsunIjr8NWX1uhm3IiCAO/jZk9RuSbchOegeTxHtac+76SsJuGAeTIII49A4m0b4hOZjEiXVU2ej1G3NXnyT70Dc4qgwRxMM6qkz3huSoMifu4aW1tSvzSis6ObwUEcTBPbxU8Ybk8NJgAseZu3s8Zk7Pnr2wmHaPB8eZI4L4BI4z17ghOc48Ik0KnCiACJJDgZO8QskzcRBBGih5llsogioLIkgJRVBzi7dJWXQxEEF6tr+kLHpO8bYbW48EPvrNVVO/f5D7nZQjiECGe2+3vhIohbi93sh9XsBOoUXgbdAjEAMRCFK79/bll/u1p+blXxubf4n3RbXmbT3ytp806s+a+T4pjExxRcAcgSyIQJwhn6fNzu5u3o1pdAoqAp4aiIMIxEEEummwjkABRCAOItBNYGWhBqwsRATpQQSKcfcaKMJeA0SQEkSgGKU5wjDsPkQEKUEEiumdR6A+OuA8AkSQDkSgGP+EInU4oQgRpAQRKEb3eYHNwDMLs7mNhh5nrgAiEAcRKCYjCzz0NgpVDbmDdTgqx5kXH0SgmMkVQah6oiyIQBxEoJgJFYFCaaMAiEAcRKCYyRSBU1hZB0QgDiJQTLi5ukfEnZytnL94Oe0RccNF4FcxOhaqOGTXPjnmNN1ugRPrB0IN265icmrBFsH6/JT6xCEiEAcRKMZtq7XH1xaVDo0dJILpqeP9NhmoPrZQsZqrWyhxoeIWKQqUUVyfnxpS8qwrIMsU8sWOEIE4iEAxtgVGHiN/qfpcXASBIqhD6pE6/fnQVN+IgmjLS9M9EfgPC3q/Xj0h7wJEIA4iUEx/RBCrsMzcrTvKcwTBEoaBOoUSZdE7InB+IEJJKUEE4iACxfitVL3UXAIRdOcOnILIcUSwPj81WgSBf7dfjl0IRCAOIlCM30r1i8+OIYJK9W5Ec41fDXlEjyBqcVHUr6QCEYiDCBTTbaWZlKMPXdqIDnn/mzkogs4DglgiiJhocKchQ9//8guQEYE4iEAx+YvAau2dsYD/R0cT/iPGWCLo/u7ApwaHgZZfPcES4xKACBTjbzrSHxoM3HRkLxZwp+6tvQDTZ9bjDw16L25NMYa/860fUFhchAjEQQSK8bchq08Wsg0ZEaQEESimdzBJvMeH566vJBwXcDAJIkgJIlCMdVTZ6AVFc1efJLPABkeVIYLUIALFuIeX1tauzCstMebwUkSQEkSgm8Bx5u6mo5nTs2cvLKbddMRx5oggPYhAN00KnCiACMRBBOqh5Jk4iEAcRJBFKIIqCyIQBxFkFG+TsuhiIAJxEEF28bYbW48ESp5srpr6/YPcb50cQQTiIIKM4m3QIxADEYiDCLIIcwSyIAJxEIF6eGogDiIQBxHopsE6AgUQgTiIQDeBlYUasLIQEaQHESjG3WugCHsNEEFKEIFilOYIw7D7EBGkBBEopncegfrogPMIEEE6EIFi/BOK1OGEIkSQEkSgGN3nBTYDzyzM5jaSP6d4OIhAHESgmIws8NDbKE415G7dxBDUNSg2iEAxkyiCMMtL09Q+LDyIQDGIYECJtLQgAnEQgWIQgUZ3oI4IFEAEigk3V/fMwpOzlfMXL6c9s3C4CPwqRoFiRId+mbOoMiTdAifWD4SKlNhllE8tDBSBePnTDohAHESgGLet1h5fW1Q6xXiQCKanjvfbp1uhsL5QCRQp63fguxN+bo2zfvd+fX5qeMkzn6jKyCIgAnEQgWJsC4ysa3Cp+lxcBIHBeUT9Uvuvem17oXJ0rFrJy0vTUSJwXlMURCAOIlBMf0QQq9LR3K07ynMEwRKGTg9fqBtKOXAAAA1YSURBVCx6j/X5Ka3FBYhAHESgGL+Vqtc+TCCC7tyBUxA5jgginwJEiSAkHUEQgTiIQDF+K9WvhjyGCCrVuxGj9/jVkGP2CPTGBXVEoAAiUEy3ld6++WE8D8zMLK1ozhH05/CDIug8IIglgoiJhsA0pP+CeouOEYE4iEAx+YvAau2dsYD/R0cT/iPGWCLo/u7wpwZqzws6IAJxEIFi/E1H+kODgZuO7MUC7oh9eWnaWl8Qf2jQe3FrijE0NNCcIKgjAgUQgWL8bcjqk4VsQ0YEKUEEiukdTBLv8eG56ysJxwUcTIIIUoIIFGMdVTZ6QdHc1SfJLLDBUWWIIDWIQDHu4aW1tSvzSkuMObwUEaQEEegmcJy5u+lo5vTs2QuLaTcdcZw5IkgPItBNkwInCiACcRCBeih5Jg4iEAcRZBGKoMqCCMRBBBnF26QsuhiIQBxEkF287cbWI4GSJ5urpn7/IPdbJ0cQgTiIIKN4G/QIxEAE4iCCLMIcgSyIQBxEoB6eGoiDCMRBBLppsI5AAUQgDiLQTWBloQasLEQE6UEEinH3GijCXgNEkBJEoBilOcIw7D5EBClBBIrpnUegPjrgPAJEkA5EoBj/hCJ1OKEIEaQEEShG93mBzcAzC7O5jYaWRVcAEYiDCBSTkQUeehtFq4bsnowq/i8iAnEQgWImVAROKcSI8grpQQTiIALFTKYIgqXQFY42RwTiIALFTKQIQsURl5emEUHhQQSKCTdX98zCk7OV8xcvpz2zcLgI/CpG4eG6Xfsk/B1eqdo/EKpiaJdRPrUwskcQXYs9MYhAHESgGLet1h5fW1Q6xXiQCKanjvcbf6BC4ULF8oI7kl+ouJWRAuP89fmpoSXPQnME4vOFiEAcRKAY2wIj6xpcqj4XF0Fgli6ifqn9V722vVA5OlatZKfl9/8LTw1KBCJQTH9EEKvS0dytO8pzBKF5O7uHL1UWPaCb6oljDA2KDyJQjN9K1WsfJhBBd+7AKYgcRwShuUD/3+qKIKIOsvzoABGIgwgU47dS/WrIY4igUr0b0VzjV0Me0SOIelgY9SupQATiIALFdFvp7ZsfxvPAzMzSiuYcQX8+PyiCzgOCWCKImGiwpyHpEZQTRKCY/EVgtcnOWMD/o6MJ/xFjLBF0f3fwU4PApED1xDEWFBUfRKAYf9OR/tBg4KYje7GA2xrdif34Q4Pei1tTjMHvfHvxQngNQnoQgTiIQDH+NmT1yUK2ISOClCACxfQOJon3+PDc9ZWE4wIOJkEEKUEEirGOKhu9oGju6pNkFtjgqDJEkBpEoBj38NLa2pV5pSXGHF6KCFKCCHQTOM7c3XQ0c3r27IXFtJuOOM4cEaQHEeimSYETBRCBOIhAPZQ8EwcRiIMIsghFUGVBBOIggozibVIWXQxEIA4iyC7edmPrkUDJk81VU79/kPutkyOIQBxEkFG8DXoEYiACcRBBFmGOQBZEIA4iUA9PDcRBBOIgAt00WEegACIQBxHoJrCyUANWFiKC9CACxbh7DRRhrwEiSAkiUIzSHGEYdh8igpQgAsX0ziNQHx1wHgEiSAciUIx/QpE6nFCECFKCCBSj+7zAZuCZhdncRip1zYaACMRBBIrJyAIPvY0CVUM+rN/tVU+k5FlpQASKmUwRrJ45Hjj7nCKoxQcRKGYiRRD6dymLXgYQgWImUQQRJc/k3wkiEAcRKCbcXN0zC0/OVs5fvJz2zMLhIrBrjbhddLv2iVuGpPsdbv1AqEiJXUb51MJoEVDyrOAgAsW4bbX2+Nqi0inGg0QwPXW83wLtCoV3D+sLFatxuoUSu1N9bo2zfhnF9fmpwSXPwrUPl5emEUHhQQSKsS0wsq7BpepzcREEiqBG1C+1/6rXthcqR8eqlew2dbfY4fr81PHpKURQdBCBYvojgliVjuZu3VGeIwj12+0evkxZ9ODLHp9fXp9HBIUHESjGb6XqtQ8TiKA7d+AURI4jgvX5qdEiGP1O0oEIxEEEivFbqX415DFEUKnejRjJx6+GHKdHEP2PyoEIxEEEium20ts3P4zngZmZpRXNOYLqCX+SLyiCzgOCWCKImGgITEM6RPYg0oIIxEEEislfBFZr74wF/D86mvAfMcYSQfd3Bz01uHtYPdH/3eqJY+LdgToiUAARKMbfdKQ/NBi46cheLOA+3l9emrbWF8QfGvRe3JpidIYGzgSkdF+gAyIQBxEoxt+GrD5ZyDZkRJASRKCY3sEk8R4fnru+knBcwMEkiCAliEAx1lFloxcUzV19kswCGxxVhghSgwgU4x5eWlu7Mq+0xJjDSxFBShCBbgLHmbubjmZOz569sJh20xHHmSOC9CAC3TQpcKIAIhAHEaiHkmfiIAJxEEEWoQiqLIhAHESQUbxNyqKLgQjEQQTZxdtubD0SKHmyuWrq9w9yv3VyBBGIgwgyirdBj0AMRCAOIsgizBHIggjEQQTq4amBOIhAHESgmwbrCBRABOIgAt0EVhZqwMpCRJAeRKAYd6+BIuw1QAQpQQSKUZojDMPuQ0SQEkSgmN55BOqjA84jQATpQASK8U8oUocTihBBShCBYnSfF9gMPLMwm9tIpfb5EBCBOIhAMRlZ4KG3UZxqyA7r81OBgqiH9bu92orhuqxxQQTiIALFTLQIuqckh0RgH4ictD4qIhAHEShmUkVgH3YeEEGwDuKQuqxDQATiIALFTKgIlpemO+2/9z96Pxn9X8Z+n4hAHESgmHBzdc8sPDlbOX/xctozC4eLwK9iFB6Q27VP7MpFvQIn1g/Yf3v3sO5WMTm1MGCOINTso77/k0w0IgJxEIFi3LZae3xtUekU40EimJ463m9jgQqFC5VgZ75Xlag7mefWOOvXLFqfnxpW8qxPpAiCTklSNB0RiIMIFGNbYGRdg0vV5+IiCFQcGzIgd5roQuXoWLWSB835xRbBuJXREIE4iEAx/RFBrEpHc7fuKM8RBEsYunUKxcui0yMoD4hAMX4rVa99mEAE3bkDpyByHBFEfoEzR1B6EIFi/FaqXw15DBFUqncj5urjV0NO0yMId0l4alAQEIFiuq309s0P43lgZmZpRXOOoHrCn+QLNr/OA4JYIoj4Vg9MQ/YIiyCkDNYRFAREoJj8RWC19s5YwP+jown/EWMsEXR/N9FTA//fclYWJljsgAjEQQSK8Tcd6Q8NBm46shcLRPTJe+sL4g8Nei9uTTHGHhrcPazfdZY2JFvyhAjEQQSK8bchq08Wsg0ZEaQEESimdzBJvMeH566vJBwXcDAJIkgJIlCMdVTZ6AVFc1efJLPABkeVIYLUIALFuIeX1tauzCstMebwUkSQEkSgm8Bx5u6mo5nTs2cvLKbddMRx5oggPYhAN00KnCiACMRBBOqh5Jk45u9vEIEsiCCLUARVltYzRCDJqwfvEEFG8TYpiy7GztYBIhDEe4gIMkzzVVOkFOLWV7sTOC9gs9cadrPm/vZKR/PpsDkXRKCSRr1Zf9bcftLYeuTF7CNs/qXx8q+N2lPz6vv2pD0pDOOtjfj68tbe5f4my8XO9rAeFiLILjEvw97e61dfT/pd3vph2ATB3v7r1g9vcn+TJeLV1+/29uLdfohAO3FFsP+69WKi73JvNcZdu/faW510Xcan9WKEWBFBdol/Jfb2Xze+ndS7/N7hbi1WJ3a3dlC/l/e7LQONb+NOEyKCLDLWxWjvTug33shBgdN1ejbRXac4eKvv2rtj3HiIQD1jXYy9/dftnQmbErs3ngX6LqBfMABv7V17Z7zPExGoZ9zrsbf/eq/92vzt7STc6N7qu5gjgjC7tYPJ7D0N496h+dvbvXaSzxMR6CbZXb63/7rdPGg+eVt/kPe9pYO39m7nhzfx57Sj2Xvd+uHNZHWgBvHgsPnkbbuZ0KqIQD2pbvT913t7r3fqB60Xb8w/3pjv35abv79pPXuzs3WwN37HdQQ7r3e2DlrP3pi/l/9TGot/vGm9eLNTP0irVESgHeE7HkAHRKCb3C8wQBx2dhCBZnK/wABx2NnZybutjA4iANAFEehmb28/92sMMIr9vBtKrJRYBLu77byvMcAIdnfbeTeUWCmxCFqtVu6XGWA4rVYr74YSKyUWgTFmt02nAIrLbrsc3QFTdhEYY9rtvdyvN0CYdnsv78YxRkovAmNabWYNoWC09/aNKcegoJP3QASm1WoxRoDisNtul2VqoJf3QQSd7Ozs0DWAfGnv7Zdi1UA4748IOmm1dnbbbYwAWdLe299tt1utUiqgk/dNBISQBEEEhBBEQAhBBIQQgwgIIQYREEIMIiCEGERACDGIgBBiEAEhxCACQohBBIQQgwgIIQYREEIMIiCEGERACDGIgBBiEAEhxCACQohBBIQQgwgIIQYREEIMIiCEGERACDGIgBBiEAEhxCACQohBBIQQgwgIIQYREEIMIiCEGERACDGIgBBiEAEhxCACQohBBIQQgwgIIQYREEIMIiCEGERACDGIgBBiEAEhxCACQohBBIQQgwgIIQYREEIMIiCEGERACDGIgBBiEAEhxCACQohBBIQQgwgIIcaY/w9XFYuBzIBJOAAAAABJRU5ErkJggg=="
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>signalOut = Σ (bandpass_n(signalIn) × gain_n)   for n = 1 to 10</code></pre>
+    <p>The input signal is passed simultaneously through all ten biquad
+      bandpass filters. Each filter’s output is scaled by its gain, and the
+      ten scaled outputs are summed to form the final output.</p>
+    <p>At unity gain (all bands = 1.0), all spectral content passes through
+      unchanged. Setting a band to 0.0 silences that frequency region; values
+      above 1.0 boost it.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>Input audio signal to equalize</td>
+        </tr>
+        <tr>
+          <td><code>band1</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 31 Hz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band2</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 63 Hz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band3</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 125 Hz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band4</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 250 Hz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band5</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 500 Hz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band6</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 1 kHz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band7</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 2 kHz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band8</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 4 kHz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band9</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 8 kHz band (0.0–2.0)</td>
+        </tr>
+        <tr>
+          <td><code>band10</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain for the 16 kHz band (0.0–2.0)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Equalized audio output</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <h3 id="band-gain-parameters">Band Gain Parameters</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Frequency</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>band1</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>31 Hz — Sub bass</td>
+        </tr>
+        <tr>
+          <td><code>band2</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>63 Hz — Bass</td>
+        </tr>
+        <tr>
+          <td><code>band3</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>125 Hz — Low mid</td>
+        </tr>
+        <tr>
+          <td><code>band4</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>250 Hz — Mid</td>
+        </tr>
+        <tr>
+          <td><code>band5</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>500 Hz — Upper mid</td>
+        </tr>
+        <tr>
+          <td><code>band6</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>1 kHz — Presence</td>
+        </tr>
+        <tr>
+          <td><code>band7</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>2 kHz — Upper presence</td>
+        </tr>
+        <tr>
+          <td><code>band8</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>4 kHz — Brilliance</td>
+        </tr>
+        <tr>
+          <td><code>band9</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>8 kHz — Air</td>
+        </tr>
+        <tr>
+          <td><code>band10</code></td>
+          <td>1.0</td>
+          <td>0.0–2.0</td>
+          <td>16 kHz — Ultra air</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="band-q-parameters-inspector-only">Band Q Parameters (Inspector
+      Only)</h3>
+    <p>Q values are set via the inspector and are <strong>not
+        modulatable</strong> (no input port). Each band’s Q controls its
+      bandwidth:</p>
+    <table style="width:100%;">
+      <colgroup>
+        <col style="width: 31%">
+        <col style="width: 25%">
+        <col style="width: 20%">
+        <col style="width: 22%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>q1</code>–<code>q10</code></td>
+          <td>2.0</td>
+          <td>0.1–10.0</td>
+          <td>Narrow (high Q) or wide (low Q) band influence</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Low Q (0.5–1.0):</strong> Wide band — affects a broad
+      frequency range around the center <strong>Default Q (2.0):</strong>
+      One-third octave bandwidth — standard graphic EQ behavior <strong>High Q
+        (5.0–10.0):</strong> Narrow band — precise surgical cuts or notches</p>
+    <h2 id="gain-values">Gain Values</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Gain</th>
+          <th>dB Equivalent</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>Silent</td>
+          <td>Band completely removed</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>−6 dB</td>
+          <td>Reduce band by half</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>0 dB (unity)</td>
+          <td>Band passes through unchanged (default)</td>
+        </tr>
+        <tr>
+          <td>1.5</td>
+          <td>+3.5 dB</td>
+          <td>Moderate boost</td>
+        </tr>
+        <tr>
+          <td>2.0</td>
+          <td>+6 dB</td>
+          <td>Strong boost</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> Because all 10 filters output simultaneously,
+      setting multiple bands to 2.0 can produce significant overall level
+      increase. Monitor output levels when applying multiple boosts.</p>
+    <h2 id="band-frequency-reference">Band Frequency Reference</h2>
+    <table>
+      <colgroup>
+        <col style="width: 10%">
+        <col style="width: 23%">
+        <col style="width: 34%">
+        <col style="width: 30%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Band</th>
+          <th>Center Freq</th>
+          <th>Perceptual Region</th>
+          <th>Typical Content</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>31 Hz</td>
+          <td>Sub bass</td>
+          <td>Rumble, sub oscillators, extreme low end</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>63 Hz</td>
+          <td>Bass</td>
+          <td>Bass body, kick drum fundamental</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>125 Hz</td>
+          <td>Low mid</td>
+          <td>Warmth, bass upper harmonics</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>250 Hz</td>
+          <td>Mid</td>
+          <td>Muddiness zone, vocal body</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>500 Hz</td>
+          <td>Upper mid</td>
+          <td>Nasal character, boxiness</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>1 kHz</td>
+          <td>Presence</td>
+          <td>Clarity, attack presence</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td>2 kHz</td>
+          <td>Upper presence</td>
+          <td>Edge, cut-through</td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td>4 kHz</td>
+          <td>Brilliance</td>
+          <td>Attack transients, consonants</td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td>8 kHz</td>
+          <td>Air</td>
+          <td>Brightness, breath, sibilance</td>
+        </tr>
+        <tr>
+          <td>10</td>
+          <td>16 kHz</td>
+          <td>Ultra air</td>
+          <td>Extreme sparkle (rarely present in musical sounds)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-tonal-sculpting">Basic Tonal Sculpting</h3>
+    <p>Shape a Harmonic Generator’s output before signal conversion:</p>
+    <pre><code>[Harmonic Generator] → [Rolloff Processor] → [Spectrum To Signal] → signalIn
+                                                                          ↓
+                                                                    [10-Band EQ] → signalOut
+                                                                     band4: 0.5 (reduce mud)
+                                                                     band7: 1.4 (add presence)</code></pre>
+    <h3 id="dynamic-formant-shaping-envelope-modulation">Dynamic Formant
+      Shaping (Envelope Modulation)</h3>
+    <p>Animate band gains with an envelope for vowel-like evolution:</p>
+    <pre><code>[Envelope Engine] → controlOut → band5 (500 Hz)
+                  → controlOut → band6 (1 kHz)
+                                 [10-Band EQ] → signalOut</code></pre>
+    <p>As the envelope rises, the mid-presence bands swell, creating a
+      natural swell from dark to bright.</p>
+    <h3 id="lfo-filter-sweep">LFO Filter Sweep</h3>
+    <p>Rhythmically modulate adjacent bands for a wah-like effect:</p>
+    <pre><code>[LFO] → valueOut → band5
+                    band6  → [10-Band EQ] → signalOut</code></pre>
+    <p>Wire the LFO to multiple adjacent bands. As the LFO sweeps, the
+      emphasis moves across the frequency spectrum.</p>
+    <h3 id="frequency-mapper-eq">Frequency Mapper + EQ</h3>
+    <p>Pitch-adaptive EQ — high notes get more brightness:</p>
+    <pre><code>[Frequency Mapper] → controlOut → band8 (4 kHz)
+  outputMin: 0.8, outputMax: 1.8</code></pre>
+    <p>Low notes get subtle 4 kHz content (0.8); high notes get a strong 4
+      kHz boost (1.8).</p>
+    <h3 id="sub-boost-for-low-notes">Sub Boost for Low Notes</h3>
+    <pre><code>[Frequency Mapper] → controlOut → band1 (31 Hz)
+  curveType: Logarithmic
+  invert: true
+  outputMin: 0.8, outputMax: 1.6</code></pre>
+    <p>Low pitched notes get a sub boost (up to 1.6×); high notes leave the
+      sub band nearly untouched.</p>
+    <h3 id="carving-space-between-layers">Carving Space Between Layers</h3>
+    <p>When layering two signals via Signal Mixer, use two 10-Band EQs to
+      carve complementary frequency spaces:</p>
+    <pre><code>[Chain A] → [10-Band EQ (bands 1-5 = 1.0, bands 6-10 = 0.3)] → signalA → [Signal Mixer]
+[Chain B] → [10-Band EQ (bands 1-5 = 0.3, bands 6-10 = 1.0)] → signalB → [Signal Mixer]</code></pre>
+    <p>Chain A occupies the low end; Chain B occupies the high end.</p>
+    <h2 id="modulation-behavior">Modulation Behavior</h2>
+    <p>When a control signal is connected to a <code>band</code> port:</p>
+    <ol type="1">
+      <li>The static parameter value is read as the baseline gain</li>
+      <li>The connection function (passthrough, add, multiply, etc.) is
+        applied with the incoming control value scaled to gain range:
+        <code>sourceValue = controlOut × 2.0</code></li>
+      <li>The result is clamped to 0.0–2.0 before being applied to the
+        filter</li>
+    </ol>
+    <p><strong>Q values have no input ports</strong> and cannot be modulated
+      at runtime. Adjust them via the inspector.</p>
+    <h2 id="comparison-with-other-spectral-shapers">Comparison with Other
+      Spectral Shapers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 21%">
+        <col style="width: 15%">
+        <col style="width: 13%">
+        <col style="width: 25%">
+        <col style="width: 25%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Domain</th>
+          <th>Bands</th>
+          <th>Modulatable</th>
+          <th>Primary Use</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>10-Band EQ</strong></td>
+          <td>Signal</td>
+          <td>10 (parallel bandpass)</td>
+          <td>All gains</td>
+          <td>General equalization</td>
+        </tr>
+        <tr>
+          <td><strong>Rolloff Processor</strong></td>
+          <td>Spectrum</td>
+          <td>Continuous taper</td>
+          <td>Yes</td>
+          <td>Harmonic rolloff shaping</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Signal</td>
+          <td>Resonant filter</td>
+          <td>Cutoff, resonance</td>
+          <td>Vowel/body resonance</td>
+        </tr>
+        <tr>
+          <td><strong>LP/HP Filter</strong></td>
+          <td>Signal</td>
+          <td>1 (lowpass or highpass)</td>
+          <td>Cutoff, resonance</td>
+          <td>Bright/dark shaping</td>
+        </tr>
+        <tr>
+          <td><strong>Noise Color Filter</strong></td>
+          <td>Signal</td>
+          <td>Continuous</td>
+          <td>Color parameter</td>
+          <td>Noise coloring</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-output">No Output</h3>
+    <ol type="1">
+      <li>Check that <code>signalIn</code> is connected to a source producing
+        audio</li>
+      <li>Verify at least one band has a gain &gt; 0.0</li>
+    </ol>
+    <h3 id="unexpected-level-changes">Unexpected Level Changes</h3>
+    <ol type="1">
+      <li>All 10 bands at unity gain should preserve level (within filter
+        rounding error)</li>
+      <li>If level is unexpectedly high, check for bands set &gt; 1.0 via
+        modulation</li>
+      <li>The parallel architecture means the gain of each band is independent
+        — silence a band (0.0) and the other 9 still contribute</li>
+    </ol>
+    <h3 id="thin-nasal-sound">Thin / Nasal Sound</h3>
+    <ol type="1">
+      <li>Try reducing Q values for the active bands (lower Q = wider, more
+        natural sound)</li>
+      <li>High Q on multiple adjacent bands can create a peaky, nasal
+        coloration</li>
+    </ol>
+    <h3 id="muddy-low-end">Muddy Low End</h3>
+    <ol type="1">
+      <li>Reduce band4 (250 Hz) — this region is commonly associated with
+        muddiness</li>
+      <li>Reduce band3 (125 Hz) if the problem is in the low-mid warmth
+        area</li>
+    </ol>
+    <h3 id="too-much-sibilance">Too Much Sibilance</h3>
+    <ol type="1">
+      <li>Reduce band9 (8 kHz) and/or band8 (4 kHz)</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="filter-design">Filter Design</h3>
+    <p>Each band uses a <strong>biquad bandpass filter</strong> implemented
+      in Direct Form I (transposed). The coefficient calculation follows the
+      Audio EQ Cookbook formula for a constant-peak bandpass filter (peak gain
+      = 0 dB for Q computation).</p>
+    <p>The ten filters are independent — they all receive the same input
+      signal and their outputs are summed. This is a true parallel graphic EQ
+      architecture, not a series chain.</p>
+    <h3 id="filter-state-and-legato">Filter State and Legato</h3>
+    <p>The filter states (delay line history) are preserved across legato
+      note transitions and reset at the start of non-legato notes. This
+      prevents clicks and artifacts when notes connect smoothly.</p>
+    <h3 id="cpu-cost">CPU Cost</h3>
+    <p>Ten biquad filter evaluations per sample (ten multiply-accumulate
+      chains of 5 operations each), plus ten multiply-adds for the output sum.
+      Moderate CPU cost — more expensive than single-filter containers but
+      efficient relative to convolution-based approaches.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>bandpasseq.h</code>, <code>bandpasseq.cpp</code></em></p>
+  </body>
+</html>

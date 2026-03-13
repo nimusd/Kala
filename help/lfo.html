@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>LFO</title>
+  </head>
+  <body>
+    <h1 id="lfo-documentation">LFO Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The LFO (Low Frequency Oscillator) is a <strong>stateful periodic
+        oscillator</strong> that generates cycling waveforms for modulation.
+      Unlike the stateless Easing Applicator and Envelope Engine, the LFO
+      maintains internal phase state and advances automatically each sample,
+      producing continuous oscillation independent of note progress.</p>
+    <p>The output oscillates between -amplitude and +amplitude (bipolar),
+      making it suitable for modulation that needs to swing above and below a
+      center value.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) - Generates periodic control
+      signals for modulation</p>
+    <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAVwAAAEvCAIAAACGwu4UAAAYBklEQVR4nO2dzW8cZZ7H5w/IydecfBqxnCxfZjVzQr74YGlmlL0vG8sexGyQNywbaZXYAbEEBWZAQdswsDNCEMGKjBME5s0J2QQx7DjJjJMltJTgSYgSx69xv7lfnMS9h3a361dVXV1VTz31VLU/H30vxMYuP/U8n37qqarn96MiAICFH5k+AABIFkgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAARIAQAESAEABEgBAASpl8JaPnf65oWDF37/89OHfjr11CMnH//x5D8SkpA8cvLxn0499fPThw5e+P3pmxfW8jnTI6YzKZZCvlD44/Vzj3263/iJJ8RnHvt0/x+vnysUC6ZHjxdplcJCbnnv+aPGzzEhIbL3/NGF3LLpMdSWVErh5sqdwc8PGD+1hITO4OcHflidNz2S3EmfFFbza3vOHDZ+UglRzJ4zh1fza6bHkwvpk8Kzl942fjoJiSTPXnrb9HhyIWVSyC7d+LuT/2T8XBISSR49tTe7dMP0qLKTMin825/fMH4iCYkwB/78O9Ojyk7KpPCTj39t/CwSEmF+8vGvc4W86YElSJkUjJ9CQiLP/9751vTAEiAFQgznxPX/MT2wBEiBEMPJ/N8p0wNLgBQIMZyXZ//b9MASIAVCDAcpKGH8/BESeZCCEsbPHyGRBykoYfz8ERJ5kIISAdp65lK9fvet084vvfFl3c6XM+J7DtwRX72RPWi835AuDlJQIkBbe0qh7Tg//dGNer1e+OiX8vvr9UsHTHcd0q1BCkoEaOswUnjjy3q9fsf5esXBtwo2UxASWZCCEgHaOrgUfpm923ZGcPqjG46rDEIiCVJQIkBbB5bCwbcKrtMEP18lJHyQghIB2jqwFDzXGhqrj1xBEA1BCkoEaOsAdx8alwxIgZgJUlAiQFvrmClw+UA0BCkoEaCtNawp8MAC0RGkoESAto7+7oPrTyNENUhBiQBtHflzClw7ED1BCkoEaOton2hkiZFoC1JQIkBbz1xyvOLQePqow4Lijx3vPvDMEtEapKCE8fNHSORBCkoYP3+ERB6koITx80dI5EEKShg/f4REHnZzVsL4+SMk8lD3QQnj54+QyEOFKCWoJUm6LH//8T9TS1IJqk6TLgtVp1XJLt149NRe4yeSkEjy6Km92aUbpkeVnZRJoVgsPnvpbePnkpBI8uylt02PJxfSJ4XV/NqeM4eNn05CFPMPZw6v5tdMjycX0ieFYrF4c+XO4OcHjJ9UQkJn8PMDP6zOmx5J7qRSCsVicSG3vPf8UeOnlpAQ2Xv+6EJu2fQYaktapVAsFgvFwuT35x77dL/xc0yIzzz26f7J788VigXTo8eLFEuhwVo+d/rmxUMX//CLM4d+NvXUIycfN37iCWnlkZOP/2zqqV+cOXTo4h9O37y4ls+ZHjGdSb0UACBakAIACJACAAiQAgAIkAIACJACAAiQAgAIkAIACJACAAi6QQql0nq5UqlUa9VarVrbICRhqVWqtXKlUiqtmx4rvki3FNbX1ytVREBSk0q1tr6edDWkVQqlUqlcqRg/x4SESLlSKZVKpsdQW1IqhRITBJLqVKq1YjGhXkilFCqVqvGTSohiKpWq6ZHkTvqkwFUD6ZqUKxXT48mFlEmhVCoZP5GERJgELi6kTArlMtME0lUplxM3WUiZFKqsL5IuS7VmelTZSZsUjJ9CQqJO0p5cQAqEGA5SUML4+SMk8qyvl00PLAFSIMRw1stIQQHj54+QyIMUlAjd7vMbufceXjxUn9pfnyStHKpPvffw4vxGTrFb7+TmVW9DpKBEiBYv1aqTD2afqZ8y3nsSm2fqpyYfzJZqYR4ep3nV2xApKBG0uVc2Cq9snjXeY1KRVzfPrmwEa2GaV70NkYIqgdo6Vyu/uPmF8Y6Sory4+UWuVqZ5Y2tDpBAB/hu6Uqv97uHXxrtI6vLmw68rNG8sbYgUosF/Q8/cv2m8c6Q0F+7/QPPG0IZIIRr8tnKt+vzmZ8Z7Rkrz/OZn654LZjSvehsihTDk7xXu3S6sXMsvXs0tXM4tzHbO4pX80nf51evF7xeXJmqfGO8Z6c3V+3c8OvG39+8YP8Lkx7sNkUIw8muFlbm8Hwt45O7s2vSt7MTGTrxzrp4TD/7q0Yk/ePAX40eY/Hi3IVIIQG6h4HNe4Ce3rqxm8ueN94/U5bebX3p04t9snjF+hMmPdxsiBb/cu12ISgeWKUPu+PIF410kXZnYnPLoxBObXJqptiFS8EVuIXojtLzAfCFQnq6f9OjET9dPGj/C5Me7DZFCZ/JrUV41uF5HsL4QKB6d2PixpSVIQQn1lcWOmb6VNd5LUhSkoLUNkUIH8vd0XTjIi4g17lNG0qGNH1taghTCo2N90TXvLs8Y7yhpCVLQ2oZIoQMr17RfOzTyzdyc8Y6SliAFrW2IFDqweDUOIyzM5rLZeeMdJS1BClrbECl0QOt9B2tuXVl1P39zo727e3bt7unNZIz3pITEqBQyA4M9u8bGjTeCvjZECh2IxwiNuJy8udHe3T390+b7UKLSVVJoSr+ZoT2m2xApdMCsFIYzfbH1khSla6SwZ6xnl5T+cKYv6Kxwz1iY40EK4UEKCUx3SGE407drd9/AnONL00O7gkwPkULcIIUEpiukMN7ffkawZ6xn1+DosL8fhRTixjl05//07dSxF/9935MjIyMjI0/sG3vupde/uPSn1cil0O+41BzO9O0aHB3eugrd/pBpzEIbsX/CTA9t/5CxcWtvczHO9JDts6sxm93lWOnc6oiW62FH/84MDPZYf7Xzhwft/X46tP8f4vKrrSs41nYTrWqVgosgHD/W2g6WP9+tNVxPhPM4t0+cPMhAnx9IITxy3K5m3z/29K9GXPjVv776/t/mNc8UhjN9uwb7ep19rvUvcuZpm6BuucO3FPaMWfrZ3GivZeTbfpRjxjveb/1qfbx/bNzlszHsMmo0MwV3Azb+3szAoGz27e8MJIXx/t3b32D9OR3mgJaW8ZJC6zcyU4gTqxEu/9fhJ9yE0ORfXpuc1y4F28eLo2db+tB4v33ICYN0kIJjxFq/X/jCMTzaff67/TlhLo4iunywSSozMNhuPm9tyQBScPyB29+PFMKRLCnMn/ngoJcRGvOFIx9+pVsKoic5O4ScW9q7nf/Lh61LlTZfdf5em4zcR5cQjccgjEcKsgXmRnttwpU3C5uH6l8KLn9g66s+pODj8gEpGKE5Yhc+/w/PWUKTfa/MhL6I8CWFtterbgsQClKwrlNY4kMKXhcFllHkHISxS6H9B/J4v1gCsGrOvxTG+10asPnVzmsKlkkZUmiSKCl885+uSwku1xDHL8YnBc8O0Wmm4PIN3jMFz9/redniclTePz8mKWyPanHMjnHYTgre7eA9Fep098G6EoEUmiRJCudOTfhzwshI5myMUvCahbp8Ysv1P9f1iNa/eH6UdRwM7btpY/h5iiM+KTQlJf1ol8L0UJvLB3d9tP7F+96K53MK2//uvjCBFAyScCk41vkn908PiU+89ncf3BzRY19mt3bHudF+690Hj1X3xtX49jc07j5Yv7OvV+H5iyil0JzkWz+05XC1fYNUnvCFo4Xt7TA5nBlyWNjliUahS/lDmjeJVddrkUJ4mi9Eab98cH0hyocUJu0rC87rC8vNdvtnl3Utze1RArmy4PXp5P6Z6fr0hGOoGJWCXZ2OP3xoT/vLB8sobdPCtpUF519te/fBdWZheR6hN5NxWKD1K3hOIRaar05rX2iM59XpcA8LRRyFJcaOHdrk35WqIIXwtDZZ8XdL8vCJsyGvHeLZZCUJUlA/BqSgHqQQHst2bJ0fXjpy/Fo4IyzEtR2beSlE8TI4UlAPUgiP3Lh19fI7L+t4zDm2jVtNSqF58ay+PQRSUA9SUMK2xbt8IWrkyX0HXzim+kIUW7xH1aGNH1taghSUKFAMJmFBClrbECn4grJxiQpS0NqGSMEvFJhNTpCC1jZECgHILVKKPhFBCiqZqH3y7vLM6vXi0nf5xSv+yppczi1eza1cy9+7XcjfKxgcg4mTQrFYzK3kl65GUB4mm717tDxtvH+kNEghXMY3pqZvZe/Orin23pW5fGHNjBoSJ4XcAjOFRAQphEgmd/7WlQg2DWzNHXKLBryQLCmwppCcIIWgOb584W7UvXdhNnfvdtxeSJAUuPuQqCCFQMnkzmvqvQuzcc8XkiKFPM8pJCxIwX/GN6aivGpw5nIuzvWFpEjB9kSjjvBEY6AgBf+ZvpXV3XtX5vKxDcZESEG++6Arsb370B1BCj4zUftE/V6Dn8R2nzIRUtCxvuiaeN6S7I4gBZ95d3kmnt4b24pjIqTQ2k9Bd+LZT6E7ghR85pu5uXh678q1mK4gEiGF5s5L2hPPzkvdEaTgM99llaoT+c/S1Vw84zERUtB638Ea1z0a40qU5dWdiXwTB6TgM3rvO1hzeUdJIZ42nc0tuO3mHFeEFCIvdY0UTCXO3hvPeEQKscVLCuHKCliDFEwFKWhhB0rBFqSQ3iAFLSAFpJDeIAUtOP94uUfjE/vGnnvpddU9GttKwVIFRG55ulV2bbtmyXbZUpf6K80qMtbCJG0Lycu61Y5iMM5ycs4Nmq3/49i4QwrW6jVhCkAgBZ+Js/fGMx4TKIXV7PvHdOzm3EYKmYFBW3Uwey2zraE4N9q7u6d3cLt+lK1O4XCmT1Zqs5WEC7Km0EkKtl/tXqtO/K7AXkAKPhNn741nPCZNCp3rPrw2qXRbuNM5thZlFUNrv0vtM1HU2G3stS2FpiYFZ+XYzMBgj7RV20mKzyAFn4mz98YzHpMlBX8Voo58+FXUUpC1BpvD2D72XOsLCinYr+qtozE6KTjL23eqzh5ixQEp+EycvTee8ZgoKWivJekmhcY1grhkSLgUXJ9xsAx7WW3Vu6pq+yAFn4mz98YzHhMlBe1Vp51ScK1fHK0Uwlw+OMvDqs0UQgQp+EycvTee8ZgkKZw7NeGvVUdGMmc1SWF6SOnywWshIKgUnL9aLHnKNYXxfstcIJLbk0jBZ+LsvfGMx50uBdfbDQpScNwC2P5PLym4Lw22/sVRIdK25Gm/+9D4fotlhjND3H3QFKSgheYLUdonYK4vRG0/hrB7aI/65YN8fMDyi7zffWgtBLT+0bI0MDg67JgdWA67+TCF4zqozZH4ClLwmeYLUfovH3bUC1HNV6e1L9VofXXabU0hxUEKPtN8dVp7791Zr063Nlnxd1Pn8ImzIWdfWjdZQQo7M61NVnT33p21yYplO7bOj38cOX4tXJsuaN6ODSnszFi2Y9Pbe3fWdmxy49bVy++8rONBUd0btyKFnRm5cauu3ruw0zZuLTq2eJevlIw8ue/gC8dUXylhi/dAQQr+Y9viXUfv3XFbvBeLxQLFYBIWpOA/ExSD0QRl4xIVpBAomdx5HYUkG9mhZeMaUGA2OUEKQUOBWV3kFilFn4gghRDJ5ClFr4fcSn7pagTlYbLZu0fL08Y7SkqDFMJlYmNq+lZWvZDcylw+znUEK4mTQm6BmUIighRUMlH75N3lmdXrxeXv8otX/H3CXc4tXc2tXMvfu12I7e6jK8mSAmsKyQlS0NqG1qyXy6ZHniBBUuDuQ6KCFLS2IVLoTJ7nFBIWpKC1DZFCZ2xPNOoITzRG1aGNH1taghTCI9990BXd7z50WZCC1jZECh3Qsb7oGq1vSXZZkILWNkQKHWjtp6A7WvdT6LIgBa1tiBQ60Nx5SXu07rzUZUEKWtsQKXRA630Ha1z3aCRBO7TxY0tLkEJ44jFCI8Y7yv66vSCVNer1GmLo0MaPLS1BCuHZcVKwxLXcUxKCFLS2IVLoAFJACl0ZpBAepIAUujJIITzOoSt3uXti39hzL72uusudqxTcKqxYhqi1pqO1yotXBTdbXZZGradG+pxlmlzqx9l3f22VnGkWiWxbb6b1J8iDjLpDGx9saQlSCI8ct6vZ949p2g/XKQVr1abWAG6NJcsGzZmBQVuVt8YIz8ifMOksUSurQtm9YJ8pOOpNW74hMzDY0zvYt/3r7OXhMgODFqdMD6l4ASmoBymEx2qEjjvnvzY5H6EUxJicG+3dPdQ/JupEt7kdsF1Rzm1Ub/2ne4VI+dne6Xscxext8wirRBxCUak0ixTUgxTCs33V4KvGzpEPv4puTcFygTCc6ds1Nm6ZHdhrSdpuJVqnAy13WOpHuzjFOUqdawoOT7XGuZukLNcv9tLVagsWSEE9SCE8zRGrvRqf20Jja6RlBgZ7+qct49Dymd+s1yrqUwsRNIa6WGKQJV6t1WItB+Aybi0/RBaY8ZaCdfHCGqRgLEghPM0Rq79ur9vdh60hPTfaa7l036rj3Pzgda3pvD0+m/P2zmPYEdcP8+avtv2EdlLYUpVzpqCpQxsfbGkJUgjP1og9d2rCnxNGRjJno5NCY0YwkOkTChgb3Zo4tP7FKoXpIfn0YWO4jtsGrZ9LevcZfmOSIqYqk65rCtb/Pdq7m0hBaxsihQ4YlkJ9vH93X69FAfunh3YN9vXudr3dMNm6LrCO/+FMn8tc3X53YHI4M9Th7sP2IckbDfXJ1gWCnKFYD2O8f7ddXtx9MBikEJ7mC1HaLx/avRBlfzzBObrE/f+hPbbLh7rL+Bc/qv1jBe0+3huWkUN66/LB80kEubKgUPAWKagHKYSn+eq09oXGFL067VbD2tciRQwd2njjpCVIITytTVb83ZI8fOJsyGuH9Gyy4piJ1CeRQuqCFMJj2Y6t88NLR45fC2eEhfRsx9bmmgIppCxIITxy49bVy++8rOMx51Rs3Oq+YLkVpJCyIAUlbFu8yxeiRp7cd/CFY6ovRLHFe1Qd2vixpSVIQYkCxWASFqSgtQ2Rgi8oG5ecPF0/6dGJn66fNH6EyY93GyIFv1BgNiGZ2Jzy6MQTm0lfmklCvNsQKQQgt0gpevP57eaXHp34N5tnjB9h8uPdhkghGIW1gnppybuza9O3sqwjhMuJB3/16MQfPPiL8SNMfrzbECmEIX+vcO92YeVafulqzufcYfFKfvm7/Or14veLS8m/+5jkXL1/x6MTf3v/jvEjTH682xApRIbfVq5Vn9/8zHi3SGme3/xsvValebW2IVKIDJ+tXK1tzNy/abxnpDQX7v9A88bQhkghGvw3dKW28ebDr413jtTlzYdfV2jeWNoQKUSD/4au1jZytfKLm18Y7yIpyoubX+RqZZo3tjZEChEQqK2rtY2VjeIrm2eNd5RU5NXNsysbwVqY5lVvQ6SgStDmrtY2SrXq5IPZZ+qnjPeYxOaZ+qnJB7Ml3wtjNG+0bYgUlAjR4o3Mb+Tee3jxUJ3HFkQO1afee3hxfiMXumFpXvU2RApKKPbdcq12fWNp5v7N0w+ynzz4dsfm9IPszP2b1zeWyrWaYpPu2OaNsA2RghIR9mBCEhKkoITx80dI5FlfRwoKGD9/hESe9fV10wNLgBQIMRykoES1GuXCGCEJSM30qLKTMimUyxXTp5CQKFMuV0yPKjspk0KpVDJ+FgmJMKVSyfSospMyKRSLxXKFyQLpkpQriZsmFNMohWKxWKmEeZiUkESlUqmaHknupFIKxWKpwoojSXMq1VqxmLgLhwYplUKxVCpxHUFSmnKlksClhBZplUKD9fV1pgwkRalUa0l7KsFJuqXQoFRaL1cq2IEkNpVqrVyplEpJ10GDbpACAEQIUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAAFSAAABUgAAAVIAAMH/A3y6Q8KFMzabAAAAAElFTkSuQmCC"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>valueOut = generateWaveform(phase) × amplitude
+phase += frequency / sampleRate  (each sample)</code></pre>
+    <p>The LFO continuously cycles through its waveform at the specified
+      frequency, outputting values scaled by amplitude.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>frequency</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Oscillation frequency in Hz (0.01-100.0)</td>
+        </tr>
+        <tr>
+          <td><code>amplitude</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Output amplitude (0.0-1.0)</td>
+        </tr>
+        <tr>
+          <td><code>waveType</code></td>
+          <td>Control</td>
+          <td>0</td>
+          <td>Waveform shape (0-3, see below)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> There is no <code>phase</code> input port.
+      Phase is managed internally and advances automatically.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>valueOut</code></td>
+          <td>Control</td>
+          <td>Oscillating value from -amplitude to +amplitude</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>frequency</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.01-100.0</td>
+          <td>Oscillation speed in Hz</td>
+        </tr>
+        <tr>
+          <td><code>amplitude</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0-1.0</td>
+          <td>Output scaling (peak value)</td>
+        </tr>
+        <tr>
+          <td><code>waveType</code></td>
+          <td>Integer</td>
+          <td>0</td>
+          <td>0-3</td>
+          <td>Waveform selection</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="waveform-types">Waveform Types</h2>
+    <h3 id="sine">0: Sine</h3>
+    <p>Smooth, continuous oscillation.</p>
+    <pre><code>     ╭─╮
+    ╱   ╲
+───╱─────╲───  0
+            ╲   ╱
+             ╰─╯</code></pre>
+    <ul>
+      <li><strong>Formula</strong>: <code>sin(2π × phase)</code></li>
+      <li><strong>Output</strong>: Smoothly varies between -1 and +1</li>
+      <li><strong>Character</strong>: Natural, organic movement</li>
+      <li><strong>Use cases</strong>: Vibrato, gentle tremolo, filter
+        sweeps</li>
+    </ul>
+    <h3 id="triangle">1: Triangle</h3>
+    <p>Linear ramps between extremes.</p>
+    <pre><code>    /\
+   /  \
+──/────\──  0
+        \  /
+         \/</code></pre>
+    <ul>
+      <li><strong>Formula</strong>: Piecewise linear (0→1→-1→0)</li>
+      <li><strong>Output</strong>: Sharp peaks, linear transitions</li>
+      <li><strong>Character</strong>: Mechanical, predictable</li>
+      <li><strong>Use cases</strong>: Rhythmic effects, linear sweeps</li>
+    </ul>
+    <h3 id="square">2: Square</h3>
+    <p>Instant transitions between extremes.</p>
+    <pre><code>   ┌───┐
+   │   │
+───┘   └───  0
+       ┌───┐
+       │   │</code></pre>
+    <ul>
+      <li><strong>Formula</strong>: +1 for first half, -1 for second half</li>
+      <li><strong>Output</strong>: Only two values (+amplitude and
+        -amplitude)</li>
+      <li><strong>Character</strong>: Abrupt, digital</li>
+      <li><strong>Use cases</strong>: Trills, gating, rhythmic on/off
+        effects</li>
+    </ul>
+    <h3 id="sawtooth">3: Sawtooth</h3>
+    <p>Linear rise with sudden reset.</p>
+    <pre><code>      /│
+     / │
+────/──│──  0
+   /   │
+  /    │</code></pre>
+    <ul>
+      <li><strong>Formula</strong>: <code>2 × phase - 1</code> (rises from -1
+        to +1)</li>
+      <li><strong>Output</strong>: Continuous rise, instant drop</li>
+      <li><strong>Character</strong>: Asymmetric, building tension</li>
+      <li><strong>Use cases</strong>: Risers, one-directional sweeps</li>
+    </ul>
+    <h2 id="output-range">Output Range</h2>
+    <p><strong>Important:</strong> The LFO output is
+      <strong>bipolar</strong> (centered at zero):</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Amplitude</th>
+          <th>Output Range</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0</td>
+          <td>-1.0 to +1.0</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>-0.5 to +0.5</td>
+        </tr>
+        <tr>
+          <td>0.25</td>
+          <td>-0.25 to +0.25</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>When connecting to parameters that expect 0-1 range, you may need to:
+      1. Use a connection function that offsets the value 2. Connect to a
+      parameter that accepts bipolar modulation 3. Scale and offset
+      downstream</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-vibrato">Basic Vibrato</h3>
+    <p>Modulate pitch with a slow sine wave.</p>
+    <pre><code>LFO ──→ valueOut ──→ Spectrum to Signal (pitch, via modulation)
+  │
+  └── frequency: 5.0, amplitude: 0.02, waveType: 0 (Sine)</code></pre>
+    <p>The pitch will oscillate ±2% around the base frequency at 5 Hz.</p>
+    <h3 id="tremolo">Tremolo</h3>
+    <p>Modulate amplitude with a sine wave.</p>
+    <pre><code>LFO ──→ valueOut ──→ [Amplitude/gain parameter]
+  │
+  └── frequency: 4.0, amplitude: 0.3, waveType: 0 (Sine)</code></pre>
+    <h3 id="filter-wobble">Filter Wobble</h3>
+    <p>Modulate filter cutoff with a triangle wave.</p>
+    <pre><code>LFO ──→ valueOut ──→ Rolloff Processor (lowRolloff)
+  │
+  └── frequency: 0.5, amplitude: 0.5, waveType: 1 (Triangle)</code></pre>
+    <h3 id="rhythmic-gating">Rhythmic Gating</h3>
+    <p>Use square wave for on/off effects.</p>
+    <pre><code>LFO ──→ valueOut ──→ [Gate/mix parameter]
+  │
+  └── frequency: 2.0, amplitude: 1.0, waveType: 2 (Square)</code></pre>
+    <h3 id="riser-effect">Riser Effect</h3>
+    <p>Use sawtooth for continuously building tension.</p>
+    <pre><code>LFO ──→ valueOut ──→ [Intensity parameter]
+  │
+  └── frequency: 0.25, amplitude: 1.0, waveType: 3 (Sawtooth)</code></pre>
+    <p>One complete sweep every 4 seconds.</p>
+    <h3 id="lfo-modulating-lfo">LFO Modulating LFO</h3>
+    <p>Create complex modulation by having one LFO control another’s
+      frequency.</p>
+    <pre><code>LFO 1 (slow) ──→ valueOut ──→ LFO 2 (frequency input)
+     │                              │
+     └── freq: 0.1                  └──→ valueOut ──→ [Target]</code></pre>
+    <h2 id="frequency-guidelines">Frequency Guidelines</h2>
+    <h3 id="by-musical-effect">By Musical Effect</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Effect</th>
+          <th>Frequency</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Slow drift</strong></td>
+          <td>0.01 - 0.1 Hz</td>
+          <td>Gradual evolution</td>
+        </tr>
+        <tr>
+          <td><strong>Gentle movement</strong></td>
+          <td>0.1 - 1.0 Hz</td>
+          <td>Subtle motion</td>
+        </tr>
+        <tr>
+          <td><strong>Vibrato</strong></td>
+          <td>4 - 8 Hz</td>
+          <td>Natural pitch wobble</td>
+        </tr>
+        <tr>
+          <td><strong>Tremolo</strong></td>
+          <td>2 - 10 Hz</td>
+          <td>Amplitude pulsing</td>
+        </tr>
+        <tr>
+          <td><strong>Fast modulation</strong></td>
+          <td>10 - 20 Hz</td>
+          <td>Electronic effects</td>
+        </tr>
+        <tr>
+          <td><strong>Audio-rate</strong></td>
+          <td>20 - 100 Hz</td>
+          <td>Timbral effects, sidebands</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="tempo-sync-reference">Tempo Sync Reference</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>BPM</th>
+          <th>Quarter note</th>
+          <th>Eighth note</th>
+          <th>Sixteenth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>60</td>
+          <td>1.0 Hz</td>
+          <td>2.0 Hz</td>
+          <td>4.0 Hz</td>
+        </tr>
+        <tr>
+          <td>90</td>
+          <td>1.5 Hz</td>
+          <td>3.0 Hz</td>
+          <td>6.0 Hz</td>
+        </tr>
+        <tr>
+          <td>120</td>
+          <td>2.0 Hz</td>
+          <td>4.0 Hz</td>
+          <td>8.0 Hz</td>
+        </tr>
+        <tr>
+          <td>140</td>
+          <td>2.33 Hz</td>
+          <td>4.67 Hz</td>
+          <td>9.33 Hz</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="comparison-with-other-modifiers">Comparison with Other
+      Modifiers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 25%">
+        <col style="width: 32%">
+        <col style="width: 16%">
+        <col style="width: 25%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Output Range</th>
+          <th>State</th>
+          <th>Driven By</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>LFO</strong></td>
+          <td>-amplitude to +amplitude</td>
+          <td>Stateful (phase)</td>
+          <td>Internal clock</td>
+        </tr>
+        <tr>
+          <td><strong>Drift Engine</strong></td>
+          <td>~0.995 to ~1.005</td>
+          <td>Stateful (phase)</td>
+          <td>Internal clock</td>
+        </tr>
+        <tr>
+          <td><strong>Envelope Engine</strong></td>
+          <td>0 to 1 (scaled)</td>
+          <td>Stateless</td>
+          <td>Note progress</td>
+        </tr>
+        <tr>
+          <td><strong>Easing Applicator</strong></td>
+          <td>startValue to endValue</td>
+          <td>Stateless</td>
+          <td>Progress input</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The LFO is unique in: - <strong>Bipolar output</strong> (swings
+      positive and negative) - <strong>Self-running</strong> (doesn’t need
+      external progress input) - <strong>Multiple waveforms</strong> (Sine,
+      Triangle, Square, Sawtooth)</p>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="phase-continuity">Phase Continuity</h3>
+    <p>The LFO’s phase continues advancing across notes. It does not reset
+      at note boundaries unless explicitly reset. This means: - Long notes
+      will see multiple LFO cycles - Short notes may only see part of a cycle
+      - The LFO phase at note start depends on timing</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p>The <code>reset()</code> method returns phase to 0. This is called
+      when the audio engine resets, not at each note start.</p>
+    <h3 id="amplitude-clamping">Amplitude Clamping</h3>
+    <p>Amplitude is clamped to 0.0-1.0. Values outside this range are
+      brought to the boundaries.</p>
+    <h3 id="frequency-clamping">Frequency Clamping</h3>
+    <p>Frequency is clamped to 0.01-100.0 Hz. Very low frequencies create
+      ultra-slow sweeps; high frequencies approach audio rate.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="phase-accumulation">Phase Accumulation</h3>
+    <p>The LFO uses normalized phase (0.0 to 1.0) rather than radians:</p>
+    <div class="sourceCode" id="cb12">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a
+href="#cb12-1" aria-hidden="true" tabindex="-1"></a>phase <span class="op">+=</span> frequency <span
+class="op">/</span> sampleRate<span class="op">;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span
+class="op">(</span>phase <span class="op">&gt;=</span> <span class="fl">1.0</span><span
+class="op">)</span> phase <span class="op">-=</span> <span class="fl">1.0</span><span
+class="op">;</span></span></code></pre>
+    </div>
+    <p>This prevents floating-point precision issues over long playback
+      times.</p>
+    <h3 id="waveform-generation">Waveform Generation</h3>
+    <p>Each waveform is generated from the normalized phase: -
+      <strong>Sine</strong>: <code>sin(2π × phase)</code> - single call to
+      sin() - <strong>Triangle</strong>: Piecewise linear with 4 segments -
+      <strong>Square</strong>: Simple threshold test -
+      <strong>Sawtooth</strong>: <code>2 × phase - 1</code></p>
+    <h3 id="performance">Performance</h3>
+    <ul>
+      <li>Lightweight per-sample processing</li>
+      <li>Single trig function call (sine only)</li>
+      <li>No memory allocation</li>
+      <li>Efficient for many simultaneous instances</li>
+    </ul>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>lfo.h</code>, <code>lfo.cpp</code></em></p>
+  </body>
+</html>

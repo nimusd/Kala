@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Bowed</title>
+  </head>
+  <body>
+    <h1 id="bowed-documentation">Bowed Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Bowed container is a <strong>digital waveguide physical
+        model</strong> of a bowed string instrument, based on the algorithm
+      developed by Perry R. Cook and Gary P. Scavone in the Synthesis ToolKit
+      (STK) and extended with the nonlinear waveguide technique by Romain
+      Michon. It simulates the interaction between a bow and a string: a
+      nonlinear friction table drives two coupled delay lines representing the
+      string segments on either side of the bow contact point, filtered through
+      a cascade of body resonance filters derived from measured violin impulse
+      response data.</p>
+    <p>Because the model is <strong>self-oscillating</strong>, it produces a
+      continuous pitched tone for the full duration of any note. The pitch is
+      tracked continuously, so pitch curves and portamento in the Score Canvas
+      work without artifacts. Legato transitions preserve the vibrating string
+      state, allowing smooth slurs between notes. The optional nonlinear allpass
+      section (Michon extension) can push the timbre from clean and violin-like
+      into progressively richer, grittier, or FM-adjacent territory.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) — Core sound generation</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 18%">
+        <col style="width: 14%">
+        <col style="width: 12%">
+        <col style="width: 56%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>bowPressure</code></td>
+          <td>Control</td>
+          <td>0.75</td>
+          <td>Bow friction force against the string (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>bowVelocity</code></td>
+          <td>Control</td>
+          <td>0.50</td>
+          <td>Maximum bow speed — controls loudness (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>bowPosition</code></td>
+          <td>Control</td>
+          <td>0.127</td>
+          <td>Contact point along the string (0 = bridge, 1 = nut) (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>nlType</code></td>
+          <td>Control</td>
+          <td>0</td>
+          <td>Nonlinear modulation source: 0–4 (see Nonlinear Section)</td>
+        </tr>
+        <tr>
+          <td><code>nlAmount</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Depth of nonlinear filtering — 0.0 fully bypasses it (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>nlFreqMod</code></td>
+          <td>Control</td>
+          <td>10.0</td>
+          <td>Modulation frequency in Hz, used by NL types 3 and 4 (0–200 Hz)</td>
+        </tr>
+        <tr>
+          <td><code>nlAttack</code></td>
+          <td>Control</td>
+          <td>0.10</td>
+          <td>Ramp-in time for the nonlinearity at note start (0.001–2.0 s)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before synthesis. 1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down. Any ratio works — the system is
+            tuning-agnostic. Can be driven by LFO (vibrato), Envelope Engine
+            (pitch glide), or Physics System (spring pitch wobble).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 20%">
+        <col style="width: 60%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Generated bowed string tone</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 18%">
+        <col style="width: 8%">
+        <col style="width: 12%">
+        <col style="width: 14%">
+        <col style="width: 48%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>bowPressure</code></td>
+          <td>Float</td>
+          <td>0.75</td>
+          <td>0.0–1.0</td>
+          <td>Friction force (bow table slope)</td>
+        </tr>
+        <tr>
+          <td><code>bowVelocity</code></td>
+          <td>Float</td>
+          <td>0.50</td>
+          <td>0.0–1.0</td>
+          <td>Maximum bow speed / loudness</td>
+        </tr>
+        <tr>
+          <td><code>bowPosition</code></td>
+          <td>Float</td>
+          <td>0.127</td>
+          <td>0.0–1.0</td>
+          <td>Bow contact point (betaRatio)</td>
+        </tr>
+        <tr>
+          <td><code>nlType</code></td>
+          <td>Int</td>
+          <td>0</td>
+          <td>0–4</td>
+          <td>Nonlinear modulation source selector</td>
+        </tr>
+        <tr>
+          <td><code>nlAmount</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Nonlinearity depth (0 = bypassed)</td>
+        </tr>
+        <tr>
+          <td><code>nlFreqMod</code></td>
+          <td>Float</td>
+          <td>10.0</td>
+          <td>0–200 Hz</td>
+          <td>Oscillator frequency for NL types 3 &amp; 4</td>
+        </tr>
+        <tr>
+          <td><code>nlAttack</code></td>
+          <td>Float</td>
+          <td>0.10</td>
+          <td>0.001–2.0 s</td>
+          <td>Nonlinearity envelope ramp-in time</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before synthesis (1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="how-it-works">How It Works</h2>
+    <p>The algorithm is a <strong>two-segment digital waveguide</strong>
+      simulation of bowed-string acoustics. Each sample is computed as
+      follows:</p>
+    <pre><code>bowAmp         = adsrEnvelope() × (0.03 + 0.2 × bowVelocity)
+
+nutReflection  = −neckDelay.lastOut
+bridgeRefl     = −stringFilter( bridgeDelay.lastOut )
+stringVel      = bridgeRefl + nutReflection
+
+deltaV         = bowAmp − stringVel
+x              = deltaV × slope + 0.001   (slope = 5 − 4×bowPressure)
+friction       = clamp( (|x| + 0.75)⁻⁴,  0.01, 0.98 )
+newVelocity    = deltaV × friction
+
+neckDelay.tick( bridgeRefl + newVelocity )
+bridgeDelay.tick( nutRefl  + newVelocity )
+
+nlSig          = nonlinearAllpass( bridgeDelay.lastOut,  θ )
+output         = bodyFilters( nlSig ) × 0.1248</code></pre>
+    <p>The key components are:</p>
+    <ul>
+      <li><strong>Neck delay</strong>: Models the string segment from the bow
+        contact point to the nut (or fingered position). Its length is
+        <code>(1 − bowPosition) × baseDelay</code> samples.</li>
+      <li><strong>Bridge delay</strong>: Models the shorter segment from the
+        bow to the bridge. Length is <code>bowPosition × baseDelay</code>
+        samples. <code>baseDelay = sampleRate / pitch − 4</code>, where the
+        −4 compensates for filter latency.</li>
+      <li><strong>Bow table (friction model)</strong>: Implements Smith's
+        stick-slip friction model. The function
+        <code>(|x| + 0.75)⁻⁴</code> produces a characteristic curve where
+        near-zero relative velocity yields high friction (stick phase) and
+        large relative velocity yields low friction (slip phase). The
+        <code>slope</code> parameter, controlled by <code>bowPressure</code>,
+        sets the steepness of this curve.</li>
+      <li><strong>String loss filter</strong>: A one-pole low-pass applied to
+        the bridge reflection. It models the energy absorbed each time the
+        wave reflects off the bridge end. The pole position is derived from the
+        STK formula <code>0.75 − 0.2 × 22050 / sampleRate</code>. The
+        feedforward coefficient is <code>gain × (1 − |pole|)</code>, ensuring
+        DC loop gain = 0.95 &lt; 1 so the string always decays when the bow
+        stops.</li>
+      <li><strong>Body resonance filters</strong>: Six cascaded BiQuad
+        sections with coefficients from a measured violin body impulse response
+        (Esteban Maestre, 2011). They shape the spectral output to give the
+        bowed tone its characteristic resonant character without affecting the
+        waveguide pitch.</li>
+      <li><strong>Nonlinear allpass (Michon extension)</strong>: A first-order
+        allpass filter inserted between the bridge delay output and the body
+        filters. Its coefficient θ is modulated by one of five sources. See
+        <a href="#nonlinear-section">Nonlinear Section</a> below.</li>
+    </ul>
+    <h2 id="bow-envelope">Bow Envelope</h2>
+    <p>A simple <strong>ADSR envelope</strong> is applied to the bow
+      excitation amplitude at the start and end of each note:</p>
+    <ul>
+      <li><strong>Attack</strong> (20 ms): Ramps from 0 to peak bow force,
+        simulating the bow being placed on the string. Skipped for legato
+        notes.</li>
+      <li><strong>Decay</strong> (5 ms): Short decay to the sustain
+        level.</li>
+      <li><strong>Sustain</strong>: Bow held at 90% of peak force for the
+        duration of the note.</li>
+      <li><strong>Release</strong> (10 ms): Bow lifts off the string as the
+        note ends.</li>
+    </ul>
+    <p>This envelope is internal and affects only the excitation. Overall
+      note dynamics are controlled by the Score Canvas as usual.</p>
+    <h2 id="nonlinear-section">Nonlinear Section (Michon Extension)</h2>
+    <p>When <code>nlAmount &gt; 0</code>, a <strong>first-order nonlinear
+        allpass filter</strong> is applied to the bridge delay output on each
+      sample:</p>
+    <pre><code>H(z) = (θ + z⁻¹) / (1 + θ·z⁻¹)
+y[n] = θ·(x[n] − y[n−1]) + x[n−1]</code></pre>
+    <p>The allpass coefficient θ is derived from one of five modulation
+      sources, scaled by <code>nlAmount</code> and the ramp-in envelope, then
+      clamped to (−0.999, 0.999) for stability:</p>
+    <table>
+      <colgroup>
+        <col style="width: 8%">
+        <col style="width: 20%">
+        <col style="width: 72%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Source</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0</td>
+          <td>Bridge signal</td>
+          <td>Direct signal-dependent modulation. Thickens tone and adds subtle
+            harmonic richness that tracks the string vibration.</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>Leaky average of bridge signal</td>
+          <td>Slow, DC-like drift of the allpass coefficient. Produces a gentle
+            tonal shift over time rather than per-sample modulation.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Bridge signal²</td>
+          <td>Always positive; responds to energy bursts in the string.
+            Asymmetric modulation that emphasises the attack and forte moments.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Sine wave at <code>nlFreqMod</code> Hz</td>
+          <td>Periodic, independent tremolo-like modulation. At low
+            <code>nlFreqMod</code> values produces slow tonal wobble; at higher
+            values produces audible sidebands.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Sine wave at pitch Hz</td>
+          <td>Sine locked to the fundamental frequency. Produces harmonically
+            coherent waveshaping that tracks pitch — useful for consistent
+            timbre across the register.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The <code>nlAttack</code> parameter ramps the effect from zero to
+      full depth over the specified number of seconds at the start of each
+      note. This prevents a hard click when the nonlinearity switches on and
+      allows the string tone to establish itself before the distortion is
+      applied.</p>
+    <p class="tip"><strong>Tip:</strong> Start with <code>nlType = 0</code>
+      or <code>nlType = 2</code> at low <code>nlAmount</code> (0.05–0.15) for
+      the most musical, natural-sounding extension. Types 3 and 4 at higher
+      amounts produce more overtly electronic or FM-like timbres.</p>
+    <h2 id="parameter-guide">Parameter Guide</h2>
+    <h3 id="bow-pressure">Bow Pressure</h3>
+    <p>Controls the steepness of the bow-table friction curve. This is the
+      most character-defining parameter — it sets how strongly the bow bites
+      into the string.</p>
+    <ul>
+      <li><strong>0.2–0.4</strong>: Light, feathery bowing — thin and
+        transparent tone, may not sustain at low velocities</li>
+      <li><strong>0.6–0.8</strong>: Full, centred string tone with clear
+        fundamental (default 0.75)</li>
+      <li><strong>0.85–1.0</strong>: Heavy bowing — richer in upper partials,
+        slightly more aggressive edge to the sound</li>
+    </ul>
+    <h3 id="bow-velocity">Bow Velocity</h3>
+    <p>Sets the maximum bow speed amplitude. Together with
+      <code>bowPressure</code>, this is the main volume control for the
+      Bowed container.</p>
+    <ul>
+      <li><strong>0.1–0.3</strong>: Pianissimo — light and delicate</li>
+      <li><strong>0.4–0.6</strong>: Normal playing level (default 0.5)</li>
+      <li><strong>0.7–1.0</strong>: Forte to fortissimo</li>
+    </ul>
+    <p>Modulating <code>bowVelocity</code> with a Drift Engine or LFO
+      produces natural bow speed variation. Connecting a Physics System
+      to <code>bowVelocity</code> can simulate the inertia of a real bow
+      arm.</p>
+    <h3 id="bow-position">Bow Position</h3>
+    <p>Sets where along the string the bow contacts, expressed as a ratio
+      <code>betaRatio</code>: the bridge delay length = <code>bowPosition
+        × totalDelay</code>.</p>
+    <ul>
+      <li><strong>0.05–0.12</strong>: Sul ponticello — near the bridge.
+        Bright, glassy, rich in upper harmonics; traditional for special
+        effect</li>
+      <li><strong>0.12–0.20</strong>: Normale — standard bowing position.
+        Warm and balanced (default 0.127)</li>
+      <li><strong>0.25–0.5</strong>: Sul tasto — over the fingerboard.
+        Dark, hollow, flute-like tone</li>
+      <li><strong>Above 0.5</strong>: Increasingly tonal instability;
+        the bridge segment becomes dominant</li>
+    </ul>
+    <p>This is an excellent target for slow modulation via a Physics
+      System or Drift Engine to simulate natural bow placement variation.</p>
+    <h3 id="nl-amount">NL Amount</h3>
+    <p>The primary nonlinearity control. At 0.0 the nonlinear allpass
+      is completely bypassed (zero overhead). As the value increases, the
+      allpass coefficient modulation grows and the tone becomes progressively
+      more complex.</p>
+    <ul>
+      <li><strong>0.0</strong>: Pure STK bowed string — no nonlinearity</li>
+      <li><strong>0.02–0.10</strong>: Subtle warmth and harmonic enrichment,
+        barely perceptible as a separate effect</li>
+      <li><strong>0.15–0.35</strong>: Clearly audible tonal thickening;
+        adds life and movement to sustained notes</li>
+      <li><strong>0.5–0.8</strong>: Strong modulation — noticeable
+        waveshaping and spectral spread</li>
+      <li><strong>0.9–1.0</strong>: Aggressive; the allpass dominates the
+        tone; experimental territory</li>
+    </ul>
+    <h3 id="nl-freq-mod">NL Freq Mod</h3>
+    <p>Only active with <code>nlType = 3</code> (independent sine) or
+      <code>nlType = 4</code> (sine at pitch Hz — the parameter is ignored for
+      type 4 since the pitch is used instead).</p>
+    <ul>
+      <li><strong>0.1–5 Hz</strong>: Very slow sweep — almost static tonal
+        drift</li>
+      <li><strong>5–15 Hz</strong>: Tremolo-rate modulation; audible as a
+        rhythmic tonal pulse</li>
+      <li><strong>30–80 Hz</strong>: Audio-rate sideband generation;
+        additive timbre colouring</li>
+      <li><strong>80–200 Hz</strong>: Rich FM-like sidebands; highly
+        inharmonic at high <code>nlAmount</code></li>
+    </ul>
+    <h3 id="nl-attack">NL Attack</h3>
+    <p>Ramps the nonlinearity from 0 to full depth at note start. A short
+      attack (0.01–0.05 s) lets the effect appear almost immediately. A long
+      attack (0.5–2.0 s) gradually introduces the nonlinearity during the
+      note, which can be very expressive — the tone starts clean and grows
+      progressively richer.</p>
+    <h2 id="legato-behavior">Legato Behavior</h2>
+    <p>For legato note transitions the neck and bridge delay buffers are
+      <strong>preserved</strong>. The string continues vibrating uninterrupted
+      from the previous note; only the delay line lengths are updated to the
+      new pitch. The bow ADSR attack phase is skipped so there is no re-onset
+      transient between slurred notes. The nonlinear allpass state (filter
+      memory and oscillator phase) is also preserved.</p>
+    <p>For non-legato notes, all delay lines, the string filter, the body
+      filters, and the nonlinear allpass state are fully cleared.</p>
+    <h2 id="tail-behavior">Tail Behavior</h2>
+    <p>When a note ends, the bow ADSR enters its release phase and the bow
+      excitation ramps off. The waveguide continues to circulate energy, which
+      decays each round trip due to the string loss filter (loop gain = 0.95).
+      At typical pitches, the string rings down to silence in roughly 0.5–2
+      seconds, after which the audio engine detects silence and closes the
+      tail cleanly. The nonlinear allpass remains active during the tail so
+      the character of the decay is consistent with the sustained tone.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-bowed-tone">Basic Bowed Tone</h3>
+    <pre><code>[Bowed] → signalOut → [Output]
+  bowPressure: 0.75
+  bowVelocity: 0.50
+  bowPosition: 0.127
+  nlAmount:    0.0</code></pre>
+    <h3 id="sul-ponticello">Sul Ponticello (Near Bridge)</h3>
+    <pre><code>bowPressure: 0.70
+bowVelocity: 0.45
+bowPosition: 0.07</code></pre>
+    <p>Bright, glassy tone with prominent upper harmonics. Best combined
+      with a Rolloff Processor to tame the extreme highs.</p>
+    <h3 id="sul-tasto">Sul Tasto (Over Fingerboard)</h3>
+    <pre><code>bowPressure: 0.78
+bowVelocity: 0.55
+bowPosition: 0.30</code></pre>
+    <p>Dark, flute-like tone with a hollow quality. Combines well with the
+      Formant Body processor for cello-like resonance.</p>
+    <h3 id="nonlinear-warmth">Nonlinear Warmth (Michon Type 0)</h3>
+    <pre><code>bowPressure: 0.72
+bowVelocity: 0.50
+bowPosition: 0.127
+nlType:      0
+nlAmount:    0.08
+nlAttack:    0.15</code></pre>
+    <p>Subtle signal-dependent thickening that adds organic life to the
+      tone without altering its fundamental character.</p>
+    <h3 id="harmonic-locking">Harmonic Locking (Michon Type 4)</h3>
+    <pre><code>nlType:    4
+nlAmount:  0.25
+nlAttack:  0.10</code></pre>
+    <p>The nonlinear modulation is locked to the fundamental pitch, so the
+      added harmonics track every note. Gives a consistent but richer timbre
+      across the full pitch range.</p>
+    <h3 id="slow-tonal-evolution">Slow Tonal Evolution</h3>
+    <pre><code>nlType:   3
+nlAmount: 0.20
+nlFreqMod: 0.3
+nlAttack:  1.5</code></pre>
+    <p>Very slow independent sine modulation combined with a long NL attack
+      — the timbre evolves steadily from clean to faintly modulated over
+      1.5 seconds. Effective for long sustained notes in slow music.</p>
+    <h3 id="combining-with-formant-body">Combining with Formant Body</h3>
+    <pre><code>[Bowed] → signalOut → [Formant Body] → signalOut → [Output]</code></pre>
+    <p>The Formant Body processor adds vowel-like resonances that strongly
+      reinforce the bowed tone's character. Use low <code>f1</code>/
+      <code>f2</code> frequencies (200–600 Hz) for cello-like warmth, or
+      higher values (800–2000 Hz) for viola character.</p>
+    <h3 id="modulating-bow-position">Modulating Bow Position</h3>
+    <pre><code>[LFO] → valueOut → bowPosition : [Bowed]
+  LFO frequency:  0.12 Hz
+  LFO amplitude:  0.06</code></pre>
+    <p>A slow LFO on <code>bowPosition</code> recreates the natural
+      wandering of a real bow along the string, producing subtle tonal
+      variation over time.</p>
+    <h3 id="vibrato-via-pitch-multiplier">Vibrato via Pitch Multiplier</h3>
+    <pre><code>[LFO] → valueOut → pitchMultiplier → [Bowed]
+  LFO frequency:  5.5 Hz
+  LFO amplitude:  0.015
+  LFO center:     1.0</code></pre>
+    <p>Drives vibrato externally via the pitch ratio port. Unlike the
+      internal vibrato on the Recorder/Reed models, this approach works for
+      all container types and can be shared across multiple instruments from a
+      single LFO.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-sound-or-very-faint">No Sound or Very Faint</h3>
+    <ol type="1">
+      <li>Increase <code>bowVelocity</code> — values below 0.2 can produce
+        very weak excitation</li>
+      <li>Ensure <code>bowPressure</code> is above 0.4; too-light pressure may
+        not sustain stick-slip oscillation</li>
+      <li>Check <code>bowPosition</code> is not at 0 or 1 (degenerate
+        boundary conditions)</li>
+    </ol>
+    <h3 id="tone-unstable-or-noisy">Tone Unstable or Noisy</h3>
+    <ol type="1">
+      <li>Reduce <code>nlAmount</code> — high values at unstable parameter
+        combinations can excite the body filter resonances
+        excessively</li>
+      <li>Reduce <code>bowVelocity</code> slightly; very high values can cause
+        the friction model to enter an unstable operating region</li>
+      <li>Move <code>bowPosition</code> closer to the default (0.127); extreme
+        positions reduce the bridge delay length and can cause aliasing at high
+        pitches</li>
+    </ol>
+    <h3 id="tone-too-bright-harsh">Tone Too Bright / Harsh</h3>
+    <ol type="1">
+      <li>Increase <code>bowPosition</code> toward 0.20–0.30 (move away from
+        bridge)</li>
+      <li>Reduce <code>bowPressure</code> slightly</li>
+      <li>Add a Rolloff Processor or LP/HP Filter after the Bowed container
+        to attenuate high frequencies</li>
+    </ol>
+    <h3 id="tone-too-dark-lacks-presence">Tone Too Dark / Lacks Presence</h3>
+    <ol type="1">
+      <li>Reduce <code>bowPosition</code> toward 0.07–0.10</li>
+      <li>Increase <code>bowPressure</code> slightly toward 0.80–0.85</li>
+    </ol>
+    <h3 id="nl-effect-too-abrupt-at-note-start">NL Effect Too Abrupt at
+      Note Start</h3>
+    <ol type="1">
+      <li>Increase <code>nlAttack</code> — a value of 0.3–0.8 s gives the
+        nonlinearity time to fade in smoothly</li>
+      <li>Reduce <code>nlAmount</code> — even small amounts can be
+        surprisingly audible in the attack phase</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="pitch-tracking">Pitch Tracking</h3>
+    <p>The total string delay is recalculated whenever the pitch changes:</p>
+    <pre><code>baseDelay = sampleRate / pitch − 4.0</code></pre>
+    <p>The −4.0 compensates for the combined latency of the string filter
+      and body filter cascade, keeping the oscillation accurately in tune.
+      The neck and bridge delay lengths are updated simultaneously according
+      to <code>bowPosition</code>.</p>
+    <h3 id="string-filter-stability">String Filter Stability</h3>
+    <p>The one-pole string loss filter uses the STK OnePole formula:</p>
+    <pre><code>b0  = gain × (1 − |pole|)    (= 0.95 × (1 − |pole|))
+y[n] = b0 × x[n] + pole × y[n−1]</code></pre>
+    <p>The <code>b0</code> coefficient is precomputed at construction. This
+      ensures that the DC gain of the filter equals <code>gain = 0.95</code>,
+      so the waveguide loop gain is strictly less than 1 at all frequencies.
+      Without this correction (using <code>gain × x[n]</code> directly) the
+      loop gain would be &gt; 2 and the string would diverge.</p>
+    <h3 id="no-stk-dependency">No STK Dependency</h3>
+    <p>The model is implemented entirely within Kala
+      (<code>bowedmodel.h</code> / <code>bowedmodel.cpp</code>) with no
+      dependency on the STK library. All DSP components — the delay lines,
+      one-pole filter, BiQuad body filters, bow table, ADSR, and nonlinear
+      allpass — are self-contained.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>bowedmodel.h</code>, <code>bowedmodel.cpp</code>. Core algorithm
+        based on STK Bowed by Perry R. Cook &amp; Gary P. Scavone, 1995–2021.
+        Body filter coefficients by Esteban Maestre, 2011. Nonlinear extension
+        by Romain Michon.</em></p>
+  </body>
+</html>

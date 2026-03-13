@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Frequency Mapper</title>
+  </head>
+  <body>
+    <h1 id="frequency-mapper-documentation">Frequency Mapper
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Frequency Mapper is a <strong>pitch-to-control converter</strong>
+      that translates the current note’s fundamental frequency (in Hz) into a
+      normalized control value. It is the bridge between the pitched world of
+      a note and the control-rate world of modulatable parameters — letting
+      pitch drive filter cutoffs, grain density, reverb mix, or any other
+      modulatable input.</p>
+    <p>Four transfer curves are available (Linear, Logarithmic, Exponential,
+      S-Curve), the output range is freely configurable, and an optional
+      external curve input can override the built-in shaping entirely.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) - Generates control signals from
+      note properties</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>pitch (Hz) → normalize to [0, 1] → apply curve → scale to [outputMin, outputMax] → controlOut</code></pre>
+    <p>The note’s fundamental pitch is automatically available — no pitch
+      input port is needed. The mapper clamps pitches outside
+      <code>[lowFreq, highFreq]</code> to the boundary values before
+      normalizing.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>curve</code></td>
+          <td>Control</td>
+          <td>—</td>
+          <td>Optional external curve value (0.0–1.0). When connected, replaces
+            the built-in curve shape entirely</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before it is mapped. 1.0 = no change,
+            2.0 = octave up, 0.5 = octave down. Shifts the apparent pitch that
+            the mapper sees, allowing transposed or vibrato-driven mapping
+            without changing the score.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> The note pitch (Hz) is read internally from
+      the audio graph context. The <code>pitchMultiplier</code> port scales
+      this pitch before mapping — useful to shift the operating range or add
+      vibrato to the mapped output.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>controlOut</code></td>
+          <td>Control</td>
+          <td>Mapped control value in <code>[outputMin, outputMax]</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>lowFreq</code></td>
+          <td>Float</td>
+          <td>25.0</td>
+          <td>1.0–20000.0</td>
+          <td>Frequency that maps to 0.0 (before output scaling)</td>
+        </tr>
+        <tr>
+          <td><code>highFreq</code></td>
+          <td>Float</td>
+          <td>8000.0</td>
+          <td>lowFreq+1 – 20000.0</td>
+          <td>Frequency that maps to 1.0 (before output scaling)</td>
+        </tr>
+        <tr>
+          <td><code>outputMin</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>Any</td>
+          <td>Minimum output value (reached at lowFreq)</td>
+        </tr>
+        <tr>
+          <td><code>outputMax</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>Any</td>
+          <td>Maximum output value (reached at highFreq)</td>
+        </tr>
+        <tr>
+          <td><code>curveType</code></td>
+          <td>Integer</td>
+          <td>1 (Logarithmic)</td>
+          <td>0–3</td>
+          <td>Transfer curve shape (see Curve Types)</td>
+        </tr>
+        <tr>
+          <td><code>invert</code></td>
+          <td>Bool</td>
+          <td>false</td>
+          <td>—</td>
+          <td>When true, flips the normalized value (t → 1-t) before scaling</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before mapping (1.0 = no change, 2.0 = octave
+            up, 0.5 = octave down)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="curve-types">Curve Types</h2>
+    <h3 id="linear">0: Linear</h3>
+    <pre><code>output
+ 1 |          /
+   |         /
+   |        /
+   |       /
+   |      /
+   |     /
+ 0 +----/------&gt; pitch
+       low  high</code></pre>
+    <ul>
+      <li><strong>Formula</strong>:
+        <code>t = (pitch - lowFreq) / (highFreq - lowFreq)</code> (linear
+        space)</li>
+      <li><strong>Use</strong>: Direct proportional mapping; equal Hz steps
+        produce equal output steps</li>
+      <li><strong>Character</strong>: Emphasizes the upper frequency range
+        perceptually</li>
+    </ul>
+    <h3 id="logarithmic-default">1: Logarithmic (default)</h3>
+    <pre><code>output
+ 1 |       ╭────
+   |      ╱
+   |    ╱
+   |  ╱
+   |╱
+ 0 +-----------&gt; pitch
+     low      high</code></pre>
+    <ul>
+      <li><strong>Formula</strong>:
+        <code>t = (log(pitch) - log(lowFreq)) / (log(highFreq) - log(lowFreq))</code></li>
+      <li><strong>Use</strong>: Perceptually uniform mapping — octaves take
+        equal output space</li>
+      <li><strong>Character</strong>: Natural-sounding; matches human pitch
+        perception</li>
+      <li><strong>Best for</strong>: Filter cutoffs, spectral controls, any
+        pitch-proportional modulation</li>
+    </ul>
+    <h3 id="exponential">2: Exponential</h3>
+    <pre><code>output
+ 1 |            /
+   |           /
+   |         ╱
+   |       ╱
+   |    ╱
+   |╱
+ 0 +-----------&gt; pitch (log scale)
+     low      high</code></pre>
+    <ul>
+      <li><strong>Formula</strong>:
+        <code>t = ((pitch - lowFreq) / (highFreq - lowFreq))²</code> (applied
+        after linear normalize)</li>
+      <li><strong>Use</strong>: Accelerating response — low pitches produce
+        very little output change; high pitches produce large change</li>
+      <li><strong>Character</strong>: Compresses the low register, expands the
+        high register</li>
+    </ul>
+    <h3 id="s-curve">3: S-Curve</h3>
+    <pre><code>output
+ 1 |         ╭──
+   |        ╱
+   |       ╱
+   |      ╱
+   |   ╱
+   |──╯
+ 0 +-----------&gt; pitch
+     low      high</code></pre>
+    <ul>
+      <li><strong>Formula</strong>: <code>t = t² × (3 - 2t)</code> (Hermite
+        smooth step)</li>
+      <li><strong>Use</strong>: Gentle response at extremes, steeper in the
+        middle</li>
+      <li><strong>Character</strong>: Natural, organic mapping; avoids abrupt
+        jumps at the frequency boundaries</li>
+    </ul>
+    <h2 id="using-the-invert-parameter">Using the <code>invert</code>
+      Parameter</h2>
+    <p>When <code>invert</code> is enabled, the normalized t value is
+      flipped before scaling: - Low pitches → high output values - High
+      pitches → low output values</p>
+    <p><strong>Example</strong>: With <code>outputMin = 0.0</code>,
+      <code>outputMax = 1.0</code>, and <code>invert = true</code>, a low note
+      produces <code>controlOut ≈ 1.0</code> and a high note produces
+      <code>controlOut ≈ 0.0</code>. Useful for filter cutoffs that should be
+      bright for low notes and dark for high ones.</p>
+    <h2 id="using-the-external-curve-input">Using the External
+      <code>curve</code> Input</h2>
+    <p>When a control source is connected to the <code>curve</code> input
+      port, the built-in curve type is <strong>bypassed entirely</strong>. The
+      connected value (0.0–1.0) is used directly as the shaped t value before
+      output scaling.</p>
+    <p>This allows: - Using an Easing Applicator or Envelope Engine to
+      define a custom pitch-to-control transfer - Dynamically changing the
+      curve shape by modulating the curve input - Sharing a single externally
+      computed curve across multiple Frequency Mappers</p>
+    <p><strong>Note:</strong> The pitch normalization step still runs
+      (clamping pitch to <code>[lowFreq, highFreq]</code>) but the resulting
+      normalized t is discarded in favour of the external value.</p>
+    <h2 id="output-range">Output Range</h2>
+    <p>The <code>outputMin</code> and <code>outputMax</code> parameters
+      freely set the output range. They can be any values, including negative
+      ranges and inverted ranges:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>outputMin</th>
+          <th>outputMax</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>1.0</td>
+          <td>Standard 0–1 range</td>
+        </tr>
+        <tr>
+          <td>0.0</td>
+          <td>2.0</td>
+          <td>Gain control (0 to double)</td>
+        </tr>
+        <tr>
+          <td>-1.0</td>
+          <td>1.0</td>
+          <td>Bipolar modulation</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>0.0</td>
+          <td>Inverted (same as invert=true with 0–1 range)</td>
+        </tr>
+        <tr>
+          <td>200.0</td>
+          <td>8000.0</td>
+          <td>Direct Hz output for filter cutoff</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="pitch-tracking-filter-cutoff">Pitch-Tracking Filter Cutoff</h3>
+    <p>Make a low-pass filter track the fundamental pitch:</p>
+    <pre><code>[Harmonic Generator] → [Rolloff Processor] → [LP/HP Filter] → signalOut
+                                                    ↑
+                                           [Frequency Mapper] → controlOut → cutoff
+                                            curveType: Logarithmic
+                                            lowFreq: 25, highFreq: 4000
+                                            outputMin: 300, outputMax: 6000</code></pre>
+    <p>Low notes get a 300 Hz cutoff; high notes get a 6 kHz cutoff —
+      automatically tracking the fundamental.</p>
+    <h3 id="brightness-by-pitch-rolloff-modulation">Brightness-by-Pitch
+      (Rolloff Modulation)</h3>
+    <p>Brighter sound for higher pitches:</p>
+    <pre><code>[Frequency Mapper] → controlOut → [Rolloff Processor] (lowRolloff)
+  curveType: Logarithmic
+  outputMin: 0.2 (bright)
+  outputMax: 0.8 (rolled off)
+  invert: true</code></pre>
+    <p>With invert, low pitches get a high rolloff value (more harmonics),
+      high pitches get less rolloff.</p>
+    <h3 id="reverb-amount-by-register">Reverb Amount by Register</h3>
+    <p>More reverb on high notes:</p>
+    <pre><code>[IR Convolution] ← wetDry ← [Frequency Mapper]
+                              lowFreq: 100, highFreq: 2000
+                              outputMin: 0.1, outputMax: 0.9</code></pre>
+    <h3 id="driftlfo-depth-by-pitch">Drift/LFO Depth by Pitch</h3>
+    <p>Wider drift for high pitched sounds:</p>
+    <pre><code>[Frequency Mapper] → controlOut → [Drift Engine] (depth parameter via modulation)
+  curveType: Exponential
+  outputMin: 0.01, outputMax: 0.3</code></pre>
+    <h3 id="custom-curve-easing-applicator">Custom Curve (Easing
+      Applicator)</h3>
+    <p>Use an easing curve to define a completely custom pitch-to-control
+      mapping:</p>
+    <pre><code>[Easing Applicator] → easedValue → curve → [Frequency Mapper] → controlOut
+  progress: ??? → use Frequency Mapper pitch to drive Easing's progress</code></pre>
+    <blockquote>
+      <p>In practice, connect a second Frequency Mapper’s
+        <code>controlOut</code> (with Linear curve, 0–1 range) to an Easing
+        Applicator’s <code>progress</code> input, then connect the Easing
+        output
+        to this Frequency Mapper’s <code>curve</code> input.</p>
+    </blockquote>
+    <h2 id="parameter-effects-reference">Parameter Effects Reference</h2>
+    <h3 id="lowfreq-highfreq">lowFreq / highFreq</h3>
+    <p>Defines the pitch range over which the mapping runs. Pitches below
+      <code>lowFreq</code> clamp to <code>outputMin</code> (or
+      <code>outputMax</code> if inverted); pitches above <code>highFreq</code>
+      clamp to <code>outputMax</code>.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>lowFreq</th>
+          <th>highFreq</th>
+          <th>Pitch Range</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>25</td>
+          <td>8000</td>
+          <td>Full practical voice range (default)</td>
+        </tr>
+        <tr>
+          <td>55</td>
+          <td>880</td>
+          <td>Two octaves around A standard</td>
+        </tr>
+        <tr>
+          <td>100</td>
+          <td>2000</td>
+          <td>Mid-register focus</td>
+        </tr>
+        <tr>
+          <td>20</td>
+          <td>20000</td>
+          <td>Full audible spectrum</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="output-never-changes">Output Never Changes</h3>
+    <ol type="1">
+      <li>Verify the note’s pitch falls within
+        <code>[lowFreq, highFreq]</code> — notes outside this range clamp to the
+        boundary value</li>
+      <li>Check that <code>outputMin ≠ outputMax</code> (zero range produces a
+        constant output)</li>
+      <li>Confirm no external <code>curve</code> connection is overriding with
+        a constant value</li>
+    </ol>
+    <h3 id="output-too-abrupt">Output Too Abrupt</h3>
+    <ol type="1">
+      <li>Switch to Logarithmic or S-Curve for smoother perceptual
+        response</li>
+      <li>Narrow the <code>[lowFreq, highFreq]</code> range to focus on the
+        pitches in use</li>
+    </ol>
+    <h3 id="output-too-subtle">Output Too Subtle</h3>
+    <ol type="1">
+      <li>Widen the <code>[outputMin, outputMax]</code> range</li>
+      <li>Enable <code>invert</code> if the effect seems backwards</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="stateless-processing">Stateless Processing</h3>
+    <p>The Frequency Mapper has no internal state. The output at any sample
+      depends only on the current pitch and parameter values. The
+      <code>reset()</code> method is a no-op included for API consistency.</p>
+    <h3 id="pitch-source">Pitch Source</h3>
+    <p>Pitch is provided by the audio graph’s
+      <code>generateSample(pitch, ...)</code> call — the same pitch that
+      drives all other pitch-sensitive containers. It reflects the note’s
+      instantaneous fundamental frequency (including any modulation applied
+      upstream).</p>
+    <h3 id="external-curve-override">External Curve Override</h3>
+    <p>When <code>curve</code> is connected, the full
+      <code>map(pitch, externalCurve)</code> overload is used. The pitch
+      normalization still runs (to clamp pitches at the boundaries), but the
+      external value completely replaces the built-in curve result before the
+      invert and output-range scaling steps.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>frequencymapper.h</code>,
+        <code>frequencymapper.cpp</code></em></p>
+  </body>
+</html>

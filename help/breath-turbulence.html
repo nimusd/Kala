@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Breath Turbulence</title>
+  </head>
+  <body>
+    <h1 id="breath-turbulence-documentation">Breath Turbulence
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>Breath Turbulence creates breath and noise character by blending
+      voice input with noise signal. Simulates the air turbulence and breath
+      noise characteristics of wind instruments and human vocal
+      production.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Shaping</strong> (Orange) - Transforms sound character</p>
+    <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATUAAAEWCAIAAACIRZfLAAAUo0lEQVR4nO2d74sbR56H958wGPzO5PYf2IP1m4Bf5I1hN+TezbvLi8HsshDwYb8Ka284c+cLZ5iQdRwMB4HzwsKYI7ewsJdhbrGPeInjNR5vPE7sjGecGWskjX63pG5JM6N7oZGmqn+p1Sp1VaufD8+LxDNqtarqUVeVNP39kUUIMTU/0n0ChJDA4Cch5gY/CTE3+EmIucFPQswNfhJibvCTEHODn4SYG/wkxNzgJyHmBj8JMTf4SYi5wU9CzA1+EmJu8JMQc4OfhJgb/CTE3OAnIeYGPwkxN/hJiLnBT0LMDX4SYm7wkxBzg5+EmBv8JMTc4Cch5gY/CTE3+EmIucFPQswNfhJibvCTEHODn4SYG/wkxNzgJyHmBj8JMTf4SYi5wU9CzA1+EmJu8JMQc4OfhJgb/CTE3BjvZ61a/dsXpc/fL3zys90Pf5q78kbu8mkA9Vx5Y/fDnxY++Vnp8/erf/vCqlV1D33LMtrPRr3y9Z3d62/q7znIHrvX36x8fcdqNPRKYKqf5Xzhs3/U3kmQcQqfvWuV8xo9MNHPRn4z/9Fb2vsGIHf5dP6jtxr5LV0uGOdno1oufPqO9l4BGFH49J1GtaxFB+P8LP3hivb+AHBR+sMVLTqY5Wd9ez33m7/T3hkAbj74cWP7WfJGmOXn3p2L+nsCwI+9O5eSN8IsP3ev/UR7NwD4snvtJ1a9lrARZvmpvQ8AQqi/+EvCRuAnQFQqD5YTNgI/AaJS/t/fJmwEfgJEpfSnDxM2Aj8BooKf+vsAIAj81N8HAEHgp/4+GM/yar+/WtHx1MW7m/29W8W4D6+s96d5OOBn5MZaXu3LsZeT6qfIfhbvbvb9s2ndiPPU+KkX/IzcWMur4igfmDAbRS/ZriPHuX6+be31++uXpjwZ/NQLfkZuLNlPVQL4gZ9wBH5Gbiz8nBz8nBL8jNxYbj8v2f1+7+7bwk9XK5cv2fLSVFwQHv/y8OHHGYpUWZeXjYN/Pzr429be8N/HD3o/P2/c6rnn5NKrqKz3++uXhivt1cqxn+LZCu8UUQ4onarwEjyNaS+LzeVZMN+41fNf/Aec21yAn5EbS/bTPfKWV/v9zd6eND4q68KIuXGrJwzc4t3N4xEm/yjg+ikO2Ut2f+y1Ma6fe5s94VHFu5v9vc3e8bgfCCa9qMh+SqddvLvpfkWuB4qyLa/25XfDoyeVm879qPSDn5Eby71/K7/BL6+6t4s8Y7d4dzNo9BxduIRx7PUz4qGGxPVTPqxskechk/jpOWfxDD3vONKR5amKq92k63Pgb6YU/IzcWK757WC6NRpS7tmv38rNdwU7inydGbP+9Dydh9jXT+mc/dafwpEnOODb1p7bHOGnnpcsHifwxXofNbtNAT3gZ+TG8o4S8V88CrlXkvJVd/DTkHmgNj/lh6jzU15vu9+VwvwMnCzIK9Lj4OcUmSM/b9zqBfsZtvPpOVRCfoZfpibxc/iQCAcMvn5GPbHA7Wvvo+YN/IzcWBNeP8MU8tsKTsxPSRJ538XfT593peCVofeAw9cV+llLqJ8+V+mQ1zhX4Gfkxhq//nS9x8tbnZdP527csoUBJ+/KiGPXM+yU+Tl4rtBdUx8/PXuwgmbjDzj6ZVeLXT5dvLsqPjDkOuz+ttZo/9a1r3v5dGWd/dupkmo/pUT5CoG8CnV/YDA6jt+nNcJSSp2f8qbU0Qe24+e34mt3H3PcAT37q36HGuOnp/3dn8GOMk+btzn81N4BACHgp/4+AAgCP/X3AUAQ+Km/DwCC4P59+vsAIAjuf6u/DwCCyPr946m/Asaye+3vs15/hfplYCzUL7Ma289yH/xYe08AuKH+5yDUzwYDoX72URrVcuHTd7T3B8CIwqf/0KiWtehgnJ+WZTXym/mP3tLeKwC5y6fzH73VyG/pcsFEPy3Lssr5wmfvau8byDiFz961ynmNHpjqp2VZjUb16zu719/U3kmQQXavv1n9+o7VaOiVwGA/B6lVq9+slD5/v/DJz/MfnsldeUN7z8F8cuWN/IdnCp/8vPT5+9VvVqxaVffQt6wU+ElIhoOfhJgb/CTE3OAnIeYGPwkxN/hJiLnBT0LMDX4SYm7wkxBzkwI/m81W27Ztp+N0Ok6nCzAzOrbTadt2s9nSPeqPYrSfrVbLdnASNGA7nVZLv6WG+tlsNtu2rb2TIOO0bbvZbGoUwUw/m1w2wRBsp2NZ2hQ10U/bdrT3CsAI23Z0uWCcn0xrwUDatq1FB7P8bDab2nsCwBctC1Gz/Gy3uXiCobTbGi6hZvnpsC0ExuJ0kjfCMD+19wFAMMl/IoqfAFHBT/19ABBEq9VO2Aj8BIhKq42fAKaCnzEbrtO29ovPD7cf9Le+nBsOcmu9am7qv9rp9Kq5g9ya9pejncPtB/vF5512/GGGn5O3muPs7230X93X3v2zGlU7j7pWJd546lqVw51H2l+CWby6v7+34ThxvkOKnxNeNu1WJq4Mr+73qq8nbZxe9fUcv21NyUFurWO38HOyTNZetp2pi8NEivaqr7WfsOEc7jxyJvyyN35O0FgHu0+193GivLofcaLbtSpcOaNwsPsUPydI9Jbq1vLaezd5DnceRdgu6mRqWjEl3XoeP6Mmaks5ncPth9q7Vgu9am7czDan/SRTxOH2w+jf+s6Qn/VKo7LTKD2vF57W8mu1/OPxFJ7Ui+v18gursVPefzlXH6VE5yC3Nmban4UNM6V0rRJ+HqdebZQ26lGEDKe+vnXw8ivtvZs8nXbYxqP200sd+8Xv8fMotXwj4tUy0hV1reK8eKK9gxOm2yjip0IOXz/GT8uyrMpOQ5WZIq3vvtXex0kS/kGL9tNLHYc/PMBPq5afiZwDMnUV7ZW38FMtWfezXlU5rfWd6GZnLbpfwk/FZN1PJRtC4dTXN7V3czLgp3Iy7We9MsOZrUhGPnTBT+Vk2s8ZbQt5aX33THtPJwB+KifTfpaez3xyO6D6zbb2nk4A/FROpv0sPE1CzvzjWulJQXtPJwB+KifTfs5051aksFbR3tMJMCd+3l44dfLMzXu6T2Pry37W/UxEzgHq+mzpwskT564uT3OQlcUTp85e3FA9mGbt58bVM6dOLqzM2gpfP+9dPHfyxKljZn8aW1/28RM/FTKvfq4snjh18sSF264zmawXVhZPnFpcmvRk8DN1fiogpX4mhOznxtUz/tPd2wsuace3OX5OFPxUe9h59DNstjJRM+LnxPFalLv/zR8//rf33/vV+fPnz5//5XsX/vnfP/3ir/fLyv0853nrlTt7+eZZYbUj9at3xAT9svjvngnb8XMtXTh54sLtozmb95ejo9BP4WSOT9U7vx3MPAdcuC21zMbVM6fOXtzYWrrg34zSY6XDin6G7xUJP/W6eny2txdOxV274ueI8rPff3zxF+d98otLH/3+ZU6pnzfPBls32Io4/unShZNunQQ/PT89euDSBeEgrkma109xNbWyGHP/Q5WfsofLNxd9/Vy+eTbsVQwNH/7+vYvnxHa7d/Gc641sdCjBujEr3nsXR++zYX6OWpXr50QR5Vz7jw9+6efmMP/02//KKfTT3fG3F0b/69ORwjhw+Rk0xfIMrGXxHcHHT/EZpafT4GfQUJZelNBi4mnLfobMGmTEo+FnhCTqZ251+ddhcg6uotf++/8Urj89mgnXPY8bol3iA4NWR8s3z7r/XRxAvvPboHNL3s+g3VFxxPvJ5ju/DRSm75pF+81pI/gZYX6Ln/EylCf/P/8Seu0c5r2lB7Fnud6mP+5R8Xrlf+0K8DPwQicsukRS4udQEumc5RG/7FkgTOjn4Ph+c9oJ15+B7xf4OW2G8vzlE99lp88k93cP1fk56nt5JE18/fTz0+f66f/WYKyfwpmMRrk6Pz0vMNDJcfu34gofP9XmSJ67n/8mmp7nz9/8s0I/jyxakl3yG3mB60/fYeo1ML1+SnNIccT7zDxvL7j3hyL7ubLoP7/t+61jfZQOWvDj5zTR7adnj1Gw0b1/K/+vtA/p+ungv93//uXG1YWQ/Vuj/FxZPG6QYCd9trUj++ndsA30c2ivz/eHpEaTG9zbs/G+/JRtP9cSmt8Gfj/eY5Hk5BBZFa880i8Lg0ZehQrPYryf/p8Weoa4+AIXVibbH5I/Fx275nR9/9Z3biJ8znnu6nLw2fL5Z7QM/75s5vtD/H1Z/PntBAStxlNMpv0c/X12tM9XPrjz55iTW/4+Owk/Tfq7MFVk2k/h/ibjv59w7XfP48mZ5/4ms/BT+gKQ5+tB80Km/ZTvD1Ze+8/rM/p+H/cHm8H10/0Z75zNbAdk2k/Lc39N+fvx53/13q//9eNpvx/P/TWTWn/OIVn3s8H9qdWBn8rJup8W9R3UgZ/KwU/Loj6SIvBTOfh5lFqB+oLTgp8qG/Plg9Z335ZfWMX1euFJtBs1r9UKT2ul5/XKTqNeaczUFw31eWulevGpgjtWl54Ue9//VXsHaxhS+KmkGV9+VV/fUjAON+qN6qwspT5v+sDP6XFePCmsVVSNw/xarVaYiaKsP9MHfk5J67tvZzEOKzvqFWX/Nn3g5zQ4L57Mbhwqv4pSnzd94Gf8pnv5lcpprZe1mtq1KPV50wd+xkbJhlA4pY26QnGoz5s+8DNmu718kMw4VPihC/V50wd+xmNG20JeFG4UUZ83feBnPKrfbCczDkvPlU1xqc+bPvAzHntPCsmMw+LTmip3qM+bPvAzHrPduRVZS5efyTTK41peef2yae/lEXhjzmnAz3gkOQ5VuYOfoeDnHIGf/kmxn9OCnwaBn/7BT7WHxc944Kd/vGefWH3eSFVx5XsiS/e/cs1vpQqw3ioD3uPLfg5rKAg3htZZ/zNrJDkOVbkz5/V5x1bFdVcQkIuLhNzvXCiOEFKi1+un+BbgKn0bFfyMR5LjUJU7c16fd1xVXJ9boXvK4wlVgyYu0evjZ2A9r8jgZzySHIeq3MlEfd7Aqife4tBbssDu66d3MRleotd/fuv/XJHBz3gkOQ5VuTP39XnD/PSvdRXk55a4UvWr/+NT2Ac/DSLJcajKnbmvz6vu+nnMYDdo8O/hJXrx0yCSHIeq3Jn7+p+hfvrpEbT+DDpsaIle/DSIJMehKney7WfA/q38v6P9oQX5g5ahaWElevHTIPDTP1rr80aoiit9qin749q/Dfq1wBK9+GkQw+/Hz35+m67vx1OfVy34GY/h35fNfBym7O/LqM+rFvyMx+jvs2c9DlP299nU51ULfsZDuL/JbMdhyu5vQn1eteBnzHaT7g82w3GYsvuDWdTnVTvO8DMurvtrzmIcpu/+mhb1eZWCn7E54P7UQaG+gyrwcxqo7xAY6iMpAT+nhPpIgaE+7/Tg5/RQXzAw1OedEvxUwsHLr+rrmwrGIfV5uX6K4KfKxnz5oPXds/ILa2+S+vbFuaxvz/pTzZDCT9WEtKdIq91O0heL/ds0gp/Kybqf1OdVCH4qJ+t+Up9XIfipnEz7SX1eteCncjLtJ/V51YKfysm0n9TnVQt+KifTflKfVy34qZxM+6m1Pq/PHeJF/G+Bq4RpaxMGgp/Kybaficg5wNP0+AnjwU/8VAZ+Kgc/8VMZ+Kkc/MRPZeCncvBTQmt9Xunm1F4/heK5ktgriydOLS6JxXw9ZVfEu1QvrOBnesDPERrq8547e0Yuueuq7zDyUy6YK9d6OPI24Kfu2p5H96THz3SAn0dy6q/PKzsZXg1JrH3kKrztqt1wdHV1Pwt+pgP8rOVNqc/rrapyZF2AY4E/Fewd8yxqwU/l4GfNmPq8QX4Oqnp6ieCnb5kj/EwP+Fkzpj6vVJY3/AopwvVzjsFPnfU/g70KXot6CPVTriM4+il+pgT81OqncHFzFeSVnVy6cFIuhn17Qdq/DfbctS3M/m26yLaf+uvzimtLyRnPNVNehQqujvFzS67zu7jE/DZFZNpP6vOqBT+Vk2k/qc+rFvxUTqb9pD6vWvBTOZn2k/q8asFP5WTaT4v6vErBT+Vk3U/q8yoEP5WTdT8t6juoo1fGT8Xgp2VRH0kRvepr/FTI4Q8P8PMo1Oednm6jiJ8KOXz9GD+P06g2lJRjqa9vZmfNKdJpt/BTIfvF7/HTnXqlUdlplJ7Xi09rEa+ohSf1vfV6+YXV2Cln5KMULwe5tfAxdJBb036S6aJrlfAzUiI2k+N0Drcfau9XLfSqufDG6VVz2k8yRRxuP3ScDn5GSlQ/O91uLa+9azUMpp1HTmfsYOoc7jzSfqppoVvPRx91+Bm1pZxO92D3qfbeTZRX97tWJdKbl1Xpv7qv/4SN52D36URDDj8naCzHtjN1oRg7s5Vnua+1n7DhHO48cmwbPyfIZH52uh27lYntkFf3J5LzWFGuogEc5NY6dtg2OH76ZNL2cjpdx3H29zbmeCAe7jyKOK310rUqmZpiROLV/f29DcdxYrQnfsYZhU6n22lb+8Xnh9tz9aHLQW6tV81F2BAKp9Or5jIxyxjH4faD/eLzTjv+MMPPaQZi1+l0Ola1W8v3Kj/sl7bSSK+81au+7jaKMWZfY97C7Fa3UexVX/fK+l9mok1a+aFby3es6tTvdPipdEQCqAU/9fcBQBCtFn4CmEqr1UrYCPwEiErm/Yz8TUiAxOkkb4RZfrbbk32fAyAx2m07eSPM8rPZbGrvBgBfms1m8kaY5adlWe0JvxIJkABtW8PF0zLQT8uybDvOd68AZoRtO7pcMNFPy2rabBSBGdhOx7I0zGwHMdNPq9lsMtEF7bRtW8uycxRD/Ryk1WpxIQUt2E4n+U87vTHaz0GazVbbthEVEsB2Om3bbjb1mzlICvwkJLPBT0LMDX4SYm7wkxBzg5+EmBv8JMTc4Cch5gY/CTE3+EmIucFPQswNfhJibvCTEHODn4SYG/wkxNzgJyHmBj8JMTf4SYi5wU9CzA1+EmJu8JMQc4OfhJgb/CTE3OAnIeYGPwkxN/hJiLnBT0LMDX4SYm7wkxBzg5+EmBv8JMTc4Cch5gY/CTE3+EmIucFPQswNfhJibvCTEHODn4SYG/wkxNz8PwibedpYLMZDAAAAAElFTkSuQmCC"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 25%">
+        <col style="width: 25%">
+        <col style="width: 20%">
+        <col style="width: 29%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port Name</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>voiceIn</code></td>
+          <td>Signal</td>
+          <td>-</td>
+          <td>Primary audio signal (typically from Formant Body or Spectrum to
+            Signal)</td>
+        </tr>
+        <tr>
+          <td><code>noiseIn</code></td>
+          <td>Signal</td>
+          <td>-</td>
+          <td>Noise signal source (from Noise Color Filter or other noise
+            generator)</td>
+        </tr>
+        <tr>
+          <td><code>blend</code></td>
+          <td>Control</td>
+          <td>0.1</td>
+          <td>Mix ratio (0.0 = voice only, 1.0 = noise only)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 31%">
+        <col style="width: 31%">
+        <col style="width: 37%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port Name</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Voice signal blended with noise/turbulence character</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>blend</code></td>
+          <td>Float</td>
+          <td>0.1</td>
+          <td>0.0 - 1.0</td>
+          <td>Voice to noise blend ratio</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="processing-algorithm">Processing Algorithm</h2>
+    <h3 id="signal-blending">Signal Blending</h3>
+    <div class="sourceCode" id="cb1">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a
+href="#cb1-1" aria-hidden="true" tabindex="-1"></a>output <span class="op">=</span> voiceIn <span
+class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> blend<span
+class="op">)</span> <span class="op">+</span> noiseIn <span class="op">*</span> blend<span
+class="op">;</span></span></code></pre>
+    </div>
+    <h3 id="simple-linear-crossfade">Simple Linear Crossfade</h3>
+    <ul>
+      <li><strong>Blend = 0.0</strong>: Pure voice signal (no noise)</li>
+      <li><strong>Blend = 0.5</strong>: Equal mix voice and noise</li>
+      <li><strong>Blend = 1.0</strong>: Pure noise (no voice signal)</li>
+    </ul>
+    <h2 id="configuration-preferences">Configuration (Preferences)</h2>
+    <p>No specific configuration preferences - uses standard control ranges
+      (0.0 - 1.0).</p>
+    <h2 id="usage-examples">Usage Examples</h2>
+    <h3 id="basic-breath-character">Basic Breath Character</h3>
+    <pre><code>Pitch → Harmonic → Rolloff → Spectrum → Formant Body → Breath Turbulence → [Output]
+         Generator                      Processor        Signal</code></pre>
+    <h3 id="with-noise-shaping">With Noise Shaping</h3>
+    <pre><code>         ┌─────────────────┐
+         │                 │
+Fixed →  │ Noise Color     ├──→ noiseIn
+Noise    │ Filter           │
+         │                 │
+         └─────────────────┘
+
+Voice Chain → voiceIn → Breath Turbulence → [Output]</code></pre>
+    <h3 id="with-dynamic-breath-control">With Dynamic Breath Control</h3>
+    <pre><code>         ┌─────────────────┐
+         │                 │
+Voice →  │ Formant Body    ├──→ voiceIn
+Chain    │                 │
+         │                 │
+Envelope → blend           │
+         │                 │
+         └─────────────────┘</code></pre>
+    <h2 id="practical-applications">Practical Applications</h2>
+    <h3 id="sound-design-techniques">Sound Design Techniques</h3>
+    <h4 id="wind-instrument-character">1. Wind Instrument Character</h4>
+    <ul>
+      <li><strong>Flute</strong>: Low blend (0.05-0.15) for subtle breath</li>
+      <li><strong>Saxophone</strong>: Medium blend (0.2-0.35) for more
+        pronounced breath</li>
+      <li><strong>Clarinet</strong>: Variable blend (0.1-0.4) for expressive
+        control</li>
+    </ul>
+    <h4 id="vocal-character">2. Vocal Character</h4>
+    <ul>
+      <li><strong>Whisper Effect</strong>: High blend (0.6-0.8) with noise
+        input</li>
+      <li><strong>Breathy Vocals</strong>: Low-medium blend (0.1-0.3)</li>
+      <li><strong>Harsh Vocals</strong>: High blend (0.4-0.6) for aggressive
+        character</li>
+    </ul>
+    <h4 id="textural-effects">3. Textural Effects</h4>
+    <ul>
+      <li><strong>Air Noise</strong>: Pure noise with subtle voice blend</li>
+      <li><strong>Wind Effects</strong>: Voice signal modulated by wind-like
+        noise</li>
+      <li><strong>Atmospheric Textures</strong>: Slowly evolving blend
+        patterns</li>
+    </ul>
+    <h3 id="performance-parameters">Performance Parameters</h3>
+    <h4 id="blend-amount-guidelines">Blend Amount Guidelines</h4>
+    <ul>
+      <li><strong>Subtle</strong>: 0.02-0.1 - Barely audible breath
+        character</li>
+      <li><strong>Natural</strong>: 0.1-0.3 - Realistic wind/vocal sounds</li>
+      <li><strong>Pronounced</strong>: 0.3-0.6 - Clear breath/turbulence</li>
+      <li><strong>Extreme</strong>: 0.6-1.0 - Noise-dominant effects</li>
+    </ul>
+    <h4 id="noise-source-selection">Noise Source Selection</h4>
+    <ul>
+      <li><strong>White Noise</strong>: For harsh turbulence</li>
+      <li><strong>Pink Noise</strong>: For natural wind sounds</li>
+      <li><strong>Filtered Noise</strong>: For specific spectral
+        character</li>
+      <li><strong>Colored Noise</strong>: Via Noise Color Filter for precise
+        control</li>
+    </ul>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-breath-effect">No Breath Effect</h3>
+    <ol type="1">
+      <li>Verify noiseIn is connected from Noise Color Filter</li>
+      <li>Check blend parameter is &gt; 0.0</li>
+      <li>Ensure voiceIn signal is present</li>
+      <li>Verify output connections</li>
+    </ol>
+    <h3 id="too-much-noise">Too Much Noise</h3>
+    <ol type="1">
+      <li>Reduce blend parameter toward voice-only</li>
+      <li>Check noise source characteristics</li>
+      <li>Consider using filtered noise instead of white noise</li>
+      <li>Adjust noise color if using Noise Color Filter</li>
+    </ol>
+    <h3 id="unwanted-distortion">Unwanted Distortion</h3>
+    <ol type="1">
+      <li>Check that signals aren’t clipping before blending</li>
+      <li>Verify blend parameter isn’t too high for clean sound</li>
+      <li>Ensure noise source is appropriate level</li>
+      <li>Consider adding gain control before blend</li>
+    </ol>
+    <h3 id="thin-sound">Thin Sound</h3>
+    <ol type="1">
+      <li>Increase blend to add body through noise</li>
+      <li>Check noise frequency content</li>
+      <li>Verify voice signal has sufficient low frequencies</li>
+      <li>Consider adding low-frequency boost to noise</li>
+    </ol>
+    <h2 id="best-practices">Best Practices</h2>
+    <h3 id="parameter-optimization">Parameter Optimization</h3>
+    <ol type="1">
+      <li><strong>Start subtle</strong>: Begin with blend 0.05-0.15</li>
+      <li><strong>Context matters</strong>: Match breath character to sound
+        type</li>
+      <li><strong>Dynamic control</strong>: Use automation for expressive
+        variation</li>
+      <li><strong>Noise selection</strong>: Choose appropriate noise
+        color</li>
+    </ol>
+    <h3 id="signal-chain-design">Signal Chain Design</h3>
+    <ol type="1">
+      <li><strong>Position after character</strong>: Place after Formant Body
+        or other shaping</li>
+      <li><strong>Noise quality</strong>: Use filtered/colored noise for
+        better integration</li>
+      <li><strong>Level matching</strong>: Balance voice and noise levels
+        appropriately</li>
+      <li><strong>Downstream processing</strong>: May need EQ or dynamics
+        after blend</li>
+    </ol>
+    <h3 id="creative-techniques">Creative Techniques</h3>
+    <ol type="1">
+      <li><strong>Automated breath</strong>: Use envelope for natural breath
+        evolution</li>
+      <li><strong>Noise modulation</strong>: Apply slow LFO to blend for
+        pulsing effects</li>
+      <li><strong>Layered effects</strong>: Use multiple instances for complex
+        textures</li>
+    </ol>
+    <h3 id="performance-considerations">Performance Considerations</h3>
+    <ol type="1">
+      <li><strong>CPU efficiency</strong>: Very lightweight processing</li>
+      <li><strong>Signal quality</strong>: Maintain good signal-to-noise
+        ratio</li>
+      <li><strong>Real-time safety</strong>: Avoid sudden large blend
+        changes</li>
+      <li><strong>Multiple instances</strong>: Can use several for complex
+        textures</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="signal-mathematics">Signal Mathematics</h3>
+    <h4 id="linear-interpolation">Linear Interpolation</h4>
+    <p>Uses simple linear crossfade between two signals:</p>
+    <pre><code>output = voice × (1 - blend) + noise × blend</code></pre>
+    <h4 id="energy-conservation">Energy Conservation</h4>
+    <p>Linear blend preserves signal energy: - <strong>Blend = 0.0</strong>:
+      Full voice signal energy - <strong>Blend = 0.5</strong>: 50% voice + 50%
+      noise energy - <strong>Blend = 1.0</strong>: Full noise signal
+      energy</p>
+    <h3 id="acoustic-principles">Acoustic Principles</h3>
+    <h4 id="wind-instrument-physics">Wind Instrument Physics</h4>
+    <ul>
+      <li><strong>Air turbulence</strong>: Creates noise component in real
+        wind instruments</li>
+      <li><strong>Breath noise</strong>: Results from air column
+        instability</li>
+      <li><strong>Player control</strong>: Real players vary breath intensity
+        naturally</li>
+    </ul>
+    <h4 id="vocal-production">Vocal Production</h4>
+    <ul>
+      <li><strong>Glottal noise</strong>: Inherent in human voice
+        production</li>
+      <li><strong>Air flow</strong>: Creates turbulence noise component</li>
+      <li><strong>Expressive tool</strong>: Players/conductors use breath
+        character intentionally</li>
+    </ul>
+    <h3 id="filter-considerations">Filter Considerations</h3>
+    <h4 id="noise-spectral-content">Noise Spectral Content</h4>
+    <ul>
+      <li><strong>White noise</strong>: Equal energy across all
+        frequencies</li>
+      <li><strong>Pink noise</strong>: More low-frequency energy</li>
+      <li><strong>Band-limited noise</strong>: Specific frequency ranges</li>
+      <li><strong>Colored noise</strong>: Custom spectral shapes</li>
+    </ul>
+    <h2 id="version-history">Version History</h2>
+    <ul>
+      <li><strong>v1.0</strong>: Basic signal blending implementation</li>
+      <li><strong>v1.1</strong>: Added parameter validation and range
+        checking</li>
+      <li><strong>v1.2</strong>: Enhanced integration with Noise Color
+        Filter</li>
+      <li><strong>v1.3</strong>: Improved signal handling and performance</li>
+      <li><strong>v1.4</strong>: Current version with streamlined
+        interface</li>
+    </ul>
+    <hr>
+    <p><em>This documentation applies to Kala v1.4 and later. For most
+        current implementation, refer to source code in breathturbulence.h and
+        breathturbulence.cpp.</em></p>
+  </body>
+</html>

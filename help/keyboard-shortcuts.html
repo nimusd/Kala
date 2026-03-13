@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="style.css">
+<title>Keyboard Shortcuts</title>
+</head>
+<body>
+<h1 id="keyboard-shortcuts">Keyboard Shortcuts</h1>
+<p>A complete reference for all keyboard shortcuts in Kala. Shortcuts
+marked as <em>global</em> work from any window without needing to
+switch focus first.</p>
+
+<hr />
+
+<h2 id="global-shortcuts">Global</h2>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Ctrl+N</code></td><td>New project</td></tr>
+<tr><td><code>Ctrl+O</code></td><td>Open project</td></tr>
+<tr><td><code>Ctrl+S</code></td><td>Save project</td></tr>
+<tr><td><code>Ctrl+Shift+S</code></td><td>Save project as</td></tr>
+<tr><td><code>Ctrl+E</code></td><td>Export audio</td></tr>
+<tr><td><code>Ctrl+1</code></td><td>Switch to Sound Engine tab</td></tr>
+<tr><td><code>Ctrl+2</code></td><td>Switch to Composition tab</td></tr>
+<tr><td><code>Ctrl+3</code></td><td>Switch to Preferences tab</td></tr>
+<tr><td><code>Tab</code></td><td>Toggle focus between Sound Engine and Composition windows</td></tr>
+<tr><td><code>F11</code></td><td>Toggle full-screen canvas</td></tr>
+<tr><td><code>F1</code></td><td>Open this help dialog</td></tr>
+</tbody>
+</table>
+
+<hr />
+
+<h2 id="score-canvas-shortcuts">Score Canvas (Composition)</h2>
+
+<h3 id="score-tools">Tools</h3>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>S</code></td><td>Select mode — click or drag to rubber-band select notes</td></tr>
+<tr><td><code>D</code></td><td>Draw Discrete mode — new notes snap to scale lines</td></tr>
+<tr><td><code>C</code></td><td>Draw Continuous mode — pitch curve follows your gesture</td></tr>
+<tr><td><code>Z</code></td><td>Zoom mode — drag up/left to zoom in, down/right to zoom out</td></tr>
+<tr><td><code>Ctrl+Space</code></td><td>Toggle pan mode — drag anywhere to shift the view</td></tr>
+</tbody>
+</table>
+
+<h3 id="score-playback">Playback and Navigation</h3>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Space</code></td><td>Play / pause</td></tr>
+<tr><td><code>G</code></td><td>Go To dialog — jump to a specific time or bar number</td></tr>
+<tr><td><code>L</code></td><td>Activate loop mode, then drag on the timeline to set the loop region</td></tr>
+<tr><td><code>Ctrl+=</code></td><td>Zoom in (time axis)</td></tr>
+<tr><td><code>Ctrl+−</code></td><td>Zoom out (time axis)</td></tr>
+<tr><td><code>Ctrl+0</code></td><td>Zoom to fit</td></tr>
+<tr><td><code>Escape</code></td><td>Cancel in-progress render</td></tr>
+</tbody>
+</table>
+
+<h3 id="score-editing">Editing</h3>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Delete</code></td><td>Delete selected notes; clears the loop region when nothing is selected</td></tr>
+<tr><td><code>Ctrl+A</code></td><td>Select all notes</td></tr>
+<tr><td><code>Ctrl+Z</code></td><td>Undo</td></tr>
+<tr><td><code>Ctrl+Y</code> or <code>Ctrl+Shift+Z</code></td><td>Redo</td></tr>
+<tr><td><code>Ctrl+C</code></td><td>Copy selected notes</td></tr>
+<tr><td><code>Ctrl+X</code></td><td>Cut selected notes</td></tr>
+<tr><td><code>Ctrl+V</code></td><td>Paste — notes appear centered on the current view</td></tr>
+</tbody>
+</table>
+
+<h3 id="score-track-selection">Track Selection</h3>
+<p>Tracks are shown as colored vertical bars on the left of the Score Canvas.
+Only notes belonging to selected tracks can be clicked or lasso-selected.</p>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Click</code> track bar</td><td>Select that track only — deselects all others</td></tr>
+<tr><td><code>Ctrl+Click</code> track bar</td><td>Add track to the selection (or remove it if already selected). At least one track is always selected.</td></tr>
+<tr><td>Right-click track bar</td><td>Context menu — Delete Track</td></tr>
+</tbody>
+</table>
+<p>When multiple tracks are selected, note clicks and rubber-band lasso work
+across all selected tracks simultaneously. The active track (solid white
+border) is the one that receives newly drawn notes.</p>
+
+<h3 id="score-segment-mode">Segment Editing Mode</h3>
+<p>Active after double-clicking a quantized continuous note.</p>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Left</code> / <code>Right</code></td><td>Select previous / next segment</td></tr>
+<tr><td><code>Delete</code></td><td>Delete selected segment</td></tr>
+<tr><td><code>Escape</code></td><td>Exit segment editing mode</td></tr>
+</tbody>
+</table>
+
+<hr />
+
+<h2 id="sound-engine-shortcuts">Sound Engine</h2>
+
+<h3 id="engine-tools">Tools</h3>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>S</code></td><td>Toggle selection mode — enables lasso-select on the container canvas</td></tr>
+<tr><td><code>N</code></td><td>Enter Note Mode — edit the sound graph for a specific note</td></tr>
+<tr><td><code>Z</code></td><td>Toggle zoom mode — drag or use mouse wheel to zoom</td></tr>
+<tr><td><code>R</code></td><td>Reset zoom to 100%</td></tr>
+<tr><td><code>Ctrl+Space</code></td><td>Toggle pan mode — drag to pan the container canvas</td></tr>
+</tbody>
+</table>
+
+<h3 id="engine-playback">Playback</h3>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Space</code></td><td>Play / pause</td></tr>
+<tr><td><code>T</code></td><td>Play test tone (Middle C, 261.63 Hz) using the current graph</td></tr>
+<tr><td><code>Escape</code></td><td>Cancel in-progress render</td></tr>
+</tbody>
+</table>
+
+<h3 id="engine-editing">Editing</h3>
+<table>
+<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>Ctrl+A</code></td><td>Select all containers</td></tr>
+<tr><td><code>Delete</code></td><td>Delete selected containers or connections</td></tr>
+<tr><td><code>Ctrl+Z</code></td><td>Undo</td></tr>
+<tr><td><code>Ctrl+Y</code> or <code>Ctrl+Shift+Z</code></td><td>Redo</td></tr>
+<tr><td><code>Ctrl+C</code></td><td>Copy selected containers (connections between them are included)</td></tr>
+<tr><td><code>Ctrl+X</code></td><td>Cut selected containers</td></tr>
+<tr><td><code>Ctrl+V</code></td><td>Paste containers</td></tr>
+<tr><td><code>Ctrl+click</code></td><td>Add or remove a container from the current selection</td></tr>
+</tbody>
+</table>
+</body>
+</html>

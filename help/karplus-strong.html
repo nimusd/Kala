@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Karplus Strong</title>
+  </head>
+  <body>
+    <h1 id="karplus-strong-documentation">Karplus Strong Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Karplus Strong container is an <strong>extended physical string
+        model</strong> (EKS framework, Jaffe &amp; Smith 1983) that generates
+      plucked string sounds with fine control over the excitation character,
+      loop filter brightness, pick direction, and body resonance. It operates
+      in two modes: <strong>String mode</strong> where the K-S model produces
+      the entire sound, or <strong>Attack mode</strong> where it adds a pluck
+      transient to an input signal.</p>
+    <p>Four excitation types (Noise, Soft Pluck, Blend, Finger Pluck) model
+      different ways of setting a string in motion, while the EKS loop
+      filter’s brightness and damping parameters independently control the
+      tonal character and decay rate of the resulting string vibration. A body
+      resonance biquad adds instrument-body coloring post-output.</p>
+    <p>Legato note transitions preserve the string’s vibrating state — the
+      string continues ringing from the previous note rather than
+      resetting.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Core sound generation</p>
+    <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAakAAALJCAIAAACBUkvLAAAgAElEQVR4nO2d728b13rn95/wC0H/xr13ly/uG6LALl8U2KKvhAv0JUGvd7XgbisUaNXYCOr4CjaQgobl273dNnXVekPLTW6xL7zcQGtkUStc5yayY/vWtpLYV6FJW4pJjW1JsRPuiyE55zznzHA4fM6cM5zvF58XkUgNR9bMJ+fXnOdfeQiCIPnLv7J9AgiCIBYC9yEIksfAfQiC5DFwH4IgeQzchyBIHgP3IQiSx8B9CILkMXAfgiB5DNyHIEgeA/chCJLHwH0IguQxcB+CIHkM3IcgSB4D9yEIksfAfQiC5DFwH4IgeQzchyBIHgP3IQiSx8B9CILkMXAfgiB5DNyHIEgeA/chCJLHwH0IguQxcB+CIHkM3IcgSB4D9yEIksfAfQiC5DFwH4IgeQzchyBIHgP3IQiSx8B9CILkMXAfgiB5DNyHIEgeA/chCJLHwH0IguQxcB+CIHkM3IcgSB4D9yEIksfAfQiC5DFwH4IgeQzchyBIHgP3IQiSx8B9CILkMXAfgiB5TIbd97y3v3F/9883vvlZ/et/+96XP/nFgx9dBABE8dNfPvz3a1+e+NXjv73Zedju2r6JbSaT7uvte7/64tnv/t2X1q8kALLLT37xYLmx81UnpwbMnvs63+7/x189tn7dADAb/PSXD6/d27V9W1tIxtz36Gnv9//hK+uXCwCzxI8vPvibm23bN3fayZL79rr7f3Dla+sXCgCzx48vPshb6y9L7vv59Zb1SwSAWeWnv3yYq7G/zLjvN63uv/7Lh9avDwBmmD9r7Ni+0dNLZtz3VmPH+pUBwGzzk188yM/Cl8y473f+etv6lQHAzHPp047tez2lZMZ91q8JAPLAiV89tn2vpxS4DwAQ8Ht//5Xtez2lwH0AgICf/vKh7Xs9pcB9AAAJ2/d6SoH7AAAStu/1lAL3AQAkbN/rKQXuAwBI2L7XUwrcNx3v7z3q9683bJ8GAHzYvtdTyiy6r+H1+0fvvS985/29R/1+//nez9gvFDPue+vLvphHnz6yfj+A/GD7Xk8peXDfk+uGxHfRhPueXO/3+18+EX+dkfve+lJ+CQAD2L7XU8rMu+/Re8+Nie8iv/t+9ulRv++9FfIq3AdSwPa9nlJm3H1vfdmPUAkD3O5768soU8N9IAVs3+spZZbd97NPj+jA38UHPxq0rUahvePrjeFw25dPfjTSjT9i6Ed0k+g+jQefXJdG655cFz5Yb8yGp3+p4UlDgAOha054dCb6D3p/71H/6L33xSFF+v8G8d/n0adP3nsO4eYL2/d6Spld930aIpGLT64L8pIbhk+u9/uPnh+JP/XWl/3+86NHwY/Io4cTuE/2YMMLay0OrKRr/SntPs0J++YKvtPwpNmSoRaHb6BjAvI/yKP3nstWBTnA9r2eUmbVfaH6oAzbQT+6+EAzz6DtNYf5Ltp90gcl/BW07lO/Q6wqjSG+v/eITByLw6Oak9T8m4DZxva9nlJm1X1H7zX2HkXctHIXcigL0kV98CP9EBsx2gTtvskGHwcnGfyIvt1HRaZ8BD1JzQIg/1XdTMsj9Hnzhu17PaXMrvveV7p7PoNOn9QOEt1HGk187nsQdCEnmB6Rml1a9ykd3uTu0820wH25w/a9nlJm2n3DwS9qH/FOTuo+ne/UH9c0JHVnFYWos7Hum7LdB/eBH8F9rmWCP568ttmfOpCG9oU7WZ4ZCHEfsQkdIAvvMmsbnqPDxhPKzz49GvlovPt0a26U8b5Q94U+EgP35Qnb93pKmX33DXuauhV/dNIzzH3K8hH5y9GPvPVlv09mToTe8XV5sUuYE5V2XPAdpUsbNrNB53mDL6PdN/i3wjxvrrF9r6eUPLjvwUhD1xsPxEG3/vO9n8Xr88pL3gRn0XaWcPC+95YyMqg/CPk4KfpfhKzv0/0LhBxhjPvIr3D03vvo8+YO2/d6SplF97GS+0cpHr33HJsp5Avb93pKgfvGkHf3YZOu/GH7Xk8pcB8AQML2vZ5S4D4AQADqtDkX69cEAHkA9Xmdi/VrAoA8cOJXj23f6yklM+77nb/etn5ZADDzXPq0Y/teTymZcd9bjR3rlwUAs81PfvHgYbtr+15PKZlx37886f6bv3xo/eIAYIb5s8aO7Rs9vWTGfZ7n/fx6y/rFAcCs8tNfPvyqk5dGn5ct9+119//gytfWLxEAZo8fX3xw7d6u7Vs81WTJfZ7nPXra+/1/+Mr6hQLALPHjiw/+5mbb9s2ddjLmPs/zOt/u/6d/emz9cgFgNvjpLx/mrcXnJ3vu8zxv3/P+6Ytnv/t3X1q/bgDILj/5xYM/a+zkaoxPTCbd5+d5b///PNg9vfHNz+pf/7v3vvzJL+xfTAA4zk9/+fD3/v6rE796fOnTTn6Ws2iTYfchCIIkDtyHIEgeA/chCJLHwH0IguQxcB+CIHkM3IcgSB4D9yEIksfAfQiC5DFwH4IgeUy23ffixctXBwcHh0eHR0eHR98BAKI5ODw6ODw6ODx8+fKV7dvXcrLqvpcvXx4cwncATMWrVwe2b2VryZ77Xrx48ergwPpFA8BscHB49PLlS9u3tYVkzn0v0NwDgJ0cdoEz5r6Dg0PrVwkAM0neWn9Zch+6ugCY4+DwyPYtnmoy474XL15YvzgAmG1yNfWRGfe9eoVGHwDGsX2jp5fMuO8QUxwAmCc/kx7ZcZ/tawKAPHBweGj7Xk8pcB8AICA/Mx5wHwAgAO5zLtavCQBygu17PaXAfQAACdv3ekqZfff1Dl4/6H5/81l/swOc4+az/oPu972D11Pervgrj7i990PLe3MA943LLLvv1eF3293vP7F9LYKxfNLpb3e/f3WY5EbFX1nL57s/7L1M+H8U2/d6SplZ9704/O7W3g/WL0EQn9t7P7yYUH/4K0fwSaff2n8D94VlNt338vC7z3dxS2SPz3d/eBlbf/grxyGB/mzf6yllNt13F22BzHL32x/wV2bkk05/0s6v7Xs9pcyg+554b6xfcGAanrwY31TBXzk+n+/+MNHUh+17PaXMmvsOjr779TM0B7LNr5+NuVfxV56UljdBz9f2vZ5SXHRf79v9b3f2d+/3One67a1u+/PxdG71nt7t7T3wOt8c/L/W99YvNTAlzyK7ac9evrZ+htni9l7ckQS4z056z/d3t3txZBfNw/uvbsKAWWb7+fcRN+fD5/jjTsyLA7hPikPu67b3Y7by4tDa6t16/J31Cw4k49ZuVDvlFqZ3J+dp7BkP2yZIKa6479udfS7ridz98sj6NQcS8OnTKPfdfGr/DDPHN7EXu9iWQUpxwn3dthHx+aD1l1Eibk7r55ZFvu7BfVLsu6/3nLOrq+38Yuwvi8B9vHzdixpChfsshGVyI5qH//LK+pUHJgXu4wXuI7Hsvt63Bnu7Ilj4kjngPl7gPhLL7jM0xaFyB5MeWQPu4wXuI7Hsvt37xju8Pl/de2H94gMTAffxAveRWHZf504a4mt/3t35Yt/6xQcmAu7jBe4jsew+ozO8Iq2tnvWLT6K5WpibX6jbPg2HmQn3bS8V549VGrZPo78J9ymx7b5UxOcT8xJZXykdm6vWTF+LsvtqlfljxdV127eHUxh2X2Nhbr6wsm34t9C7r1aZPzYXYP40+ptwnxK4jwL3OcJsuq+5Wpgjf+vGwtz8ZJdcc7UwV1pqTnYycB8J3GcJuG8cs9jnbSzMabvA20vFSS4AuI8jcJ8l4L5xzJ77oroUE43/wn0ccc59rX/+4n/Wfv4niyfK5XK5fHyx+vbZi//r03/eM+K+elUYdhlclOoFKo7OLNSlvtL6SulYcXV90G2ZP6b8X10e2REOG+W+xsLc/ELdPxP/Bye+0GcAPvcJf53g31zp8/q9UZ/iak26DMb9RcSflQ4rui963kN4VePB0dluLxUTjhXCfSROuW/v3uXaH1bKmlT+6C8uf9nidV+9Kl7BtYrWfaQzMriLJPeJUmuuFsTLsblaCK51+VDj3Cd+Sq0y4XjQTMDkPtlx9areffWqoEXlzzruL1KrCCqUDiX6bswIY3ANRLlvdPGg3Tdt3HHf3tZfnTqu894w/+X81Raj+4ZNNnqJSO6rV6l0ZLutr5RIEyCq9yoebaz7lAHyvC2I4XFfqCZEm2wvFamVZLtN9BcRjwb3uRtX3Nf6qL4cJT6/9Xfmw495232aPojoPp3ItH1e/Y8L35mnfaUYfd7QSz8fMLb7dK1m4Z9UJ7J1XZ838i8i9ax1/dwY7hvf5+0P3wD3TRtH3Ne+djqyzTfM4rvNxD1fzQURDNME94Zw0WsHaCZxn6/X0RvEXjbcNw6+8b5gjEz4VxX+SeXRD83fccxfZHB8XT93svG+cBfDffxxxH03LmiH+TQd37WbjO6T7o3BxcTnPkVYcN8k8LlP/NOM/hnZ3Ke09EN9N26ed3QO4y4AuI8jbrjv+gcn46mvXF7d4HefdLWJF6jmYq1X6VxHbPfVKujzTgC7+zbFfqX0T6r+8/r/O0zkPr8zoW/rRa7vk9+m/F8T7mNOft23vlKV5+bUdt/wYo2e5w11nzyxO1hPA/fFhWuuYyH4dwv1nd8kjJ7nDf2LqBO7oe4Lf65Dvoqk/00qV12y6wHuI7Htvq2U+rzqXgb6KQhNW08cw67WJpvrkNf9oc87CVzuC1l5R/9JxeuhsLI90VyHvO5v/BgfeZ5XN18sruOjV534iVjflziO7GFlfK6Dbw8r9TYARjDR541P2BKo7AL3kbiyd2m8NS6nrmwk7PCy7V2qGxcHJrDqPof2nuIC7iNxZ8/68Wubz6zdTya+duI966UHM5THNoBJ0nSf9GDGjD5IA/eROFWraG/r0jlDz7QlrVUkL1hFbzdF0nSfPPg7m/tKwH0kztWolPcyKJ9YXH6nNu1eBqhRmUXsjvfNHnAfiX337aM2OdAB9/EC95HYd5/ned22wUqVtx7jVskkcB8vcB+JE+7zjBXqvYuyvJkF7uMF7iNxxX2e53U7nJ3f1lYPLb5MA/fxAveROOQ+z/O6u72ndxiqle/c9j7beW39agPTAPfxAveROOS+bhvtPhAA9/EC95G44j6M9wEC3McL3EfihPswzwtU4D5e4D4S++7rYX0f0AH38QL3kdh3H3muwwR4riOLwH28wH0kTj3Pa5Ckz/MCa8B9vMB9JO7s42KWhPu4AHvAfbzAfSSu7N9nGrb9+0BawH28wH0kjuzbbBy+fZtBSsB9vMB9JI7U6zCOWq8DOA7cxwvcR2LbfamIzyfZFSNXEQLpAffxAveR5Np9cerRwH22gPt4gftI4D54zVHgPl7gPhK4D+5zFLiPF7iPxDn3yfU6ji9W3z57cdp6HVr3FaQiRH6ZrkHt3UHp6EpjU9PnFYtGl5bqUonxzY5fxDKoR652mcW61MIPbi8VRyWx0cvub8J93MB9JE65b+/e5ZqhOm3x2n2Nhbn5QrEkukyWV2NhTijb2lwtyApbXymJ1XsHmgt+fHupKHxZrwo/u71UnC8USyiAOQLu4wXuI3HHfePr856/2krBfaQiteg+TR9Z8teg2Sj8uCo7pQ7s4FX5nQDu4wbuI3HFfa2P6stR4vNbf2c+/Nh8u09ueVE9yWb0m34D3ylqk3+8X6vQH19fKQ1rYOsOnm/gPl7gPhJH3Ne+djqyzTfM4rvNxD1f9WrQuo9UHxfkpTGj6D5BZNofFwcKRQL3ocMrAvfxAveROOK+Gxe0w3yaju/azay6T9PuE4D7KHAfL3AfiRvuu/7ByXjqK5dXN6y5T7PO2Z+WHfxIU5nz9QcQxeFCRY5D4D4K3McL3EeSa/cpI3Rj3DeY2A2f561V5iPneSUV+icgzfPCfQJwHy9wH4lt922l1OcN2ctgNAYnre8T30PbekPfDaSmtPXI8r3I5YF0+QvcJwL38QL3kTiyh5XxuQ5Te1g1VwvK3K5I5BgfiALu4wXuI3Fl79J4a1xOXdlI2OE1tHdp5BBeXz89AuIB9/EC95G4s2f9+LXNZ9buJxNfm2vP+npVEpm0sLm/2dleKooexHLlqYD7eIH7SJyqVbS3demcoWfaeGoViYN9c/P6lcziG9DbnQK4jxe4j8S5GpXyXgblE4vL79Sm3csANSqzCNzHC9xHYt99+6hNDnTAfbzAfST23ed5XrdtsFLlrce4VTIJ3McL3EfihPs8Y4V676Isb2aB+3iB+0hccZ/ned0OZ+e3tdVDiy/TwH28wH0kDrnP87zubu/pHYZq5Tu3vc92Xlu/2sA0wH28wH0kDrmv20a7DwTAfbzAfSSuuA/jfYAA9/EC95E44T7M8wIVuI8XuI/Evvt6WN8HdMB9vMB9JPbdR57rMAGe68gicB8vcB+JU8/zGoTneV6QInAfL3AfiTv7uJiFZx8XkCJwHy9wH4kr+/eZxtD+fcAccB8vcB+JI/s2G8fUvs3AGHAfL3AfiSP1OowTUq/DKCg3PhVwHy9wH4lt96UiPp/Urza4byrgPl7gPhK4zxxw31TAfbzAfSRwnzngvqmA+3iB+0jgPnPAfVMB9/EC95E45z65XsfxxerbZy9OW68jxH2DSuRBgSG/plq9KhYXl39EriyueG19pTR6tbDSUNzXWAgqGUVUtgT9TbiPG7iPxCn37d27XDNUpy3MfYHgmquFuflCsTSqKrm+UpIqsflF2gKXNRbmpBKUtYpotKElR+/3jz8scSm/GWiA+3iB+0jccd/4+rznr7b43Se0y2oVUnZSqixeqygNveZqQVInKVkpHb9WIbV6UbZ8DHAfL3AfiSvua31UX44Sn9/6O/Phx/x93tF31ldKcltM1BN982anL47ora+UlDLk4nif+uMYDRwD3McL3EfiiPva105HtvmGWXy3mbjnq1wNk7hPbOIFBP5SmnXSq0pRcxQvHw/cxwvcR+KI+25c0A7zaTq+azdnpN0HxgD38QL3kbjhvusfnIynvnJ5dcOO+3RdVLExWK8eI+N90twIergTA/fxAveRwH3BdyLdFzLPG3zpT+yGz/PWq8fkyY1aBfO8UcB9vMB9JLbdt5VSn1e3l8GE7ht+R1jBR2ZpxdV/paWm0taTR/0wyRsN3McL3EfiyB5Wxuc6sIdV5oD7eIH7SFzZuzTeGpdTVzYSdnixd2nmgPt4gftI3Nmzfvza5jNr95OJr4096zMI3McL3EfiVK2iva1L5ww904ZaRZkD7uMF7iNxrkalvJdB+cTi8ju1afcyQI3KLAL38QL3kdh33z5qkwMdcB8vcB+Jffd5ntdtG6xUeesxbpVMAvfxAveROOE+z1ih3ruY4sgscB8vcB+JK+7zPK/b4ez8trZ6aPFlGriPF7iPxCH3eZ7X3e09vcNQrXzntvfZzmvrVxuYBriPF7iPxCH3ddto94EAuI8XuI/EFfdhvA8Q4D5e4D4SJ9yHeV6gAvfxAveR2HdfD+v7gA64jxe4j8S++8hzHSbAcx1ZBO7jBe4jcep5XoPged7MAffxAveRuLOPi1mwj0vmgPt4gftIXNm/zzTYvy9zwH28wH0kjuzbbBzs25w54D5e4D4SR+p1GEdXr8MG9apcEgSEAvfxAveR2HZfKuLzsX7xbXYi3afWL2euaamWXnIauI8XuI8E7tOjqTXO0mQb5z6hblxjYW5eqXc+AbUKsSfcl2vgPhK4T48D7tPVO58ExX0ZA+7jBe4jgfv0OOE+pYLwRMB9QATuI3HOfXK9juOL1bfPXpy2Xkeo++pVcXxtYBk67lZaakolyYN3yqXKFdHoCpnL7ltfKQU/ONZ90tnK7cHBYQefuLAs/V7DT5yk1HpztTBXWmr2axVykPSA+3iB+0icct/evcs1Q3XadO7bXioSDQVCidPuW18pBWJqrhZEffgCHdmwubqguM8XHzlCWJ+3Vpmnp0e1WCoUpdMbM95Xrx6LPOGCZPntpeJUg48JgPt4gftI3HHf+Pq856+2TPZ5pUZWgj6v4JrtpWJIf3N4ECqvjuI+UabDVhj9uNEZ1qv0aGPct71UVOY9xOFFovLOtIOPCYD7eIH7SFxxX+uj+nKU+PzW35kPP+Z2n9zDHd3tsd23vVQUepf+j2h6r/JBdKpS17hEibgjy0gnpij36WQ65g0Rv5QZ4D5e4D4SR9zXvnY6ss03zOK7zcQ9X+Vq8Ee7Rne41CWM4z5/LGz0I0FDLKKJNBqzU1uF4XKRmnjSoUT3US9HuU9/hnDfLAP3kTjivhsXtMN8mo7v2k0m9ylCmdB9ij6CA+pbVcJByOCaT7hc4rX7JnEf2n35A+4jccN91z84GU995fLqhiH3yWP/k7tPXIocvop4dBBVf2N6ymPH+yZxn/YM6Xgf3DdTwH0k+XWfPLE7WO0hT4NG3vzybMBgLYg8+SDOoqrzvIP+rzy1GiYX3TyvcHo6962vlORvjp/nlb+E+2YKuI/Etvu2UurzavcykBevkabQaBIjUMDo/QMFCAvuFupKQ1KauwjpnA6OELQEI+QyWAyoXW2nn4cZLd8LWd8nz64ok85w30wB95E4soeV8bkO7GGVOeA+XuA+Elf2Lo23xuXUlY2EHV7sXZo54D5e4D4Sd/asH7+2+cza/WTia2PP+gwC9/EC95E4Vatob+vSOUPPtKFWUeaA+3iB+0icq1Ep72VQPrG4/E5t2r0MUKMyi8B9vMB9JPbdt4/a5EAH3McL3Edi332e53XbBitV3nqMWyWTwH28wH0kTrjPM1ao9y6mODIL3McL3Efiivs8z+t2ODu/ra0eWnyZBu7jBe4jcch9nud1d3tP7zBUK9+57X2289r61QamAe7jBe4jcch93TbafSAA7uMF7iNxxX0Y7wMEuI8XuI/ECfdhnheowH28wH0k9t3Xw/o+oAPu4wXuI7HvPvJchwnwXEcWgft4gftInHqe1yB4njdzwH28wH0k7uzjYhbs45I54D5e4D4SV/bvMw3278sccB8vcB+JI/s2Gwf7NmcOuI8XuI/EkXodxtHW61DYXirqKucCG8B9vMB9JLbdl4r4fGJcH5bcF1HLPMfAfbzAfSRwnwjc5xBwHy9wHwncJ4I+r0PAfbzAfSRwnwjc5xBwHy9wH4lz7pPrdRxfrL599uK09Toi3CcW/C6sNGT3jcqTzx+bk+uOD2qBj4p/D2p+y8XO++JxCivbYi1zybBSn1fzZloRXKwpXlytrZR0hckzD9zHC9xH4pT79u5drhmq06Z1X60iSmpoupGV6lXfaJud/qavOeElUXDrK6Vjc6VCcX74/u2loujK7aXifKFYCn7cl5d0NMl94mn4Bw9GA+tV0YZDd8N9YAxwH4k77htfn/f81Ran+5qrBTrDIAtOZn2lFOhMFtDgB2nDUNaZ+Cp5w5g3NxbmJKsKRu5vUoPPDnAfL3AfiSvua31UX44Sn9/6O/Phx2zuk1w2QDPeJ3RjBcUM+rzhP6jtxoqf1VwtjOw55s3CwcWfEn8RuA+MA+4jccR97WunI9t8wyy+20zc8yWXQq2itMVkhQ26k9KXtt2nWw0D94E4wH0kjrjvxgXtMJ+m47t2M512n9LCMuC+0D4v3LcJ93ED95G44b7rH5yMp75yeXWDa7xP9Yg4BUHd509BJHcf8axi0njuk8b+dCc2Q8B9vMB9JDl2H7UGmWCV5j3odGoC94nOqleVL2O6b3AmmOcFkwL3kdh231ZKfd6QvQzEFXylpaasMGEZXWFle/o+rzhtIs1XTOK+TbomcRt9XhAHuI/EkT2sjM91WN3DSjfex4du4HIWgPt4gftIXNm7NN4al1NXNhJ2eK3uXWrUfTP7HB7cxwvcR+LOnvXj1zafWbufTHxty3vWc7qvVpHmZ2Z1YfMm3McN3EfiVK2iva1L5ww902a1VhGn+8TBPvqU8WwB9/EC95E4V6NS3sugfGJx+Z3atHsZoEZlFoH7eIH7SOy7bx+1yYEOuI8XuI/Evvs8z+u2DVaqvPUYt0omgft4gftInHCfZ6xQ712U5c0scB8vcB+JK+7zPK/b4ez8trZ6aPFlGriPF7iPxCH3eZ7X3e09vcNQrXzntvfZzmvrVxuYBriPF7iPxCH3ddto94EAuI8XuI/EFfdhvA8Q4D5e4D4SJ9yHeV6gAvfxAveR2HdfD+v7gA64jxe4j8S++8hzHSbAcx1ZBO7jBe4jcep5XoNYfZ4XJAHu4wXuI3FnHxezWN3HBSQB7uMF7iNxZf8+01jdvw8kAe7jBe4jcWTfZuNY3bcZJAHu4wXuI3GkXodxQup1RMFSB6NWmc1NlVMA7uMF7iOx7b5UxOcz6bVi2n10F1JSwCgBSk1hzclkZ69TuI8XuI8E7gslFfcJxyeFKxNA3EeLycF9uQbuI4H7QknbfexuUtyXLeA+XuA+ErgvlPTdx2wruA8IwH0kzrlPrtdxfLH69tmL09brCHFfY2FufqFOS32P3iC6KcRTUsk0v9MqVDrvb1L3DUqh+93Sse4Ta5nT9qBQNz04jaDP21jQjSSq7crwjxjWVxJ+qWmHIycE7uMF7iNxyn179y7XDNVpC3NfoVgKfCePuE3kPl+gIzusr1QV9/niCw4S2edtLEgykn9WHtcbfdaE432RHzHU9Ejc6ysl6nrDwH28wH0k7rhvfH3e81db7O4jHdIw341xX/gE69B9VHzqMUW5rK+UlIG/xsLIy2Gd2UncN+Yj/BOW3iC+mgZwHy9wH4kr7mt9VF+OEp/f+jvz4cf8fV7pm4LR4rsvYmTQd5+2griyxkVqc6mWCczld3jVWZEJ3DfuIzRv2F4qprpWEe7jBe4jccR97WunI9t8wyy+20zc81WuBjb3RczPjgbU1FZhuDH1LSxNj1Uc7OtM5L6xHwH3zRpwH4kj7rtxQTvMp+n4rt007j6d79RuJrFkhPsqDTIauKkeX2Jso0z+5ujIaPeBcOA+Ejfcd/2Dk/HUVy6vbjZxyDQAACAASURBVJgc76MjYpL7pJH+WkVoc6lzvuLbKo1NZTKEHl/9qajBOBFBUpOM9437CLhv1oD7SHLvPmnCtKR8OXKHPCs6WPkR+E5SoX6eV26jjVk/qJuEFT49EJzoO+I+ZQZm/Dyv/CXcN0vAfSS23beVUp9Xt5eB3+cdLuYgY2eqm8QldZWG2taT5i7E5pXgi8HwX9ASjFh7LJ6YLB1pIeE42UWt7wv/CLhv5oD7SBzZw8r4XIduDyvdeB9wBriPF7iPxJW9S+OtcTl1ZSNhh1e3dync5zRwHy9wH4k7e9aPX9t8Zu1+MvG19XvWw31OA/fxAveROFWraG/r0jlDz7TpahXBfU4D9/EC95E4V6NS3sugfGJx+Z3atHsZoEZlFoH7eIH7SOy7bx+1yYEOuI8XuI/Evvs8z+u2DVaqvPUYt0omgft4gftInHCfZ6xQ712U5c0scB8vcB+JK+7zPK/b4ez8trZ6aPFlGriPF7iPxCH3eZ7X3e09vcNQrXzntvfZzmvrVxuYBriPF7iPxCH3ddto94EAuI8XuI/EFfdhvA8Q4D5e4D4SJ9yHeV6gAvfxAveR2HdfD+v7gA64jxe4j8S++8hzHSbAcx1ZBO7jBe4jcep5XoPonucFTgP38QL3kbizj4tZdPu4AKeB+3iB+0hc2b/PNLr9+4DTwH28wH0kjuzbbBzdvs3AaeA+XuA+EkfqdRhHV68DOA3cxwvcR2LbfamIz2fKS2dcaSHADNzHC9xHAvfFBe5LGbiPF7iPBO4DjgL38QL3kcB9wFHgPl7gPhLn3CfX6zi+WH377MVp63WEuG9Qq2hUwHtQt1uo/C1WMgr6vH6RcqFK9/pKidQpB9MD9/EC95E45b69e5drhuq0hbkvEFxztTA3XyiWBgZUjCaN99WrwUvN1QLqvRkA7uMF7iNxx33j6/Oev9rid5/QfKtV5uXmW2Nhbr6wsu1/SeY6apVBO7FWkQ4CuID7eIH7SFxxX+uj+nKU+PzW35kPP+bv846+o8zkRrlv8OOVKiZ/DQH38QL3kTjivva105FtvmEW320m7vkqV8OU7huMDKK3awi4jxe4j8QR9924oB3m03R812664r7Ggj8+iHafGeA+XuA+Ejfcd/2Dk/HUVy6vbrjhvuF43/ZSEeN9RoD7eIH7SOC+4DsTuA/zvOaB+3iB+0hsu28rpT6vbi+DpO6rV48J39/UTBADBuA+XuA+Ekf2sDI+14E9rDIH3McL3Efiyt6l8da4nLqykbDDi71LMwfcxwvcR+LOnvXj1zafWbufTHxt7FmfQeA+XuA+EqdqFe1tXTpn6Jk21CrKHHAfL3AfiXM1KuW9DMonFpffqU27lwFqVGYRuI8XuI/Evvv2UZsc6ID7eIH7SOy7z/O8bttgpcpbj3GrZBK4jxe4j8QJ93nGCvXexRRHZoH7eIH7SFxxn+d53Q5n57e11UOLL9PAfbzAfSQOuc/zvO5u7+kdhmrlO7e9z3ZeW7/awDTAfbzAfSQOua/bRrsPBMB9vMB9JK64D+N9gAD38QL3kTjhPszzAhW4jxe4j8S++3pY3wd0wH28wH0k9t1HnuswAZ7ryCJwHy9wH4lTz/MaBM/zZg64jxe4j8SdfVzMgn1cMgfcxwvcR+LK/n2mwf59mQPu4wXuI3Fk32bjYN/mzAH38QL3kThSr8M4cep1MFNH2fKpgPt4gftIbLsvFfH5KFfD5O6bqCQb3DcdcB8vcB8J3DfJBcTqvloFhX2jgPt4gftI4D5jVxvcNx1wHy9wHwncZ+xqg/umA+7jBe4jcc59cr2O44vVt89enLZeR7T71ldKx+bmfcSK4+srpWPF1fXmamFuWHpc7fPWq6OfPVZp1Crzx4qr68FL1Vpne6k4fIP00ryAr0j1fJR65/LHCS8JnyL+FoOTDzma28B9vMB9JE65b+/e5ZqhOm1h7isUS4Ep6lVRHOsrpWPFUmEkrA513/pKSRRKraIV3OgNjQVZWEq7r7Egm6tWmRdbjvLHiUfbXioKh2quLvhHoGdbhftyyCft/hdfHX19N3kf6+lvus9b+96+XVXwxx33ja/Pe/5qi919pNe5vlIa6YaobbNDbKJ2mbeXitR94hvEg2+GuU/8jvJxYrN0s14dnl5I5z3jE81w3/R8/ts3v/2CZ2Tp6d1e75ldWzDHFfe1PqovR4nPb/2d+fBj/j6v9M1AKFRVmx1ZRsI7R+j6vPqDb4a4Tz4fwXfq0YKT8Tu8SpfW7/CK7dZMAfdNyZ2vj57wrp/d6j5vzU7zzxH3ta+djmzzDbP4bjNxz1e5OGK4j4hDcJ/GjCbdJw5KiozeP+hxk7bhsB+ducG+TbhvOr74+ojTegIzoz9H3HfjgnaYT9PxXbtp3H1Cn9cZ98XtwPqDjMr0sW9Gg5PaBoD7EvP5b98wt/jk1t9sdH7dcN/1D07GU1+5vLrB6j6iCVFe0e7TrXNuLNC5Dj73xV5WrTntTt/vF8tNQteB+5LxSbv/2y/Mbo/09G5vBqY+cu8+Om8rfxnhvkFjKnqeN8p9Sssx0n3Kx212GgsDdY7+oy/N+darwdEmeiLFDeC+ZHzxlanersgM9Hxtu2/QMjfe5w3fy0BcGScNio1136YwyuZLc6I+rzAYJ63vI2dIlxxq1uuNjiOv+5NXEWZLfJtwX1KmWc4yQdPvN1276pg+juxhZXyuI509rPCoBiNwXzJSEJ/Pfsbt58repfHWuJy6spHw75TK3qXKEjwwBXBfMlJzX7djVx7Txp0968evbT6zdj/x38nAnvXbS0WxSysvbAZTA/clIzX3Pf8m20N+TtUq2tu6dM7QM20mahWJg33alSVgGuC+ZKTmvm8fw33ThdSolPcyKJ9YXH6nNu1eBqhRmUXgvmSk5r69Rz3b8pgq9t23j9rkQAfclwy4L2bsu8/zvG7b4FLMW49xq2QSuC8ZcF/MOOE+z1ih3rsoy5tZ4L5kKHfBszv/eLX2p3+46I+k/4fqn5z8b//jHx/uwH22TyBIt8PZ+W1t9dDiyzRwXzKkG2Hz879bPqFdNnFi+XJzE+5zJt3d3tM7DNXKd257n+28tn4VgmmA+5IhiO//nv/PUavGjv/J1a1fw30OpNtGuw8EwH3JGN4Crf/980jzlcvlcrn6FzcTLx2D+3iC8T5AgPuSMbj4G5f/eKz5yuVy+c//Mel+wHAfQzDPC1TgvmQM/q//16diqa9cPnu5DffZSQ/r+4AOuC8Z/mV//VyszUHK5fLyXyV8VBTumzbkuQ4T4LmOLAL3JQPuixmnnuc1iInneYFR4L5k+Bd8Cn1ePM87VQxNcagY2McFmAXuS8bgmjc/14F9XKbKaP8+06Syfx/gBO5LxvCaj7fG5dyNR0nvKezfN1WG+zYbJ519mwEjcF8ygst+7NrmP/rbf24mv6ewb/NUMTrDK6Kr1wGcBu5LhlSvY7P53//YyDNtqNcxbdIRn4/Za461EJq2+G/S42gqmmeiVDnclwylTpu8l0Fl8b/+6YXp9zJAnbZpM7Pui1lKfACt0MblPgGhdmVGgPuS8Um7/9svzN5ZqM/LkNlxH2E69xkA7ssRn//2zRNzo0lb3d4zu9rgCdxnBrhvauC+afjia1MVymegt+vHOffJ9TqOL1bfPntx2nodEe4TR8RG5SVrlXlNEfFAHGI58+H3gz6vXCk8kJq+gri24JGmzysVGtfWUBeOr3Gc7D7d6GTwoc3VwlxpqUkrr0sHbK4WRh9npjod3DclX3x9xNz625od8XmOuW/v3uWaoTptWvfVKvOBYpqrhUB/kilqFfH2bizMyV9S9/U3O5p23/pKKXhV+qz+2PE+4mLf16P3D/Wt/UVGkHaf2gwUigs3VwtzpUKRfoT8242+NFWcE+6bns9/+4Zr7O/p3d5sdHVHccd94+vznr/a4nSf0vaRjDN6ddgI8t8jezD8aOP6vLWKqJ5I98knoJ7G+kqJtAR1J6nIrl6Vfkr8UmdP4ZjKoVjnuEfAfSx80u5/8dWRtPBlUuv9pvu8tT8Dkxskrriv9VF9eewi9MqZD5M+f6O6b9hVFL4p62B9pXSsWF0o0gaa0qTqb3Ziuk/uLMttyTD3ac5TPlX1Dbpp4siGHnGxzrZqjzjsUFzAfbw8+vaNt3ew337V/eZldyeKvUe9bx/vP/9mv9vxsr6AOSKOuK997XSsbScW320m7vmSS4EOtGmG0pTeXEQDZ5z7/I+TXBPPffqWJoP7xCPLJxDtPmnkMQDuc5yve99H/JOK2HVCanHEfTcuaIf5NB3ftZvm2n2aN5SiB+YCot1HOpiTuM9Yu09wHDnbMPf5n6J71QRwHy9wH4kb7rv+wcl46iuXVze4xvsUH0mMXCa9LXylyGTuUyZMIsb7dOdJx/uSua+zvVScL6w0lopyq00z3if+uJEergrcxwvcR5Jj9w1G36T2zsLYeV5/bYc4TaGd59V9Ka+hEd1HxRRjnpeMSyZz36htK7t1sH5FnuEJn2je7GwvVTDP6zpwH4lt922l1OcN28tAHvXzfaFxIvWdunxPGQocHXnwTWGYbKGujOKNXg1Z3yc/mau8lNR9Sgt09LuUlprir6nM28ijfiYWZsN9vMB9JI7sYWV8rgN7WIWgG8FMa0QvGriPF7iPxJW9S+OtcTl1ZSNhhxd7l2rRb5oA980icB+JO3vWj1/bfGYtYVGVNvas1xMyawH3zSJwH4lTtYr2ti6dM/RMG2oVyQzG8sLXacN9swbcR+JcjUp5L4PyicXld2rT7mWAGpVZBO7jBe4jse++fdQmBzrgPl7gPhL77vM8r9s2WKny1mPcKpkE7uMF7iNxwn2esUK9dzHFkVngPl7gPhJX3Od5XrfD2fltbfXQ4ss0cB8vcB+JQ+7zPK+723t6h6Fa+c5t77Od19avNjANcB8vcB+JQ+7rttHuAwFwHy9wH4kr7sN4HyDAfbzAfSROuA/zvEAF7uMF7iOx774e1vcBHXAfL3AfiX33kec6TIDnOrII3McL3Efi1PO8BsHzvJkD7uMF7iNxZx8Xs2Afl8wB9/EC95G4sn+fabB/X+aA+3iB+0gc2bfZONi3OXPAfbzAfSSO1Oswjq5eR3jByU5/M2xPYxaiS8SBTn8T7uMG7iOx7b5UxOejXA2OuM8vjRRWH31SUiogmQJwHy9wHwncF3qtpOo+WqAybuUzpUgb3Af0wH0kcF/otWLLfVEV0LUnWeSvjesCcB8vcB8J3Bd6rdhzX79WgfvgPmbgPhLn3CfX6zi+WH377MVp63VEu08s+y32FlX3iYXMaRnySmNQwlxfA0iu8x2j3aeciTIaKHyc8H21zytVUs9Qdxju4wXuI3HKfXv3LtcM1WkLc1+hWAp0UK+KdpDdt71UnA9aWPWqqL+BE0Ne9SVFPiXCfbXKvOzcxoLQsiOvjhnvk3+jgS7jtSitA/fxAveRuOO+8fV5z19tsbuPiED0neQ+ZVVKrRLITrGVpDO1A7u+UoqY5x0zyyEXkIx0H20/an8RZ4H7eIH7SFxxX+uj+nKU+PzW35kPPzY83ieoQXRfiL9CXxXMOOZTZFH6HtQNMg5ai9SPUe7Tl9nNzEQw3McL3EfiiPva105HtvmGWXy3mbjnq1wN8d2nLsEbjtx1+pvR7muuFiZwX1/TGh2M6w2FKB8wyn36Jh7cl1PgPhJH3HfjgnaYT9PxXbtp3H2aPm/0xCtfu2/0ueEzIfHdh3YfEID7SNxw3/UPTsZTX7m8umFyvE8cxQsd+1OIdF/IEpax6/tCfpysfI4c79NpDuN9eQXuI8m9+4hH6Jcj3zUWxJncTn+zXpXmecMdSidbx83zjt7jH1+aSBmuawkaktRl4+d5M9Ho24T7uIH7SGy7byulPm/4XgbiWJ7UIFLaevKoH1l3EuG+jjxTUWmMXdssT3oIn1tcXacDiKNXQ9b3ycsAYz4q5wJwHy9wH4kje1gZn+vAHlaZA+7jBe4jcWXv0nhrXE5d2UjY4cXepZkD7uMF7iNxZ8/68Wubz6zdTya+NvaszyBwHy9wH4lTtYr2ti6dM/RMG2oVZQ64jxe4j8S5GpXyXgblE4vL79Sm3csANSqzCNzHC9xHYt99+6hNDnTAfbzAfST23ed5XrdtsFLlrce4VTIJ3McL3EfihPs8Y4V672KKI7PAfbzAfSSuuM/zvG6Hs/Pb2uqhxZdp4D5e4D4Sh9zneV53t/f0DkO18p3b3mc7r61fbWAa4D5e4D4Sh9zXbaPdBwLgPl7gPhJX3IfxPkCA+3iB+0iccB/meYEK3McL3Edi3309rO8DOuA+XuA+EvvuI891mADPdWQRuI8XuI/Eqed5DYLneTMH3McL3Efizj4uZsE+LpkD7uMF7iNxZf8+02D/vswB9/EC95E4sm+zcbBvc+aA+3iB+0gcqddhHF29jjFE12aLSXRxyzTITmE2AtzHC9xHYtt9qYjPZ9JrxbT7wo7P8rkBcB/o9DfhPiVwXyhwn13gPl7gPhK4LxS4zy5wHy9wHwncFwrcZxe4jxe4j8Q598n1Oo4vVt8+e3Haeh0h7vNrk/uuGZTuFqt6iw7S+Eh1iliAfPiS7L5BHXG/QHhc90mHpVXJCyvbg/MPSqE3FoL3V2vSeaq/sqJFUkZdeKlWmde8JNU+55Qs3McL3EfilPv27l2uGarTFua+QrEU+K5eFfU3kft8m4zEtL5SVdzniy84SDz3bS8VyY+MPnR7qSiff2dgIvIbEfeJv2Otop6S/Oah42oVWa/+95urBd1vzQLcxwvcR+KO+8bX5z1/tcXuPtK0CfPdGPfJChAZuo+Kb3jM+RDC+ryDhttmpz84ZuAj8ePIp+h1ppx5Y0Fu+Qq/46CNSc+nXuXsnsvAfbzAfSSuuK/1UX05Snx+6+/Mhx/z93mlbwpGi+++iBE6X0akebUZdsyw70v9ypGDtpeKxHRjfiPdGwTfqSITzOh3eOnB/ROT/csF3McL3EfiiPva105HtvmGWXy3mbjnq1wNbO6T+4MSozEytVUYz31+L1WSl+g+tcOb2H1h7VChS1vSjQOOhheZZ1TgPl7gPhJH3HfjgnaYT9PxXbtp3H0636ltImLJCPdVGmQ0cFM9fsj3FatGuo+93aclpK2nbxhOAdzHC9xH4ob7rn9wMp76yuXVDZPjfaJrFPdJ7ZpaRWjphK8jGQ3AqfpL4j5pNkZ1n9oLls8z2n3ho5YUvSVDxgSTAvfxAveR5N59Sp9O/lLue440ROdPiWK087y0ZRTHfZqZiij30alq7TxvqPuU3yKYz+1sL1UCBQdGrleDo8VXZzzgPl7gPhLb7ttKqc+r28vAF8FgzZ06YkXdJE44VBpqW08aLxtakky8Dob/gpbg+LkOYVVdtTamz9vf7CgL9OL3edXfQl5Po/524WsPGYD7eIH7SBzZw8r4XIduDyvd6BhwBriPF7iPxJW9S+OtcTl1ZSNhh1e3dync5zRwHy9wH4k7e9aPX9t8Zu1+MvG19XvWw31OA/fxAveROFWraG/r0jlDz7TpahXBfU4D9/EC95E4V6NS3sugfGJx+Z3atHsZoEZlFoH7eIH7SOy7bx+1yYEOuI8XuI/Evvs8z+u2DVaqvPUYt0omgft4gftInHCfZ6xQ712U5c0scB8vcB+JK+7zPK/b4ez8trZ6aPFlGriPF7iPxCH3eZ7X3e09vcNQrXzntvfZzmvrVxuYBriPF7iPxCH3ddto94EAuI8XuI/EFfdhvA8Q4D5e4D4SJ9yHeV6gAvfxAveR2HdfD+v7gA64jxe4j8S++8hzHSbAcx1ZBO7jBe4jcep5XoPonucFTgP38QL3kbizj4tZdPu4AKeB+3iB+0hc2b/PNLr9+4DTwH28wH0kjuzbbBzdvs3AaeA+XuA+EkfqdRgnvF4H4+WlKZMGEgP38QL3kdh2Xyri81GuBmvuU6uAM5Z2nBngPl7gPhK4j/Hymsh9SgU4NBhl4D5e4D4SuI/x8krqvvB6lXkG7uMF7iOB+xgvr+Tu26xX4T4C3McL3EfinPvkeh3HF6tvn704bb2OaPeJo2/KuJtck1vxmvyzjZH7dO247YhX11dKQcHv4bkJJcmF40jlwKWXhCrm8/LRhlXMhZ9VK5Rrf83hiQlvUP4Rwj438h92PHAfL3AfiVPu27t3uWaoTluY+wrFUnBb1qvSXUqH4RoL8r1dq4j2GVrSf39ztUD8Uq8emystNfubqvvqVUlGzdWCcBrSpwgH2ez0a5XRQci5+ScTcm6DEwiOs75SCvv0ob+Gh5Jf1XxQZXAO0mnTn4oF3McL3EfijvvG1+c9f7XF7j7SihGtVKsobRzRaM3VgqAP9YC1iiLK4Zd0nlf+FPKDA0evbG9qmofCadPvBz81MFTIMVXEX5xYUveL6LrqivoTDGjCfbzAfSSuuK/1UX05Snx+6+/Mhx8bHu8LGlba0UC530p1I4/3SW006WiiCHwPCh+kfq5wWL/TSnudwy6t/AsKklLfoA5Nyr170W7yrymcfOj4puYfR26xxgHu4wXuI3HEfe1rpyPbfMMsvttM3PNVroZI96md1k5fvNuV1llfcYHQtpKnMkgjSO0eHlMZHTZ4g9ThncZ9/oCd1MuO5b7QxqM0AhgA99kE7iNxxH03LmiH+TQd37Wbxt0X3NhTtfuE95Dus3Z931AiMWef/Waab5Pp2n1Kiyy2+/SfG/KPMzFwHy9wH4kb7rv+wcl46iuXVzdMjvcRX0SN96mdOHWJsj8mWKcjgyHr+wKRxVvnHFhS1wil432x3SdNm0S6T/u5If84kwP38QL3keTefXQYjs630nne4Msxc6mjbxaKUfrQHJxMNwvzuesr1UAoyngineeVvwx1n2ZaOa77NJ9bEf7PIbdtFzDPaxW4j8S2+7ZS6vOG72UgjvGrTRVp4Vvk6r/SUlPXZFNEthky6SmZVx71U1acaM82YiniuLkOed1f7D6v5nNlZYuDfROv3Ib7eIH7SBzZw8r4XIe1PazwwEZS4D5e4D4SV/YujbfG5dSVjYQdXkt7l2JXq+TAfbzAfSTu7Fk/fm3zmbX7ycTXtrVnPceQf26B+3iB+0icqlW0t3XpnKFn2tKuVTQYQYP4kgP38QL3kThXo1Ley6B8YnH5ndq0exmgRmUWgft4gftI7LtvH7XJgQ64jxe4j8S++zzP67YNVqq89Ri3SiaB+3iB+0iccJ9nrFDvXZTlzSxwHy9wH4kr7vM8r9vh7Py2tnpo8WUauI8XuI/EIfd5ntfd7T29w1CtfOe299nOa+tXG5gGuI8XuI/EIfd122j3gQC4jxe4j8QV92G8DxDgPl7gPhIn3Id5XqAC9/EC95HYd18P6/uADriPF7iPxL77yHMdJsBzHVkE7uMF7iNx6nleg6T9PC+YGriPF7iPxJ19XMxiZx8XMAVwHy9wH4kr+/eZxtL+fSA5cB8vcB+JI/s2G8favs0gKXAfL3AfiSP1OowTXq+D8fLCLs2cwH28wH0ktt2Xivh8lKvBmvvkkkNSXTQwAu7jBe4jgfsYL6+J3IcCRmOA+3iB+0jgPsbLC+7jBO7jBe4jgfsYLy+4jxO4jxe4j8Q598n1Oo4vVt8+e3Haeh3R7hNH3yKrj2u8Jv9sY+Q+nd22I18N3lNY2R4cdjQIKJYqV0YGxRLgC/XGgua3yCRwHy9wH4lT7tu7d7lmqE5bmPsKxVJginpV0p9vnMB3jQVZPbXKvKCwoSX99zdXC6RRKdSrHOM+8ZSGZzU81PZSUTwH8mVjQW/wTAL38QL3kbjjvvH1ec9fbbG7jzTlRCvVKkpDTzRac7VAS1BKB6xVFFEOv1TneYe2Ii7ra/rR4jnUq9ShzdUC3Ad0wH0krriv9VF9OUp8fuvvzIcfGx7vC1pn2tFAud9Ku5+yp6TC5NLRott9iuk0hvXtprFzB31eoAfuI3HEfe1rpyPbfMMsvttM3PNVroZI96md1k5fdBNp1pFXR8cfaEhuoI0d75PPZ16lsLIdMrUC9wE9cB+JI+67cUE7zKfp+K7dNO4+30pTt/uE95AG2gTu07T7AtDuA/GB+0jccN/1D07GU1+5vLphcrxPaM3pWlV0rE22Ep0bGZqrTv01gfsiXaY5DpmuyTJwHy9wH0nu3UeH4YS2nnaeN/jSn9gNmecVvlko0hbiJO5TzqqzvVSRJ3YxzwtiAPeR2HbfVkp93vC9DMQVfGrvcmCTGKv/SktNXVNR1xCbyH2jgwiL+MLOsFpDnxeEAPeROLKHlfG5Dmt7WKnLUMwC9wE9cB+JK3uXxlvjcurKRsIOr6W9S9Pf1QruA3rgPhJ39qwfv7b5zNr9ZOJr29qzXp0PMQ7cB/TAfSRO1Sra27p0ztAzbWnXKhqM0KUsvj7cB8KA+0icq1Ep72VQPrG4/E5t2r0MUKMyi8B9vMB9JPbdt4/a5EAH3McL3Edi332e53XbBitV3nqMWyWTwH28wH0kTrjPM1ao9y7K8mYWuI8XuI/EFfd5ntftcHZ+W1s9tPgyDdzHC9xH4pD7PM/r7vae3mGoVr5z2/ts57X1qw1MA9zHC9xH4pD7um20+0AA3McL3Efiivsw3gcIcB8vcB+JE+7DPC9Qgft4gftI7Luvh/V9QAfcxwvcR2LffeS5DhPguY4sAvfxAveROPU8r0HSfp4XTA3cxwvcR+LOPi5msbOPC5gCuI8XuI/Elf37TGNp/z6QHLiPF7iPxJF9m41jbd9mkBS4jxe4j8SReh3G0dXrYCGkwgaYGriPF7iPxLb7UhGfz6TXSnhFIZEo99Uqallx5YAp7e2c/u750wL38QL3kcB9ofC4T1OdUnaQGfcppdPhvrwD95HAfVMymfs2O4Oyv6a7yYr7sgfcxwvcRwL3Tcnk7gv/PiNwHyDAfSTOuU+u13F8sfr22YvT3jAU/wAADzhJREFU1usIcZ9fm3zYD1Wqj6t9XvGdw5eI+/xK4YM+bKjjxH6u1OcdnNJgoHDURW2uFkafqxxQGlUsrq6Lbw5ORu3zioXVyUvqv0z6RZfgPmbgPhKn3Ld373LNUJ22MPcViqXAXPWqqD/ivlpFUkCtorqvsSC7KdR9zdXC3PxCffShkvsKxdLgJeGsht/ZXiqKx/T9NTrJ7aXK4KUx432+HwPfkTP3DR78U9Qqulkaw8B9vMB9JO64b3x93vNXW+zuI8P/ou8k94XOSIzcR8W3mdR9mtaZ+B3hZyNmY6LdV6so8x7iKamnIb2aEnAfL3AfiSvua31UX44Sn9/6O/Phx/x9XumbgolEs4SP0Pnua8jNsQEJ233i6GFztUCdO3pP1NRtpPt0v/iYN1go+wv38QL3kTjivva105FtvmEW320m7vkqV0N890VYZjRqpmkVRo73aVuUyikNapxTRi3NMB9FuU/fiIP7Zhy4j8QR9924oB3m03R8124ad5+mz6vpJA4Y9HnJaODm6KfC5nlHR4t2n6bdRz9ae6Gj3QcIcB+JG+67/sHJeOorl1c3TI73ibYKHfuTCASk6k/rvvWVkvS2aPdFSidirUyk+3TNWGW8D+6bMeA+kty7T7jJ/SUd8pfCFKo0o6qd5/XfI84Fz2sERNpxY9xHz0qczFUmWISX6ORMjHle+Uu4b8aA+0hsu28rpT6vbi8D/w4Xl7lJVlLbetJKOqENJUhhcDShJaiO08mnMc59w/cEB5HfIC3TU88kfH3fQP26E4P7ZhC4j8SRPayMz3Xo9rAKEQ1wA7iPF7iPxJW9S+OtcTl1ZSNhh1e3dync5zRwHy9wH4k7e9aPX9t8Zu1+MvG19XvWw31OA/fxAveROFWraG/r0jlDz7TpahXBfU4D9/EC95E4V6NS3sugfGJx+Z3atHsZoEZlFoH7eIH7SOy7bx+1yYEOuI8XuI/Evvs8z+u2DVaqvPUYt0omgft4gftInHCfZ6xQ712U5c0scB8vcB+JK+7zPK/b4ez8trZ6aPFlGriPF7iPxCH3eZ7X3e09vcNQrXzntvfZzmvrVxuYBriPF7iPxCH3ddto94EAuI8XuI/EFfdhvA8Q4D5e4D4SJ9yHeV6gAvfxAveR2HdfD+v7gA64jxe4j8S++8hzHSbAcx1ZBO7jBe4jcep5XoPonucFTgP38QL3kbizj4tZdPu4AKeB+3iB+0hc2b/PNLr9+4DTwH28wH0kjuzbbBzdvs3AaeA+XuA+EkfqdRhHV68DOA3cxwvcR2LbfamIz4fzStKX906GVGxoQEjlyTTg/NWmAu7jBe4jgftUYuznzO4+tUxw6nXRDPxqUwH38QL3kcB9KinvZa+rFN4Z1KV0wUG2gPt4gftI4D4VN9wX+v28APfxAveROOc+uV7H8cXq22cvTluvI9R9Us3vak2tJu6rp149NletDYt5L9Rpx7BWmT9WafjfDKlBLhYCr9akeuShjiPF0eVzE4qmN1cLc6WlpjBuWGkMf1xTc109W2l4UfrVhpXXhX8o+n8F+Tg1paB7YuA+XuA+Eqfct3fvcs1QnTaN+yQB9WuV0R2rtPvq1WNzpUKR6EZ2n2gQ0l1trhZEGw48Mt590hk2VwvBe7aXisLHDewzfGe9emxuvlAsjY5Zq8xThxZLhcB3jYU5ejTRfcH/AwY+FUwq/6ZD28J9LgL3kbjjvvH1ec9fbTG6b32lFDKdqnWf/B2N+8QbXtLZoJ1FPnpS92leGn4icetAWNGmlvUkvkF1n/Sv1FgIPmvYKhQOpTl4UuA+XuA+Elfc1/qovhwlPr/1d+bDj3nbfVrp6Nt9koO0fV7hILXKSBmiLLQHnMB9Qjd2XmoSqr3a0G6s5mylk9T2eYN3CmermxFeR5/XVeA+Ekfc1752OrLNN8ziu83EPV/NBRGMVYm3q9Z94Q2laPdpl4zEH++T+9Hyl7bdp2uWwn3OAveROOK+Gxe0w3yaju/aTUb3DfA7iaPb2BH3id5RGo8G3BfW54X7ZgO4j8QN913/4GQ89ZXLqxv87uvLvmN1X+jS5THukwfOqPukIyRwH/l1qEnjuU/TnVeGGqcA7uMF7iPJr/vWV6ryfGW4jKZy33DidYJ5Xn9BjDJ5Qvq/U7lP+ES/4y9/Gc99g/FHzPNmAriPxLb7tlLq86p7GejnDXxGy9mk9X3CGyZyn3hA/5iqauXneXUrq4UVguQIifq84q8v2W0S95F/xsLKNvq8zgL3kTiyh5XxuQ639rBSZZoiuvE+NsJXDk0M3McL3Efiyt6l8da4nLqykbDD69TepbRdlv6nm3If53N4cB8vcB+JO3vWj1/bfGbtfjLxta3uWb++UhL7sPTRiNRhdF+tovS1+dqzcB8vcB+JU7WK9rYunTP0TJvNWkXSU8OcdkgGo/vkMVPmxizcxwvcR+JcjUp5L4PyicXld2rT7mWAGpVZBO7jBe4jse++fdQmBzrgPl7gPhL77vM8r9s2WKny1mPcKpkE7uMF7iNxwn2esUK9d1GWN7PAfbzAfSSuuM/zvG6Hs/Pb2uqhxZdp4D5e4D4Sh9zneV53t/f0DkO18p3b3mc7r61fbWAa4D5e4D4Sh9zXbaPdBwLgPl7gPhJX3IfxPkCA+3iB+0iccB/meYEK3McL3Edi3309rO8DOuA+XuA+EvvuI891mADPdWQRuI8XuI/Eqed5DWLzeV6QCLiPF7iPxJ19XMxicR8XkAy4jxe4j8SV/ftM49T+fSAOcB8vcB+JI/s2G8etfZtBDOA+XuA+EkfqdRhHrddhDLXGhUl0hSKnOXNz29lPCtzHC9xHYtt9qYjPZ9JrJWnZnXHuI1XG9Z8b255j3DeRztQabDa3WYX7eIH7SOC+UMjNH3u743ju0xdj64/qsSV0H62CBPeBAXAfCdwXF1b3lQphShq+yuS+iUCfd5aB+0jgvrjwum9pRdtX9X92dYGt3TcRcN8sA/eROOc+uV7H8cXq22cvTluvI8R9jYW5+YU6ra49ekPQ6YsoNiS95Dto6D7hJal7O7BVQyM4zUsaH0klLgP3CcXLgw9VurHF1XXpnaEdZLXPW6toq6cPft/BPyNfuSK4jxe4j8Qp9+3du1wzVKctzH2FYikQUL0q6m/seJ9/t48ssL5SHbnv2ByRCGmalZaaIXKpNAYnNrH7Rl9G6qxYKgRv8E9V/lLvvu2lIvnQ0S++vVSU/xmZgPt4gftI3HHf+Pq856+22N2n09nghh/jvuZqQT9fIWti+EGyYYOWWvD94IAm3Uc72qGfJf36ymyycA7q78sD3McL3EfiivtaH9WXo8Tnt/7OfPgxf59X+qZwk0e7L3waVB3vk/0lfIRosWGHtG+43UckJb4h1H0hbV7/VVOjhHAfL3AfiSPua187HdnmG2bx3Wbinq9yNUzlPklAEhO4j7T1hifjmvuGvXhK8KqJtdxwHy9wH4kj7rtxQTvMp+n4rt007r5YfV6dR3wmcd/wJfmzpL6w2uZid9/YPm/kHDfclw3gPhI33Hf9g5Px1Fcur26YHO+jndCI8b7QByomcp92QZ/iPmX0kG28Txq1DHVf5DpnuC8bwH0kuXefNFFbUr4MbviQNR+BSsR53gncN+hRit9R50ZkFUa4j87AqDoTTSprNGqel7yzv1mvSvO8cJ/zwH0ktt23lVKfV7eXgd/nFQezpDaRIrvRsjgixOGPC/Oek7ivv75SkpufdOmf+CkL9cg+r7AKL3R9n7gmUfrc6PV98qifbEy4z33gPhJH9rAyPteh28NKN94304SPUboI3McL3Efiyt6l8da4nLqykbDDq9u7FO5zGriPF7iPxJ0968evbT6zdj+Z+Nr6PevhPqeB+3iB+0icqlW0t3XpnKFn2nS1iuA+p4H7eIH7SJyrUSnvZVA+sbj8Tm3avQxQozKLwH28wH0k9t23j9rkQAfcxwvcR2LffZ7nddsGK1XeeoxbJZPAfbx83XsD94lxwn2esUK9d1GWN5t8+vSHiJvz5lP7Z5g5vtmH+6S44j7P87odzs5va6uHFl92ubUb5b5buz9YP8PM8fTla7hPjEPu8zxv//k+mfpIxsN/eYUxvkyz/TxqcOrhc/xxJ+bFQSzxwX020/t2/9ud/d37vad3ujFbgp1bvWd3e3sPvM43B7rlLCBjPItspDx7+dr6GWaL23tR7Wi4z+nE/LMdHH3362foEGWbXz/74QB/ZVZaXtzBPrjPucT/yz3x3li/1MA0PHkx/kbFXzk+n++O+X8J3Od04v/lDo++u/stGgVZ5e63cXtn+CvH4ZNOfy/2LAfc52Im+uO9PPzuc0wFZpDPd394eYi/MicT9XbhPhcz6d/vxeF3t/ZwY2SJ23s/vIgtPvyVx/JJIvHBfc4lwZ/w1eF3293vP7F9CYKxfNLpb3e/fzWh+PBXjuDz3R8m7erCfY4m2V/x8Oi73sHrB93vbz6zfzkClZvP+g+63/cOEt6l+Cur3N77oeW9mWhyA+5zOlPeGwdH3+29fP3Ee/N4/83Xve+BXR7vv3nivdl7+XqaWxR/ZYE33+y/efry9aSDBnBfBsJ4hwAAIrB9r6cUuA8AEHBweGT7Xk8pcB8AIADucy7WrwkA8sDB4aHtez2lZMd9h0fWLwsAZp6XL1/ZvtdTSmbc9+rVgfXLAoCZx/aNnl4y474XL15YvywAmG1evTqwfaOnl8y4z/O8Vwdo+gFgivzMcvjJkvs8zzs4OLR+iQAwk7x8+dL2/Z1qMuY+z3txgEkPALjJzxTHKJlzn/fixQt0fgHg4uDwKG8tPj/Zc5+fly9fogEIwJTkanKDJKvu8/PixctXBweQIAAxOTg8Ojg8Ojg8zGEnlyTb7kMQBEkWuA9BkDwG7kMQJI+B+xAEyWPgPgRB8hi4D0GQPAbuQxAkj4H7EATJY+A+BEHyGLgPQZA8Bu5DECSPgfsQBMlj4D4EQfIYuA9BkDwG7kMQJI+B+xAEyWPgPgRB8hi4D0GQPAbuQxAkj4H7EATJY+A+BEHyGLgPQZA8Bu5DECSPgfsQBMlj4D4EQfIYuA9BkDwG7kMQJI+B+xAEyWPgPgRB8hi4D0GQPAbuQxAkj4H7EATJY+A+BEHyGLgPQZA8Bu5DECSPgfsQBMlj4D4EQfIYuA9BkDwG7kMQJI+B+xAEyWPgPgRB8pj/D3o+Erpg9oycAAAAAElFTkSuQmCC"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>Input signal (used in Attack mode — K-S pluck blends with this)</td>
+        </tr>
+        <tr>
+          <td><code>trigger</code></td>
+          <td>Trigger</td>
+          <td>—</td>
+          <td>Manually re-triggers a pluck during a note</td>
+        </tr>
+        <tr>
+          <td><code>mode</code></td>
+          <td>Control</td>
+          <td>0</td>
+          <td>Operating mode: 0 = String, 1 = Attack</td>
+        </tr>
+        <tr>
+          <td><code>attackPortion</code></td>
+          <td>Control</td>
+          <td>0.15</td>
+          <td>Fraction of the full K-S decay to include (0.01–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Energy loss rate — controls feedback gain (0.0 = longest, 1.0 =
+            fastest decay)</td>
+        </tr>
+        <tr>
+          <td><code>pluckPosition</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Position on string (0.0 = bridge/bright, 1.0 = neck/mellow); also
+            controls noise filter cutoff</td>
+        </tr>
+        <tr>
+          <td><code>mix</code></td>
+          <td>Control</td>
+          <td>0.8</td>
+          <td>Attack mode: prominence of pluck transient vs input signal
+            (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>brightness</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>EKS loop filter stretching — controls frequency-dependent decay
+            (0.0
+            = dark, 1.0 = bright)</td>
+        </tr>
+        <tr>
+          <td><code>excitationType</code></td>
+          <td>Control</td>
+          <td>0</td>
+          <td>Excitation waveform: 0 = Noise, 1 = Soft Pluck, 2 = Blend, 3 =
+            Finger Pluck</td>
+        </tr>
+        <tr>
+          <td><code>blendRatio</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Blend type only: ratio of soft pluck to noise (0.0 = all noise,
+            1.0
+            = all soft pluck). The inspector slider is only visible when
+            excitation
+            type is set to Blend.</td>
+        </tr>
+        <tr>
+          <td><code>pluckHardness</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Soft Pluck / Blend / Finger Pluck: width and sharpness of the
+            excitation shape</td>
+        </tr>
+        <tr>
+          <td><code>pickDirection</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>EKS pick direction comb: 0.0 = bright downstroke, 0.5 = neutral,
+            1.0
+            = warm upstroke</td>
+        </tr>
+        <tr>
+          <td><code>bodyResonance</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Body resonator wet/dry mix (0.0 = off, 1.0 = full resonance)</td>
+        </tr>
+        <tr>
+          <td><code>bodyFreq</code></td>
+          <td>Control</td>
+          <td>200.0</td>
+          <td>Body resonator center frequency in Hz (80–400 Hz)</td>
+        </tr>
+        <tr>
+          <td><code>stringDamping</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Flag: enables string-damping tail mode in the audio engine (0 =
+            off,
+            1 = on)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before synthesis. 1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down. Any ratio works — the system is
+            tuning-agnostic. Can be driven by LFO (vibrato), Envelope Engine
+            (pitch glide), or Physics System (spring pitch).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Generated string sound (normalized to ~0.8 peak)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>mode</code></td>
+          <td>Integer</td>
+          <td>0 (String)</td>
+          <td>0–1</td>
+          <td>Operating mode</td>
+        </tr>
+        <tr>
+          <td><code>attackPortion</code></td>
+          <td>Float</td>
+          <td>0.15</td>
+          <td>0.01–1.0</td>
+          <td>How much of the natural K-S decay to include</td>
+        </tr>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0–1.0</td>
+          <td>Feedback gain / decay rate</td>
+        </tr>
+        <tr>
+          <td><code>pluckPosition</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0–1.0</td>
+          <td>Pluck position on string</td>
+        </tr>
+        <tr>
+          <td><code>mix</code></td>
+          <td>Float</td>
+          <td>0.8</td>
+          <td>0.0–1.0</td>
+          <td>Attack mode: pluck transient prominence</td>
+        </tr>
+        <tr>
+          <td><code>brightness</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0–1.0</td>
+          <td>EKS loop filter stretching factor</td>
+        </tr>
+        <tr>
+          <td><code>excitationType</code></td>
+          <td>Integer</td>
+          <td>0 (Noise)</td>
+          <td>0–3</td>
+          <td>Excitation waveform shape</td>
+        </tr>
+        <tr>
+          <td><code>blendRatio</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0–1.0</td>
+          <td>Blend type: noise ↔︎ soft pluck ratio</td>
+        </tr>
+        <tr>
+          <td><code>pluckHardness</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Excitation width / sharpness</td>
+        </tr>
+        <tr>
+          <td><code>pickDirection</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0–1.0</td>
+          <td>EKS pick direction filter</td>
+        </tr>
+        <tr>
+          <td><code>bodyResonance</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Body resonator wet/dry</td>
+        </tr>
+        <tr>
+          <td><code>bodyFreq</code></td>
+          <td>Float</td>
+          <td>200.0</td>
+          <td>80–400</td>
+          <td>Body resonator center frequency (Hz)</td>
+        </tr>
+        <tr>
+          <td><code>stringDamping</code></td>
+          <td>Bool</td>
+          <td>0.0</td>
+          <td>0–1</td>
+          <td>Audio engine tail mode flag</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before synthesis (1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="operating-modes">Operating Modes</h2>
+    <h3 id="string-mode-mode-0">String Mode (mode = 0)</h3>
+    <p>The K-S model generates the entire sound. <code>signalIn</code> is
+      ignored. The output is a plucked string that decays naturally based on
+      <code>attackPortion</code> and <code>damping</code>. After the attack
+      phase completes, the output returns silence.</p>
+    <ul>
+      <li>Suitable as a standalone pitched generator</li>
+      <li>Connect directly as the final output container</li>
+      <li><code>attackPortion</code> controls how long the sound lasts
+        relative to a full K-S decay</li>
+    </ul>
+    <h3 id="attack-mode-mode-1">Attack Mode (mode = 1)</h3>
+    <p>The K-S pluck acts as a transient that blends with an input signal.
+      The pluck fades out while the input signal fades in, creating a natural
+      pluck onset followed by sustained body.</p>
+    <pre><code>burstWeight = (1.0 - progress) × mix
+inputWeight = 1.0 - burstWeight
+output = ksOutput × burstWeight + inputSignal × inputWeight</code></pre>
+    <p>A cosine fade runs over the final 10% of the attack phase to prevent
+      clicks at the transition point. After the attack phase completes, pure
+      input signal passes through unmodified.</p>
+    <h2 id="eks-loop-filter">EKS Loop Filter</h2>
+    <p>The core of the string model uses the Extended Karplus-Strong (EKS)
+      loop filter — a first-order lowpass filter in the feedback loop, scaled
+      by a feedback gain:</p>
+    <pre><code>S   = 0.5 + brightness × 0.49         [range: 0.50 – 0.99]
+rho = 0.990 + (1.0 − damping) × 0.0099 [range: 0.990 – 0.9999]
+
+filtered = ((1.0 − S) × currentSample + S × prevSample) × rho</code></pre>
+    <p><code>S</code> is the <strong>stretching factor</strong> — it
+      controls how much of the previous sample is blended in. High S means
+      more previous sample contribution, which means less high-frequency
+      energy loss per cycle (brighter, longer high-frequency sustain). Low S
+      means each cycle loses high frequencies faster (darker, quicker
+      brightness decay).</p>
+    <p><code>rho</code> is the <strong>feedback gain</strong> — it controls
+      frequency-independent energy loss per cycle. Lower rho (higher damping)
+      produces faster overall decay.</p>
+    <h3 id="brightness-vs-damping">Brightness vs Damping</h3>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 21%">
+        <col style="width: 27%">
+        <col style="width: 27%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Controls</th>
+          <th>Effect at 0</th>
+          <th>Effect at 1</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Feedback gain <code>rho</code></td>
+          <td>Very long sustain (rho ≈ 0.9999)</td>
+          <td>Fast decay (rho ≈ 0.990)</td>
+        </tr>
+        <tr>
+          <td><code>brightness</code></td>
+          <td>Loop filter S</td>
+          <td>Dark (S ≈ 0.50, fast HF loss)</td>
+          <td>Bright (S ≈ 0.99, slow HF loss)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>These two parameters are <strong>independent</strong>: damping
+      controls how fast the string dies away overall; brightness controls
+      whether it dies away dark (fundamentals linger longer) or bright (upper
+      harmonics linger longer).</p>
+    <h2 id="excitation-types">Excitation Types</h2>
+    <p>The excitation is the initial waveform loaded into the delay line
+      when the string is plucked. Different excitation shapes produce
+      different timbral characters.</p>
+    <h3 id="noise-default">0: Noise (default)</h3>
+    <p>Filtered white noise. The <code>pluckPosition</code> parameter
+      controls the noise filter cutoff:</p>
+    <pre><code>cutoffHz = 200 + (1 − pluckPosition) × 8000</code></pre>
+    <ul>
+      <li><strong>Bridge (pluckPosition = 0.0)</strong>: Cutoff ≈ 8200 Hz —
+        bright, full-bandwidth noise → metallic, sharp attack</li>
+      <li><strong>Middle (pluckPosition = 0.5)</strong>: Cutoff ≈ 4100 Hz —
+        warm noise → balanced</li>
+      <li><strong>Neck (pluckPosition = 1.0)</strong>: Cutoff ≈ 200 Hz —
+        heavily filtered noise → mellow, dark attack</li>
+    </ul>
+    <p><code>blendRatio</code> has no effect in pure Noise mode (it is used
+      only in Blend mode).</p>
+    <p><strong>Character:</strong> Classic Karplus-Strong. Rich harmonic
+      content, position-dependent brightness.</p>
+    <h3 id="soft-pluck">1: Soft Pluck</h3>
+    <p>A raised cosine hump centered in the delay buffer.
+      <code>pluckHardness</code> controls the width of the hump:</p>
+    <pre><code>widthSamples = N × (0.1 + 0.9 × (1 − pluckHardness))</code></pre>
+    <ul>
+      <li><strong>pluckHardness = 0.0</strong> (default): Full-width hump
+        (width = N) — smooth, soft attack. Like a thumb or mallet</li>
+      <li><strong>pluckHardness = 1.0</strong>: Narrow hump (width = 0.1×N) —
+        pointed, brighter attack. Like a pick</li>
+    </ul>
+    <p>The hump is DC-removed and normalized to ±1.0 before entering the
+      delay line.</p>
+    <p><strong>Character:</strong> Clean, smooth, bell-like or mallet-like.
+      Less high-frequency content than Noise. Well-suited for marimba,
+      vibraphone, or gentle acoustic plucks.</p>
+    <h3 id="blend">2: Blend</h3>
+    <p>A linear mix of Noise and Soft Pluck. <code>blendRatio</code>
+      controls the ratio:</p>
+    <pre><code>delayLine[i] = (1 − blendRatio) × noise[i] + blendRatio × softPluck[i]</code></pre>
+    <ul>
+      <li><strong>blendRatio = 0.0</strong>: All noise (same as Noise
+        mode)</li>
+      <li><strong>blendRatio = 0.5</strong>: Equal mix — textured but
+        controlled</li>
+      <li><strong>blendRatio = 1.0</strong>: All soft pluck (same as Soft
+        Pluck mode)</li>
+    </ul>
+    <p><code>pluckHardness</code> controls the soft pluck component’s width,
+      and <code>pluckPosition</code> controls the noise component’s filter
+      cutoff. The blend is re-normalized after mixing.</p>
+    <p><strong>Character:</strong> Tunable between gritty and smooth. The
+      most versatile excitation type.</p>
+    <h3 id="finger-pluck">3: Finger Pluck</h3>
+    <p>A rounded triangle waveform modelling the physical string
+      displacement when a finger plucks and releases.
+      <code>pluckHardness</code> controls both width and apex sharpness:</p>
+    <ul>
+      <li><strong>Width</strong>: 0 = wide (60% of delay length, like a thick
+        thumb) → 1 = narrow (8%, like a nail or hard pick)</li>
+      <li><strong>Rounding</strong>: 0 = heavily rounded apex (flesh-like
+        softness) → 1 = sharp apex (hard surface)</li>
+    </ul>
+    <p>The rounding is implemented as cosine smoothing at both the apex and
+      the base of the triangle, producing a realistic string-displacement
+      profile.</p>
+    <p><strong>Character:</strong> Warm and organic at low hardness (nylon
+      string, fingertip), bright and precise at high hardness (nail,
+      plectrum). The most physically accurate excitation shape.</p>
+    <h2 id="pick-direction">Pick Direction</h2>
+    <p>After excitation generation, an EKS pick direction comb filter is
+      applied to the delay line:</p>
+    <pre><code>H(z) = 1 + p × z⁻¹
+p = (pickDirection − 0.5) × 1.8   [range: −0.9 to +0.9]</code></pre>
+    <table>
+      <colgroup>
+        <col style="width: 57%">
+        <col style="width: 11%">
+        <col style="width: 30%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>pickDirection</th>
+          <th>p</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>−0.9</td>
+          <td>Notch at DC, boost at Nyquist → <strong>brighter,
+              plectrum-like</strong></td>
+        </tr>
+        <tr>
+          <td>0.5 (default)</td>
+          <td>0.0</td>
+          <td>Neutral — comb filter bypassed</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>+0.9</td>
+          <td>Notch at Nyquist, boost at DC → <strong>warmer,
+              flesh-like</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>This models how different pick angles excite different harmonics at
+      the moment of contact. The excitation is re-normalized after pick
+      direction filtering to preserve level.</p>
+    <h2 id="body-resonance">Body Resonance</h2>
+    <p>An optional biquad bandpass resonator (fixed Q = 5.0) is applied to
+      the K-S output <strong>post-feedback-loop</strong> (not in the string
+      loop itself):</p>
+    <pre><code>output = (1.0 − bodyResonance) × ksOutput + bodyResonance × bandpass(ksOutput, bodyFreq)</code></pre>
+    <ul>
+      <li><strong>bodyResonance = 0.0</strong> (default): Off — no body
+        coloring</li>
+      <li><strong>bodyResonance = 0.3–0.5</strong>: Subtle body warmth</li>
+      <li><strong>bodyResonance = 0.8–1.0</strong>: Pronounced resonant
+        body</li>
+    </ul>
+    <p>The <code>bodyFreq</code> sets the center frequency of the resonant
+      peak (80–400 Hz). This range covers typical instrument body
+      resonances:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>bodyFreq</th>
+          <th>Instrument character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>80–120 Hz</td>
+          <td>Deep bass body (bass guitar, cello body)</td>
+        </tr>
+        <tr>
+          <td>150–200 Hz</td>
+          <td>Mid-bass warmth (acoustic guitar body)</td>
+        </tr>
+        <tr>
+          <td>200–280 Hz</td>
+          <td>Upper-bass boxiness</td>
+        </tr>
+        <tr>
+          <td>280–400 Hz</td>
+          <td>Bright body ring (smaller instruments)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Body resonance is independent of <code>bodyFreq</code> — it only
+      controls how much of the resonated signal is mixed in.</p>
+    <h2 id="string-damping-flag">String Damping Flag</h2>
+    <p>The <code>stringDamping</code> parameter (0 or 1) is a
+      <strong>special audio-engine flag</strong>, not a sound-shaping
+      parameter. When set to 1, the audio engine recognizes this Karplus
+      Strong container as using a string-damping behavior, which affects how
+      the tail/ring-out is handled at note end.</p>
+    <p>This has no direct effect on the sound within a note — its purpose is
+      to signal graph-level rendering decisions. Leave at 0 (default) unless
+      you specifically need the string-damping tail behavior.</p>
+    <h2 id="legato-behavior">Legato Behavior</h2>
+    <p>For legato note transitions (notes connected without a gap), the
+      Karplus Strong string is <strong>not reset</strong>. The string’s
+      vibrating state carries over from the previous note — the delay line,
+      write index, peak amplitude tracker, and filter states are all
+      preserved. Only the pitch (fractional delay length) is updated via
+      <code>setPitch()</code>.</p>
+    <p>This allows realistic portamento effects: the string continues
+      vibrating, and its harmonic character evolves as it adjusts to the new
+      pitch. For non-legato notes, the string is fully reset and re-triggered
+      at the new note’s pitch.</p>
+    <h2 id="attack-duration">Attack Duration</h2>
+    <pre><code>attackSamples = attackPortion × 1500 × delayLength</code></pre>
+    <p>Where 1500 is an empirical constant representing the typical number
+      of cycles for a full K-S decay.
+      <code>delayLength = round(sampleRate / pitch)</code>.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>attackPortion</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.01–0.05</td>
+          <td>Very short pluck — barely audible transient</td>
+        </tr>
+        <tr>
+          <td>0.15 (default)</td>
+          <td>Natural pluck onset</td>
+        </tr>
+        <tr>
+          <td>0.3–0.5</td>
+          <td>Extended pluck with long decay</td>
+        </tr>
+        <tr>
+          <td>0.7–1.0</td>
+          <td>Full K-S string sound</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-plucked-string-string-mode">Basic Plucked String (String
+      Mode)</h3>
+    <pre><code>[Karplus Strong] → signalOut → [Output]
+  mode: 0 (String)
+  excitationType: 0 (Noise)
+  attackPortion: 0.2
+  damping: 0.4
+  pluckPosition: 0.3
+  brightness: 0.6</code></pre>
+    <h3 id="adding-pluck-to-harmonic-sound-attack-mode">Adding Pluck to
+      Harmonic Sound (Attack Mode)</h3>
+    <pre><code>[Harmonic Generator] → [Rolloff Processor] → [Spectrum To Signal] → signalIn
+                                                                          ↓
+                                                                [Karplus Strong] → signalOut
+                                                                  mode: 1 (Attack)
+                                                                  mix: 0.8
+                                                                  attackPortion: 0.15</code></pre>
+    <h3 id="mallet-vibraphone-character">Mallet / Vibraphone Character</h3>
+    <pre><code>mode: String
+excitationType: 1 (Soft Pluck)
+pluckHardness: 0.1        (soft mallet)
+damping: 0.2              (long sustain)
+brightness: 0.3           (warm decay)
+bodyResonance: 0.3
+bodyFreq: 160 Hz</code></pre>
+    <h3 id="acoustic-guitar-finger-pluck">Acoustic Guitar Finger Pluck</h3>
+    <pre><code>mode: Attack
+excitationType: 3 (Finger Pluck)
+pluckHardness: 0.3        (soft fingertip)
+pickDirection: 0.8        (warm, upstroke-like)
+brightness: 0.5
+damping: 0.5
+bodyResonance: 0.4
+bodyFreq: 200 Hz</code></pre>
+    <h3 id="hard-pick-plectrum">Hard Pick / Plectrum</h3>
+    <pre><code>mode: String
+excitationType: 3 (Finger Pluck)
+pluckHardness: 0.9        (narrow, hard pick)
+pickDirection: 0.1        (bright downstroke)
+brightness: 0.8
+damping: 0.3</code></pre>
+    <h3 id="textured-blend-with-envelope-modulation">Textured Blend with
+      Envelope Modulation</h3>
+    <pre><code>[Envelope Engine] → controlOut → blendRatio
+                                 [Karplus Strong]
+                                  excitationType: 2 (Blend)
+                                  pluckHardness: 0.5</code></pre>
+    <p>The envelope sweeps the excitation from all-noise to all-soft-pluck
+      across the note’s duration, creating a character that starts gritty and
+      ends clean. Note: <code>blendRatio</code> is read at trigger time —
+      connect before note start.</p>
+    <h3 id="pitch-tracking-body-resonance">Pitch-Tracking Body
+      Resonance</h3>
+    <pre><code>[Frequency Mapper] → controlOut → bodyFreq
+  outputMin: 80, outputMax: 350
+  curveType: Logarithmic
+             [Karplus Strong]
+              bodyResonance: 0.4</code></pre>
+    <p>The body resonance frequency tracks the note pitch, keeping the
+      resonant peak in a musically relevant relationship with the
+      fundamental.</p>
+    <h3 id="vibrato-via-lfo">Vibrato via LFO</h3>
+    <pre><code>[LFO] → valueOut → pitchMultiplier → [Karplus Strong]
+  LFO frequency:  5.5 Hz
+  LFO amplitude:  0.015         (±1.5% — subtle vibrato)
+  LFO center:     1.0           (offset so modulation swings around 1.0)</code></pre>
+    <p>The LFO modulates the pitch ratio around 1.0, producing vibrato
+      without any semitone assumptions. Ratio width is tuning-agnostic — 0.01
+      amplitude gives the same proportional interval at any pitch.</p>
+    <h3 id="static-transpose">Static Transpose</h3>
+    <pre><code>[Karplus Strong]
+  pitchMultiplier: 1.5   (just fifth up)
+  pitchMultiplier: 0.667 (just fifth down)
+  pitchMultiplier: 2.0   (octave up)
+  pitchMultiplier: 0.5   (octave down)</code></pre>
+    <p>Set via the inspector slider. Useful when layering two Karplus Strong
+      containers at different intervals, or when the score is in a register
+      that needs the string model to operate at a more comfortable
+      pitch.</p>
+    <h2 id="tail-behavior">Tail Behavior</h2>
+    <p>The Karplus Strong container produces a <strong>decay tail</strong>
+      (recognized by <code>hasTail()</code>). Kala will render additional
+      tail samples after a note ends to capture the full string ring-out, so
+      the decay is heard naturally even for short notes.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-sound">No Sound</h3>
+    <ol type="1">
+      <li>Verify the trigger is firing (note start triggers automatically for
+        non-legato notes)</li>
+      <li>Check <code>attackPortion</code> is not too low</li>
+      <li>In Attack mode, confirm <code>mix</code> &gt; 0 and
+        <code>signalIn</code> is connected</li>
+    </ol>
+    <h3 id="sound-too-dark-dull">Sound Too Dark / Dull</h3>
+    <ol type="1">
+      <li>Increase <code>brightness</code> — the loop filter is losing high
+        frequencies too fast</li>
+      <li>Decrease <code>pluckPosition</code> toward 0.0 (bridge) — brighter
+        noise excitation</li>
+      <li>Decrease <code>pickDirection</code> toward 0.0 — pick direction
+        filter adds brightness</li>
+      <li>Try excitationType Noise or Blend with low
+        <code>blendRatio</code></li>
+    </ol>
+    <h3 id="sound-too-bright-harsh">Sound Too Bright / Harsh</h3>
+    <ol type="1">
+      <li>Decrease <code>brightness</code></li>
+      <li>Increase <code>pluckPosition</code> toward 1.0 (neck)</li>
+      <li>Increase <code>pickDirection</code> toward 1.0 — warmer pick
+        direction filter</li>
+      <li>Use Soft Pluck or Finger Pluck excitation (less high-frequency
+        content than Noise)</li>
+      <li>Add body resonance at a low frequency to add warmth</li>
+    </ol>
+    <h3 id="decay-too-fast">Decay Too Fast</h3>
+    <ol type="1">
+      <li>Decrease <code>damping</code> — <code>damping = 0.0</code> gives the
+        longest possible sustain</li>
+      <li>Increase <code>attackPortion</code> to include more of the K-S
+        decay</li>
+    </ol>
+    <h3 id="decay-too-slow">Decay Too Slow</h3>
+    <ol type="1">
+      <li>Increase <code>damping</code></li>
+      <li>Decrease <code>attackPortion</code></li>
+    </ol>
+    <h3 id="body-resonance-not-audible">Body Resonance Not Audible</h3>
+    <ol type="1">
+      <li>Increase <code>bodyResonance</code> toward 0.4–0.8</li>
+      <li>Ensure <code>bodyFreq</code> is in a range where the string has
+        harmonic content — very high pitches have few harmonics in the 80–400 Hz
+        range</li>
+      <li>Try different <code>bodyFreq</code> values to find where the
+        resonance activates</li>
+    </ol>
+    <h3 id="clicks-at-attack-end-attack-mode">Clicks at Attack End (Attack
+      Mode)</h3>
+    <p>This should not occur due to the built-in cosine fade over the final
+      10% of the attack phase. If clicks occur, try slightly increasing
+      <code>attackPortion</code>.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="fractional-delay-and-pitch-tracking">Fractional Delay and Pitch
+      Tracking</h3>
+    <p>The delay line uses <strong>fractional delay</strong> with linear
+      interpolation between adjacent samples:</p>
+    <pre><code>readPos = writeIndex − currentDelay
+sample  = delayLine[idx0] × (1 − frac) + delayLine[idx1] × frac</code></pre>
+    <p>This allows <code>currentDelay = sampleRate / pitch</code> to be a
+      non-integer value, enabling continuous pitch tracking. When pitch
+      changes during a note (e.g., pitch curves in the Score Canvas),
+      <code>setPitch()</code> updates <code>currentDelay</code> without
+      re-triggering the pluck.</p>
+    <h3 id="output-normalization">Output Normalization</h3>
+    <p>Output is continuously normalized against a tracked peak
+      amplitude:</p>
+    <pre><code>output = currentSample / peakAmplitude × TARGET_PEAK   (TARGET_PEAK = 0.8)</code></pre>
+    <p>The peak tracker runs across the entire attack duration, so the
+      initial cycles (which may be loud) are correctly normalized even if the
+      excitation is not uniform.</p>
+    <h3 id="body-resonance-is-post-loop">Body Resonance is Post-Loop</h3>
+    <p>The body resonance biquad is applied <strong>after</strong> the K-S
+      loop output, not inside the feedback loop. This means it colors the
+      output without affecting the string’s decay behavior — body resonance
+      does not change the pitch, damping, or ring-out of the string
+      itself.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>karplusstrongattack.h</code>,
+        <code>karplusstrongattack.cpp</code></em></p>
+  </body>
+</html>

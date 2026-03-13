@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Recorder</title>
+  </head>
+  <body>
+    <h1 id="recorder-documentation">Recorder Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Recorder container is a <strong>digital waveguide physical
+        model</strong> of a recorder (fipple flute), based on the algorithm
+      developed by Perry R. Cook and Gary P. Scavone in the Synthesis ToolKit
+      (STK). It models the acoustic behavior of a cylindrical air column driven
+      by a jet of air through a fipple: breath pressure excites a jet
+      nonlinearity, which drives a bore resonance via two coupled delay lines
+      (bore and jet), producing the characteristic woody, breathy tone of a
+      soprano or alto recorder.</p>
+    <p>Because the model is <strong>self-oscillating</strong>, it produces a
+      continuous pitched tone for the full duration of any note. The pitch is
+      tracked continuously, so pitch curves and portamento in the Score Canvas
+      work without artifacts. Legato transitions preserve the bore's vibrating
+      state, allowing smooth slurs between notes.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Core sound generation</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 18%">
+        <col style="width: 18%">
+        <col style="width: 14%">
+        <col style="width: 50%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>breathPressure</code></td>
+          <td>Control</td>
+          <td>0.81</td>
+          <td>Breath pressure driving the jet (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>jetRatio</code></td>
+          <td>Control</td>
+          <td>0.35</td>
+          <td>Jet delay length as a fraction of the bore delay (0.05–0.60)</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Control</td>
+          <td>0.015</td>
+          <td>Breath turbulence noise amplitude (0.0–0.5)</td>
+        </tr>
+        <tr>
+          <td><code>vibratoFreq</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Vibrato oscillator frequency in Hz (0.0–20.0)</td>
+        </tr>
+        <tr>
+          <td><code>vibratoGain</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Vibrato depth — 0.0 disables vibrato entirely (0.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>endReflection</code></td>
+          <td>Control</td>
+          <td>0.73</td>
+          <td>Bore open-end reflection coefficient (−1.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>jetReflection</code></td>
+          <td>Control</td>
+          <td>0.59</td>
+          <td>Jet feedback reflection coefficient (−1.0–1.0)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before synthesis. 1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down. Any ratio works — the system is
+            tuning-agnostic. Can be driven by LFO (vibrato), Envelope Engine
+            (pitch glide), or Physics System (spring pitch wobble).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 20%">
+        <col style="width: 60%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Generated recorder tone</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 10%">
+        <col style="width: 14%">
+        <col style="width: 16%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>breathPressure</code></td>
+          <td>Float</td>
+          <td>0.81</td>
+          <td>0.0–1.0</td>
+          <td>Overall blowing strength</td>
+        </tr>
+        <tr>
+          <td><code>jetRatio</code></td>
+          <td>Float</td>
+          <td>0.35</td>
+          <td>0.05–0.60</td>
+          <td>Jet delay relative to bore delay</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Float</td>
+          <td>0.015</td>
+          <td>0.0–0.5</td>
+          <td>Breath noise / breathiness</td>
+        </tr>
+        <tr>
+          <td><code>vibratoFreq</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–20.0</td>
+          <td>Vibrato rate in Hz</td>
+        </tr>
+        <tr>
+          <td><code>vibratoGain</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Vibrato depth (0.0 = off)</td>
+        </tr>
+        <tr>
+          <td><code>endReflection</code></td>
+          <td>Float</td>
+          <td>0.73</td>
+          <td>−1.0–1.0</td>
+          <td>Bore open-end termination</td>
+        </tr>
+        <tr>
+          <td><code>jetReflection</code></td>
+          <td>Float</td>
+          <td>0.59</td>
+          <td>−1.0–1.0</td>
+          <td>Jet-to-bore feedback amount</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before synthesis (1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="how-it-works">How It Works</h2>
+    <p>The algorithm is a <strong>digital waveguide</strong> simulation of
+      the flute/recorder acoustics. Each sample is computed as follows:</p>
+    <pre><code>breathP      = breathPressure × envelope + breathP × noiseGain × noise()
+             + vibratoGain × 0.05 × sin(vibratoPhase)
+
+temp         = −onePole( boreDelay.lastOut )
+
+pressureDiff = breathP − jetReflection × temp
+pressureDiff = jetDelay.tick( pressureDiff )
+pressureDiff = dcBlock( jetTable( pressureDiff ) ) × 1.2
+             + endReflection × temp × 1.02
+
+output       = 0.2 × boreDelay.tick( pressureDiff )</code></pre>
+    <p>The key components are:</p>
+    <ul>
+      <li><strong>Bore delay</strong>: A linearly-interpolating delay line
+        representing the cylindrical air column. Its length is tuned to the
+        note's pitch (compensated for filter phase delay), making it the
+        primary pitch-setting element.</li>
+      <li><strong>Jet delay</strong>: A shorter delay line (length =
+        <code>jetRatio × borDelay</code>) modeling the travel time of the air
+        jet from the fipple to the edge. Its length sets the tone character and
+        register.</li>
+      <li><strong>Jet nonlinearity</strong>: The polynomial
+        <code>f(x) = x³ − x</code> (clipped to ±1), modeling the aerodynamic
+        instability of the jet at the labium edge. This is the energy source of
+        the self-oscillation.</li>
+      <li><strong>One-pole lowpass</strong>: Models the high-frequency losses
+        at the bore's open end. Pole position is derived from the STK formula
+        <code>0.7 − 0.1 × 2050 / sampleRate</code>.</li>
+      <li><strong>DC blocker</strong>: A high-pass filter
+        (<code>H(z) = (1 − z⁻¹) / (1 − 0.99z⁻¹)</code>) applied after the jet
+        table to remove any DC offset introduced by the nonlinearity.</li>
+    </ul>
+    <h2 id="parameter-guide">Parameter Guide</h2>
+    <h3 id="breath-pressure">Breath Pressure</h3>
+    <p>Controls the overall driving force of the simulated breath. This is
+      the most fundamental parameter — it determines whether the recorder
+      oscillates at all, and at what amplitude.</p>
+    <ul>
+      <li><strong>Below ~0.65</strong>: Insufficient to sustain oscillation —
+        the model underblows and produces little or no tone</li>
+      <li><strong>0.75–0.85</strong>: Characteristic recorder tone, warm and
+        clear</li>
+      <li><strong>Above ~0.92</strong>: Risk of register jump / overblowing —
+        the model may jump to a higher harmonic mode</li>
+    </ul>
+    <p>The parameter is extremely sensitive in the 0.75–0.90 range. Small
+      increments (0.01–0.02) produce noticeable tonal changes.</p>
+    <h3 id="jet-ratio">Jet Ratio</h3>
+    <p>Sets the jet delay length as a fraction of the bore delay. This is
+      the second most sensitive parameter and has the greatest effect on tonal
+      character and stability.</p>
+    <ul>
+      <li><strong>0.20–0.28</strong>: Thinner, flute-like tone; slightly more
+        breathy</li>
+      <li><strong>0.30–0.40</strong>: Full recorder character; woody and
+        centred (default 0.35)</li>
+      <li><strong>0.45–0.55</strong>: Broader, rounder tone; more prominent
+        fundamental</li>
+      <li><strong>Above 0.55</strong>: Tonal instability — the oscillation
+        becomes unstable at many pitches</li>
+    </ul>
+    <h3 id="noise-gain">Noise Gain</h3>
+    <p>Adds breath turbulence noise multiplicatively to the breath pressure,
+      simulating the aerodynamic noise present in real wind instrument
+      playing.</p>
+    <ul>
+      <li><strong>0.0</strong>: Pure, clean tone (unrealistically clean)</li>
+      <li><strong>0.010–0.025</strong>: Subtle breathiness — natural recorder
+        character (default 0.015)</li>
+      <li><strong>0.05–0.15</strong>: Noticeably breathy, airy sound</li>
+      <li><strong>0.3–0.5</strong>: Strongly breathy — closer to a wind or
+        breath effect than a pitched recorder</li>
+    </ul>
+    <h3 id="end-reflection">End Reflection</h3>
+    <p>The reflection coefficient at the open end of the bore. Models how
+      much of the pressure wave is reflected back into the tube when it reaches
+      the open end. In a real recorder this is primarily set by the tube
+      geometry.</p>
+    <ul>
+      <li><strong>Positive values (0.5–0.8)</strong>: Standard open-tube
+        behaviour; warm, full tone (default 0.73)</li>
+      <li><strong>Lower values (0.3–0.5)</strong>: More energy escapes — less
+        resonance, slightly softer tone</li>
+      <li><strong>Negative values</strong>: Inverted reflection (as in a
+        closed tube); produces unstable or fundamentally altered
+        oscillation</li>
+    </ul>
+    <h3 id="jet-reflection">Jet Reflection</h3>
+    <p>Controls how strongly the bore pressure feeds back into the jet delay,
+      modelling the acoustic coupling between the bore and the jet near the
+      fipple. Together with <code>endReflection</code>, it determines the
+      overall loop gain and tonal brightness.</p>
+    <ul>
+      <li><strong>0.5–0.65</strong>: Balanced, natural coupling (default
+        0.59)</li>
+      <li><strong>0.7–0.85</strong>: Higher feedback — can produce a more
+        focused, projecting tone but risks instability at extreme pitches</li>
+      <li><strong>Below 0.4</strong>: Weak coupling — tone may not sustain at
+        lower breath pressures</li>
+    </ul>
+    <h3 id="vibrato">Vibrato</h3>
+    <p>Vibrato is disabled by default (<code>vibratoGain = 0.0</code>).
+      When enabled, a sine wave modulates the breath pressure at
+      <code>vibratoFreq</code> Hz with a depth proportional to
+      <code>vibratoGain</code>.</p>
+    <ul>
+      <li>Musical vibrato: <code>vibratoFreq</code> = 4.0–7.0 Hz,
+        <code>vibratoGain</code> = 0.05–0.20</li>
+      <li>Fast tremolo: <code>vibratoFreq</code> = 8.0–15.0 Hz</li>
+      <li><code>vibratoFreq</code> has no effect when
+        <code>vibratoGain = 0.0</code></li>
+    </ul>
+    <h2 id="sensitivity-note">Sensitivity Note</h2>
+    <p>The Recorder parameters interact through a nonlinear feedback
+      loop. Small changes in any parameter can have disproportionate effects
+      on tone, register, and stability. The default values (0.81 / 0.35 /
+      0.015 / 0.73 / 0.59) represent a carefully balanced operating point for
+      a clear, woody recorder tone. When experimenting:</p>
+    <ul>
+      <li>Change one parameter at a time</li>
+      <li>Use step sizes of 0.01–0.02 for breath pressure, end/jet reflection</li>
+      <li>Use step sizes of 0.01–0.05 for jet ratio</li>
+      <li>Return to defaults if the tone becomes unstable or silent</li>
+    </ul>
+    <h2 id="breath-envelope">Breath Envelope</h2>
+    <p>The recorder applies a simple <strong>attack/release envelope</strong>
+      to the breath pressure based on note progress:</p>
+    <ul>
+      <li><strong>Attack</strong>: 8% of note duration — ramps from 0 to full
+        breath pressure. Simulates the onset of blowing. Skipped for legato
+        notes.</li>
+      <li><strong>Sustain</strong>: Full breath pressure.</li>
+      <li><strong>Release</strong>: Last 5% of note duration — ramps back to
+        zero. Simulates stopping the breath.</li>
+    </ul>
+    <p>This envelope affects only the <em>internal</em> excitation; the
+      overall dynamics of the note are controlled by the Score Canvas as
+      usual.</p>
+    <h2 id="legato-behavior">Legato Behavior</h2>
+    <p>For legato note transitions the bore and jet delay buffers are
+      <strong>preserved</strong>. The oscillation continues uninterrupted
+      from the previous note, with only the pitch (delay lengths) updated.
+      The breath attack ramp is skipped so there is no re-onset transient
+      between slurred notes.</p>
+    <p>For non-legato notes, both delay lines are fully cleared and the
+      oscillation builds from silence at the start of each note.</p>
+    <h2 id="tail-behavior">Tail Behavior</h2>
+    <p>Unlike string or membrane models, a wind instrument stops sounding
+      almost immediately when blowing ceases. In tail mode (after a note ends),
+      the jet algorithm is bypassed entirely and the bore delay buffer is simply
+      drained to silence. This takes at most one bore-delay period (a few
+      milliseconds), after which the audio engine detects silence and closes
+      the tail cleanly.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-recorder-tone">Basic Recorder Tone</h3>
+    <pre><code>[Recorder] → signalOut → [Output]
+  breathPressure: 0.81
+  jetRatio:       0.35
+  noiseGain:      0.015
+  endReflection:  0.73
+  jetReflection:  0.59</code></pre>
+    <h3 id="breathy-folk-recorder">Breathy / Folk Recorder</h3>
+    <pre><code>breathPressure: 0.78
+jetRatio:       0.33
+noiseGain:      0.04
+endReflection:  0.70
+jetReflection:  0.56</code></pre>
+    <h3 id="vibrato-expression">Vibrato Expression</h3>
+    <pre><code>vibratoFreq:  5.5
+vibratoGain:  0.12</code></pre>
+    <p>Or modulate <code>vibratoGain</code> via an Envelope Engine to bring
+      vibrato in gradually over the note duration.</p>
+    <h3 id="combining-with-formant-body">Combining with Formant Body</h3>
+    <pre><code>[Recorder] → signalOut → [Formant Body] → signalOut → [Output]</code></pre>
+    <p>The Formant Body processor can add vowel-like resonances to the
+      recorder tone, useful for simulating the head joint or body resonances
+      of specific instruments.</p>
+    <h3 id="combining-with-reverb">Combining with Reverb</h3>
+    <pre><code>[Recorder] → signalOut → [IR Convolution] → signalOut → [Output]
+  wetDry: 0.3–0.5</code></pre>
+    <p>A small room or hall IR adds natural acoustic space to the dry
+      recorder tone.</p>
+    <h3 id="external-vibrato-via-pitch-multiplier">External Vibrato via Pitch
+      Multiplier</h3>
+    <pre><code>[LFO] → valueOut → pitchMultiplier → [Recorder]
+  LFO frequency:  5.5 Hz
+  LFO amplitude:  0.012
+  LFO center:     1.0</code></pre>
+    <p>Complements or replaces the internal vibrato (which modulates breath
+      pressure). An external LFO on <code>pitchMultiplier</code> is a pure
+      frequency vibrato, while the internal vibrato blends timbral and pitch
+      movement together.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-sound-or-very-faint">No Sound or Very Faint</h3>
+    <ol type="1">
+      <li>Increase <code>breathPressure</code> — must be above ~0.65 to
+        sustain oscillation</li>
+      <li>Check <code>jetRatio</code> is not below 0.10 or above 0.55</li>
+      <li>Ensure <code>endReflection</code> and <code>jetReflection</code> are
+        both positive and above 0.4</li>
+    </ol>
+    <h3 id="overblowing-wrong-register">Overblowing / Wrong Register</h3>
+    <ol type="1">
+      <li>Reduce <code>breathPressure</code> — values above ~0.90 can cause a
+        register jump</li>
+      <li>Slightly reduce <code>jetRatio</code> (try 0.30–0.33)</li>
+    </ol>
+    <h3 id="tone-too-thin-or-buzzy">Tone Too Thin or Buzzy</h3>
+    <ol type="1">
+      <li>Increase <code>jetRatio</code> toward 0.38–0.45</li>
+      <li>Slightly reduce <code>jetReflection</code> (try 0.52–0.56)</li>
+    </ol>
+    <h3 id="tone-too-dark-or-hollow">Tone Too Dark or Hollow</h3>
+    <ol type="1">
+      <li>Reduce <code>jetRatio</code> toward 0.28–0.32</li>
+      <li>Increase <code>endReflection</code> slightly (try 0.76–0.80)</li>
+    </ol>
+    <h3 id="oscillation-unstable-at-extreme-pitches">Oscillation Unstable at
+      Extreme Pitches</h3>
+    <ol type="1">
+      <li>Slightly reduce <code>breathPressure</code> and
+        <code>jetReflection</code></li>
+      <li>The model is most stable in the middle register (roughly D4–D6 on a
+        soprano recorder). Very low notes (&lt;C4) and very high notes
+        (&gt;G6) are more sensitive to parameter values.</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="pitch-tracking">Pitch Tracking</h3>
+    <p>The bore delay length is recomputed whenever the pitch changes by more
+      than 0.03%:</p>
+    <pre><code>playFreq  = pitch × 0.96666        (slight overblowing correction)
+boreSamps = sampleRate / playFreq − filterPhaseDelay(playFreq) − 1.0</code></pre>
+    <p>The one-pole filter phase delay is subtracted to keep the oscillation
+      accurately in tune. The jet delay length is updated simultaneously:
+      <code>jetDelay = boreSamps × jetRatio</code>.</p>
+    <h3 id="no-stk-dependency">No STK Dependency</h3>
+    <p>The model is implemented entirely within Kala
+      (<code>recordermodel.h</code> / <code>recordermodel.cpp</code>) with no
+      dependency on the STK library. All DSP components — the delay lines,
+      one-pole filter, DC blocker, jet table, and LCG noise source — are
+      self-contained.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>recordermodel.h</code>, <code>recordermodel.cpp</code>. Algorithm
+        based on STK Flute by Perry R. Cook &amp; Gary P. Scavone,
+        1995–2021.</em></p>
+  </body>
+</html>

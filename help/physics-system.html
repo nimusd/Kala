@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Physics System</title>
+  </head>
+  <body>
+    <h1 id="physics-system-documentation">Physics System Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Physics System is a <strong>stateful mass-spring-damper
+        simulator</strong> that creates organic, physically-plausible parameter
+      movement. It smooths abrupt changes and adds natural inertia, momentum,
+      and settling behavior to any control signal.</p>
+    <p>This is a core “organic without random” mechanism - the output moves
+      naturally toward targets without artificial randomness, creating smooth
+      transitions and preventing clicks from abrupt parameter changes.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) - Creates physics-based parameter
+      smoothing and movement</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>force = (targetValue - currentValue) × springK
+velocity += force / mass
+velocity *= damping
+currentValue += velocity</code></pre>
+    <p>The system simulates a mass on a spring being pulled toward the
+      target value, with damping that dissipates energy over time. This
+      creates smooth, natural motion with overshoot, settling, and
+      momentum.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>targetValue</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Where the system should move toward</td>
+        </tr>
+        <tr>
+          <td><code>mass</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Resistance to acceleration (0.0-10.0)</td>
+        </tr>
+        <tr>
+          <td><code>springK</code></td>
+          <td>Control</td>
+          <td>0.001</td>
+          <td>Spring stiffness - pull strength (0.0001-1.0)</td>
+        </tr>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Control</td>
+          <td>0.995</td>
+          <td>Energy retention per sample (0.5-0.9999)</td>
+        </tr>
+        <tr>
+          <td><code>impulse</code></td>
+          <td>Trigger</td>
+          <td>-</td>
+          <td>Trigger input for velocity kick</td>
+        </tr>
+        <tr>
+          <td><code>impulseAmount</code></td>
+          <td>Control</td>
+          <td>100.0</td>
+          <td>Strength of impulse when triggered (0.0-1000.0)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>currentValue</code></td>
+          <td>Control</td>
+          <td>Current position of the simulated mass</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>mass</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0-10.0</td>
+          <td>Inertia - higher = slower response</td>
+        </tr>
+        <tr>
+          <td><code>springK</code></td>
+          <td>Float</td>
+          <td>0.001</td>
+          <td>0.0001-1.0</td>
+          <td>Spring strength - higher = faster pull</td>
+        </tr>
+        <tr>
+          <td><code>damping</code></td>
+          <td>Float</td>
+          <td>0.995</td>
+          <td>0.5-0.9999</td>
+          <td>Energy retention - higher = longer motion</td>
+        </tr>
+        <tr>
+          <td><code>impulseAmount</code></td>
+          <td>Float</td>
+          <td>100.0</td>
+          <td>0.0-1000.0</td>
+          <td>Velocity added on impulse trigger</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameter-behavior">Parameter Behavior</h2>
+    <h3 id="mass">Mass</h3>
+    <p>Controls resistance to acceleration (inertia).</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Mass</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>Instant response (no inertia)</td>
+        </tr>
+        <tr>
+          <td>0.1-0.5</td>
+          <td>Light, responsive</td>
+        </tr>
+        <tr>
+          <td>0.5-2.0</td>
+          <td>Moderate inertia</td>
+        </tr>
+        <tr>
+          <td>2.0-10.0</td>
+          <td>Heavy, slow to accelerate</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Low mass = quick response but potentially jittery. High mass = smooth
+      but sluggish.</p>
+    <h3 id="spring-constant-springk">Spring Constant (springK)</h3>
+    <p>Controls how strongly the system pulls toward the target.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>springK</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0001-0.001</td>
+          <td>Very weak pull, slow drift</td>
+        </tr>
+        <tr>
+          <td>0.001-0.01</td>
+          <td>Gentle pull, smooth motion</td>
+        </tr>
+        <tr>
+          <td>0.01-0.1</td>
+          <td>Moderate pull, responsive</td>
+        </tr>
+        <tr>
+          <td>0.1-1.0</td>
+          <td>Strong pull, fast tracking</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Higher springK with lower damping can cause oscillation around the
+      target.</p>
+    <h3 id="damping">Damping</h3>
+    <p>Controls energy loss per sample. Values close to 1.0 retain more
+      energy.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Damping</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.5-0.8</td>
+          <td>Heavy damping, quick settling, may oscillate</td>
+        </tr>
+        <tr>
+          <td>0.9-0.95</td>
+          <td>Moderate damping, balanced</td>
+        </tr>
+        <tr>
+          <td>0.95-0.99</td>
+          <td>Light damping, sustained motion</td>
+        </tr>
+        <tr>
+          <td>0.99-0.9999</td>
+          <td>Very light damping, long sustain</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> Damping &lt; 1.0 means energy is always lost.
+      The system will eventually settle at the target.</p>
+    <h3 id="impulse">Impulse</h3>
+    <p>When the <code>impulse</code> input crosses 0.5 (rising edge), the
+      <code>impulseAmount</code> is added to velocity. This creates sudden
+      “kicks” that the system then naturally recovers from.</p>
+    <h2 id="physics-characteristics">Physics Characteristics</h2>
+    <h3 id="underdamped-oscillation">Underdamped (Oscillation)</h3>
+    <p>When springK is high relative to damping, the system overshoots and
+      oscillates around the target before settling.</p>
+    <pre><code>Target: ─────────────────────────
+                 ╭─╮
+Output:    ╭────╯  ╰──╮
+          ╱            ╰────────</code></pre>
+    <p><strong>Settings:</strong> High springK (0.1+), moderate damping
+      (0.9-0.95)</p>
+    <h3 id="critically-damped-fastest-settling">Critically Damped (Fastest
+      Settling)</h3>
+    <p>The system reaches the target as fast as possible without
+      overshooting.</p>
+    <pre><code>Target: ─────────────────────────
+                    ╭────────────
+Output:       ╭────╯
+          ───╯</code></pre>
+    <p><strong>Settings:</strong> Balanced springK and damping</p>
+    <h3 id="overdamped-slow-approach">Overdamped (Slow Approach)</h3>
+    <p>The system slowly creeps toward the target without overshooting.</p>
+    <pre><code>Target: ─────────────────────────
+                         ╭───────
+Output:           ╭─────╯
+          ───────╯</code></pre>
+    <p><strong>Settings:</strong> Low springK (0.001), high damping
+      (0.99+)</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="parameter-smoothing">Parameter Smoothing</h3>
+    <p>Eliminate clicks from abrupt parameter changes.</p>
+    <pre><code>[Stepped input] ──→ targetValue
+                          │
+                          └──→ Physics System ──→ currentValue ──→ [Smooth output]
+                                    │
+                                    └── mass: 0.3, springK: 0.01, damping: 0.99</code></pre>
+    <h3 id="organic-filter-movement">Organic Filter Movement</h3>
+    <p>Create natural-feeling filter sweeps.</p>
+    <pre><code>Envelope Engine ──→ targetValue ──→ Physics System ──→ currentValue ──→ Rolloff Processor
+                                          │
+                                          └── mass: 0.5, springK: 0.005, damping: 0.995</code></pre>
+    <h3 id="pitch-glide-with-momentum">Pitch Glide with Momentum</h3>
+    <p>Slide between pitches with physical feel.</p>
+    <pre><code>[Note pitch] ──→ targetValue ──→ Physics System ──→ currentValue ──→ Spectrum to Signal (pitch)
+                                       │
+                                       └── mass: 0.2, springK: 0.02, damping: 0.98</code></pre>
+    <h3 id="bouncy-parameter-response">Bouncy Parameter Response</h3>
+    <p>Create springy, elastic parameter behavior.</p>
+    <pre><code>LFO ──→ targetValue ──→ Physics System ──→ currentValue ──→ [Target]
+                              │
+                              └── mass: 0.5, springK: 0.1, damping: 0.9</code></pre>
+    <p>The output will overshoot and bounce around the LFO’s value.</p>
+    <h3 id="impulse-effects">Impulse Effects</h3>
+    <p>Add sudden velocity kicks for attack transients.</p>
+    <pre><code>Gate Processor (attackTrigger) ──→ impulse
+                                        │
+[Target value] ──→ targetValue ──→ Physics System ──→ currentValue ──→ [Target]
+                                        │
+                                        └── impulseAmount: 200</code></pre>
+    <h2 id="comparison-with-other-modifiers">Comparison with Other
+      Modifiers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 39%">
+        <col style="width: 35%">
+        <col style="width: 25%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Behavior</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Physics System</strong></td>
+          <td>Tracks target with mass/spring physics</td>
+          <td>Stateful (position + velocity)</td>
+        </tr>
+        <tr>
+          <td><strong>Easing Applicator</strong></td>
+          <td>Shapes interpolation curve</td>
+          <td>Stateless</td>
+        </tr>
+        <tr>
+          <td><strong>Envelope Engine</strong></td>
+          <td>Evaluates envelope at progress</td>
+          <td>Stateless</td>
+        </tr>
+        <tr>
+          <td><strong>Drift Engine</strong></td>
+          <td>Generates wandering multiplier</td>
+          <td>Stateful (phase)</td>
+        </tr>
+        <tr>
+          <td><strong>LFO</strong></td>
+          <td>Generates periodic oscillation</td>
+          <td>Stateful (phase)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Physics System is unique in having <strong>two state
+        variables</strong> (position and velocity), which allows for momentum
+      and overshoot - something the other modifiers cannot produce.</p>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="velocity-clamping">Velocity Clamping</h3>
+    <p>Velocity is clamped to ±10,000 units/sample to prevent numerical
+      instability with extreme parameter combinations.</p>
+    <h3 id="mass-near-zero">Mass Near Zero</h3>
+    <p>When mass &lt; 0.0001, the force is applied directly to velocity
+      without division (preventing division by near-zero). This gives instant
+      response.</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p><code>reset()</code> sets currentValue and velocity to 0.
+      <code>reset(initialValue)</code> sets currentValue to the specified
+      value and velocity to 0.</p>
+    <h3 id="impulse-detection">Impulse Detection</h3>
+    <p>Impulse triggers on <strong>rising edge</strong> - when the impulse
+      input crosses from below 0.5 to above 0.5. Holding the trigger high does
+      not re-trigger.</p>
+    <h2 id="preset-suggestions">Preset Suggestions</h2>
+    <h3 id="smooth-filter-click-prevention">Smooth Filter (Click
+      Prevention)</h3>
+    <pre><code>mass: 0.3, springK: 0.01, damping: 0.99</code></pre>
+    <p>Fast enough to track, smooth enough to prevent artifacts.</p>
+    <h3 id="heavy-inertia">Heavy Inertia</h3>
+    <pre><code>mass: 2.0, springK: 0.005, damping: 0.995</code></pre>
+    <p>Slow, weighted movement - good for gradual timbral evolution.</p>
+    <h3 id="bouncyelastic">Bouncy/Elastic</h3>
+    <pre><code>mass: 0.5, springK: 0.1, damping: 0.85</code></pre>
+    <p>Overshoots and oscillates around target - playful, springy feel.</p>
+    <h3 id="quick-response">Quick Response</h3>
+    <pre><code>mass: 0.1, springK: 0.05, damping: 0.95</code></pre>
+    <p>Fast tracking with minimal lag.</p>
+    <h3 id="slow-drift">Slow Drift</h3>
+    <pre><code>mass: 1.0, springK: 0.001, damping: 0.999</code></pre>
+    <p>Very gradual movement toward target.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="state-variables">State Variables</h3>
+    <p>The Physics System maintains two state variables: -
+      <code>currentValue</code>: Current position (output) -
+      <code>velocity</code>: Rate of change</p>
+    <h3 id="processing-per-sample">Processing Per Sample</h3>
+    <div class="sourceCode" id="cb15">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a
+href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> force <span
+class="op">=</span> <span class="op">(</span>targetValue <span class="op">-</span> currentValue<span
+class="op">)</span> <span class="op">*</span> springK<span class="op">;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span
+class="op">(</span>mass <span class="op">&gt;</span> <span class="fl">0.0001</span><span
+class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    velocity <span
+class="op">+=</span> force <span class="op">/</span> mass<span class="op">;</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span
+class="cf">else</span> <span class="op">{</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    velocity <span
+class="op">+=</span> force<span class="op">;</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>velocity <span
+class="op">*=</span> damping<span class="op">;</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>velocity <span
+class="op">=</span> clamp<span class="op">(</span>velocity<span class="op">,</span> <span
+class="op">-</span><span class="dv">10000</span><span class="op">,</span> <span
+class="dv">10000</span><span class="op">);</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>currentValue <span
+class="op">+=</span> velocity<span class="op">;</span></span></code></pre>
+    </div>
+    <h3 id="mathematical-model">Mathematical Model</h3>
+    <p>This implements a discrete approximation of the second-order
+      differential equation:</p>
+    <pre><code>m × d²x/dt² + c × dx/dt + k × x = k × target</code></pre>
+    <p>Where: - <code>m</code> = mass - <code>c</code> = damping coefficient
+      (derived from damping parameter) - <code>k</code> = spring constant
+      (springK) - <code>x</code> = current position - <code>target</code> =
+      target position</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>physicssystem.h</code>, <code>physicssystem.cpp</code></em></p>
+  </body>
+</html>

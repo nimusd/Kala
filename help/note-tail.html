@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Note Tail</title>
+  </head>
+  <body>
+    <h1 id="note-tail-documentation">Note Tail Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Note Tail container adds a <strong>smooth cosine fade-out</strong>
+      at the end of a note, preventing click artifacts and enabling
+      <em>let-ring</em> sustain effects. When a note ends, the audio engine
+      enters <em>tail mode</em> — rather than cutting the signal abruptly, the
+      Note Tail container allows the upstream signal to continue oscillating
+      while applying a cosine envelope that fades it to silence over a
+      configurable duration.</p>
+    <p>Without a Note Tail, short or abruptly-ended notes can produce
+      audible clicks at the cut-off point. With Note Tail, even a note with
+      zero written duration will fade gracefully, and long tail lengths create
+      a harp-like "let ring" effect where the sound continues beyond the
+      written note length.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Core sound generation</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>The audio signal to fade out at note end</td>
+        </tr>
+        <tr>
+          <td><code>length</code></td>
+          <td>Control</td>
+          <td>—</td>
+          <td>Modulates the tail length (in ms) from an upstream control source.
+            Applied on top of the <code>tailLength</code> parameter via the
+            connection function.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>The faded signal: passthrough during the note, cosine-faded during
+            tail</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>tailLength</code></td>
+          <td>Float</td>
+          <td>200.0</td>
+          <td>1–9999</td>
+          <td>Duration of the cosine fade-out in milliseconds</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="how-it-works">How It Works</h2>
+    <h3 id="during-the-note">During the Note</h3>
+    <p>While a note is playing, Note Tail is a <strong>transparent
+        passthrough</strong> — <code>signalIn</code> passes to
+      <code>signalOut</code> unchanged. There is no processing overhead or
+      coloration during normal playback.</p>
+    <h3 id="at-note-end-tail-mode">At Note End (Tail Mode)</h3>
+    <p>When the note ends, the audio engine enters <em>tail mode</em>. With
+      a Note Tail container present, the upstream signal sources (Harmonic
+      Generator, Wavetable Synth, etc.) <strong>keep running</strong> rather
+      than being silenced. Note Tail receives the live oscillating signal and
+      applies a <strong>cosine fade envelope</strong>:</p>
+    <pre><code>progress   = 1.0 − (samplesRemaining / totalSamples)
+fadeFactor = 0.5 × (1.0 + cos(π × progress))
+
+signalOut = signalIn × fadeFactor</code></pre>
+    <p>The cosine shape is smooth at both ends — it starts at 1.0 (full
+      volume), stays relatively flat early on, then curves gracefully to 0.0.
+      This avoids the linear-fade audible "knee" and produces a natural,
+      musical decay.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>progress</th>
+          <th>fadeFactor</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0 (start of tail)</td>
+          <td>1.0</td>
+          <td>Full volume — seamless continuation</td>
+        </tr>
+        <tr>
+          <td>0.25</td>
+          <td>≈ 0.85</td>
+          <td>Subtle reduction</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>0.5</td>
+          <td>Half amplitude (–6 dB)</td>
+        </tr>
+        <tr>
+          <td>0.75</td>
+          <td>≈ 0.15</td>
+          <td>Near silence</td>
+        </tr>
+        <tr>
+          <td>1.0 (end of tail)</td>
+          <td>0.0</td>
+          <td>Complete silence</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>After the tail completes, the audio engine stops rendering tail
+      samples and the note is fully done.</p>
+    <h2 id="tail-length-and-let-ring">Tail Length and "Let Ring"</h2>
+    <p>The <code>tailLength</code> parameter (1–9999 ms) controls the total
+      duration of the cosine fade. Unlike a simple gate or mute,
+      <em>the sound keeps oscillating during the entire fade</em> — so long
+      tail lengths produce an authentic sustain effect, not a faded silence.
+      This is musically equivalent to a harp or piano "let ring" marking.</p>
+    <ul>
+      <li><strong>Short tail (10–50 ms)</strong>: Click suppression only —
+        just smooth the note cutoff</li>
+      <li><strong>Medium tail (100–500 ms)</strong>: Natural instrument
+        ring-out</li>
+      <li><strong>Long tail (1000–5000 ms)</strong>: Pronounced sustain, sound
+        continues well past the written note</li>
+      <li><strong>Maximum tail (9999 ms)</strong>: Nearly 10-second sustain —
+        full "let ring" harp effect</li>
+    </ul>
+    <h2 id="length-port-modulation">Length Port Modulation</h2>
+    <p>The <code>length</code> input port allows the tail duration to be
+      controlled by an upstream modulator. This is especially useful with
+      <strong>Frequency Mapper</strong> to make lower-pitched notes sustain
+      longer than high-pitched ones (mimicking acoustic instrument
+      behaviour):</p>
+    <pre><code>[Frequency Mapper] → controlOut → length
+  outputMin: 500    (long tail at low pitch)
+  outputMax: 80     (short tail at high pitch)
+  curveType: Logarithmic
+             [Note Tail]
+              tailLength: 200    (base value, modulated by connection)</code></pre>
+    <p>The <code>length</code> connection is applied using the connection's
+      function and weight, then clamped to 1–9999 ms before being passed to
+      the fade engine.</p>
+    <h2 id="physical-models">Behaviour with Physical Models</h2>
+    <p>Recorder, Bowed, and Reed containers have their own internal tail
+      behaviour — they use special tail-mode rendering that lets their
+      physical models decay naturally. Note Tail does not apply its cosine
+      fade to these sources; instead, each physical model manages its own
+      ring-out independently. This means:</p>
+    <ul>
+      <li><strong>Harmonic Generator, Wavetable Synth, Noise Color Filter</strong>:
+        Note Tail cosine fade works directly on the live signal</li>
+      <li><strong>Recorder, Bowed, Reed</strong>: Use their own internal decay
+        — Note Tail has no additional effect on these sources</li>
+      <li><strong>IR Convolution</strong>: Always drains its impulse response
+        tail regardless of Note Tail</li>
+    </ul>
+    <h2 id="placement-in-graph">Placement in the Signal Graph</h2>
+    <p>Note Tail should be placed <strong>after</strong> all signal
+      processing and <strong>before</strong> the final output. It replaces the
+      output container in a typical graph:</p>
+    <pre><code>[Harmonic Generator] → [Rolloff Processor] → [Spectrum to Signal]
+                                                      ↓
+                                               [Note Tail] → signalOut (final output)</code></pre>
+    <p>Only one Note Tail container is needed per sounit graph. Multiple
+      Note Tail containers are not useful — only the last one in the execution
+      order affects the final output.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="click-suppression-only">Click Suppression Only</h3>
+    <pre><code>[any signal chain] → signalIn → [Note Tail] → signalOut
+  tailLength: 20     (20 ms — inaudible as sustain, removes click)</code></pre>
+    <h3 id="natural-ring-out">Natural Ring-Out</h3>
+    <pre><code>[Harmonic Generator] → [Spectrum to Signal] → signalIn
+                                                    ↓
+                                             [Note Tail] → signalOut
+                                              tailLength: 400</code></pre>
+    <h3 id="pitch-dependent-tail">Pitch-Dependent Tail (Frequency Mapper)</h3>
+    <pre><code>[Frequency Mapper] → controlOut → length
+  outputMin: 2000    (2 seconds for low notes)
+  outputMax: 100     (100 ms for high notes)
+  curveType: Logarithmic
+             [Note Tail]
+              tailLength: 500    (base, overridden by connection)</code></pre>
+    <p>This approach mimics how real acoustic instruments sustain longer at
+      lower pitches (longer string/resonator decay) and shorter at higher
+      pitches.</p>
+    <h3 id="let-ring-guitar">Let-Ring Guitar</h3>
+    <pre><code>[Karplus Strong] → signalIn → [Note Tail] → signalOut
+  KS: mode = 0 (String), damping = 0.2
+  Note Tail: tailLength = 3000   (3-second "let ring")</code></pre>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-fade-sound-cuts-abruptly">No Fade — Sound Cuts Abruptly</h3>
+    <ol type="1">
+      <li>Confirm Note Tail's <code>signalIn</code> is connected to the
+        upstream signal chain</li>
+      <li>Confirm Note Tail is the final output container (its
+        <code>signalOut</code> is the graph output)</li>
+      <li>Verify <code>tailLength</code> is greater than 1 ms</li>
+    </ol>
+    <h3 id="tail-seems-too-short-regardless-of-setting">Tail Seems Too
+      Short Regardless of Setting</h3>
+    <ol type="1">
+      <li>Check that the Note Tail container is in the correct sounit — a
+        saved sounit is loaded as a variation and uses its own graph copy</li>
+      <li>If using a Frequency Mapper on the <code>length</code> port, ensure
+        its output range is set correctly and not overriding to a small
+        value</li>
+    </ol>
+    <h3 id="sound-during-tail-is-distorted-or-wrong-pitch">Sound During
+      Tail Is Distorted or Wrong Pitch</h3>
+    <p>The upstream source keeps running during tail mode. If the source
+      uses pitch tracking (e.g., it is pitch-modulated), the tail continues
+      at whatever pitch the note ended at. This is expected behaviour.</p>
+    <h3 id="recorder-bowed-reed-not-affected">Recorder / Bowed / Reed Not
+      Affected by Note Tail</h3>
+    <p>Physical models manage their own internal tail decay and are not
+      routed through Note Tail's cosine fade. Their sustain and decay
+      behaviour is controlled by their own parameters (e.g., Recorder's
+      <code>decay</code>, Bowed's bow pressure).</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>tailprocessor.h</code>, <code>tailprocessor.cpp</code></em></p>
+  </body>
+</html>

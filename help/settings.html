@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="style.css">
+<title>Settings</title>
+</head>
+<body>
+<h1 id="sound-engine-settings-tab-documentation">Sound Engine Settings Tab Documentation</h1>
+
+<h2 id="overview">Overview</h2>
+<p>The Settings tab provides control over project-level audio configuration and container parameter ranges. Each container setting defines the slider range exposed in the inspector — adjusting these lets you expand or constrain how far each parameter can be pushed without changing the parameter itself.</p>
+
+<h2 id="location">Location</h2>
+<ul>
+<li><strong>Tab Index:</strong> 2 (Preferences)</li>
+<li><strong>Parent Component:</strong> KalaMain</li>
+<li><strong>Settings Backend:</strong> <code>ContainerSettings</code> singleton with QSettings persistence</li>
+</ul>
+
+<h2 id="architecture">Architecture</h2>
+<h3 id="settings-management-system">Settings Management System</h3>
+<ul>
+<li><strong>Singleton Pattern</strong>: Global settings accessible via <code>ContainerSettings::instance()</code></li>
+<li><strong>Modular Design</strong>: Separate parameter structures for each container type</li>
+<li><strong>Persistent Storage</strong>: Uses QSettings with group-based organization</li>
+<li><strong>JSON Export/Import</strong>: Supports project file serialization via <code>toJson()</code> / <code>fromJson()</code></li>
+<li><strong>Signal-Based Updates</strong>: Emits <code>settingsChanged()</code> on modifications</li>
+</ul>
+
+<h3 id="tab-features">Tab Features</h3>
+<ul>
+<li><strong>Project Settings</strong>: Composition name, sample rate, bit depth</li>
+<li><strong>Container Parameter Ranges</strong>: Min/max limits for every container type's inspector sliders</li>
+<li><strong>Save Settings</strong>: Export all ranges to a <code>.csettings</code> file</li>
+<li><strong>Load Settings</strong>: Import ranges from a <code>.csettings</code> file</li>
+<li><strong>Reset to Defaults</strong>: Restore all ranges to their factory values</li>
+</ul>
+
+<h2 id="project-settings">Project Settings</h2>
+<table>
+<thead>
+<tr><th>Setting</th><th>Options</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Project Name</td><td>Text field</td><td>Composition name used in window title and export filenames</td></tr>
+<tr><td>Sample Rate</td><td>44100 / 48000 / 96000 / 192000 Hz</td><td>Audio rendering sample rate for this project</td></tr>
+<tr><td>Bit Depth</td><td>16 / 24 / 32 bit</td><td>Audio export bit depth</td></tr>
+</tbody>
+</table>
+
+<h2 id="settings-categories">Container Parameter Settings</h2>
+<p>These settings define the slider ranges shown in the container inspector. The <strong>Default</strong> column shows the factory value stored in <code>containersettings.h</code>. Some sections only expose the maximum limit (the minimum is fixed); these are noted.</p>
+
+<h3 id="essential-blue---sound-generation">1. Essential (Blue) — Sound Generation</h3>
+
+<h4 id="harmonic-generator-settings">Harmonic Generator Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Max Harmonics</td><td>128</td><td>Upper limit of the harmonic count slider</td></tr>
+<tr><td>Fundamental Min</td><td>20.0 Hz</td><td>Lowest allowable fundamental frequency</td></tr>
+<tr><td>Fundamental Max</td><td>8000.0 Hz</td><td>Highest allowable fundamental frequency</td></tr>
+<tr><td>Rolloff Power Min</td><td>0.2</td><td>Minimum harmonic brightness rolloff exponent</td></tr>
+<tr><td>Rolloff Power Max</td><td>5.0</td><td>Maximum harmonic brightness rolloff exponent</td></tr>
+<tr><td>Drift Max</td><td>0.1</td><td>Maximum per-harmonic frequency drift amount</td></tr>
+<tr><td>PAD Bandwidth Min</td><td>1.0 ct</td><td>Minimum PADsynth spectral spread in cents</td></tr>
+<tr><td>PAD Bandwidth Max</td><td>200.0 ct</td><td>Maximum PADsynth spectral spread in cents</td></tr>
+<tr><td>PAD BW Scale Min</td><td>0.0</td><td>Minimum bandwidth scaling exponent (harmonic-dependent spread)</td></tr>
+<tr><td>PAD BW Scale Max</td><td>2.0</td><td>Maximum bandwidth scaling exponent</td></tr>
+</tbody>
+</table>
+
+<h4 id="karplus-strong-settings">Karplus Strong Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Attack Portion Min</td><td>0.01</td><td>Minimum fraction of note duration used as attack noise burst</td></tr>
+<tr><td>Attack Portion Max</td><td>1.0</td><td>Maximum attack fraction</td></tr>
+<tr><td>Damping Min</td><td>0.0</td><td>Minimum string energy decay rate per sample</td></tr>
+<tr><td>Damping Max</td><td>1.0</td><td>Maximum decay rate (1.0 = instant decay)</td></tr>
+<tr><td>Pluck Position Min</td><td>0.0</td><td>Minimum position along string where pluck occurs</td></tr>
+<tr><td>Pluck Position Max</td><td>1.0</td><td>Maximum pluck position</td></tr>
+<tr><td>Mix Min</td><td>0.0</td><td>Minimum blend of Karplus output with input signal</td></tr>
+<tr><td>Mix Max</td><td>1.0</td><td>Maximum mix level</td></tr>
+<tr><td>Brightness Min</td><td>0.0</td><td>Minimum initial spectral brightness of string excitation</td></tr>
+<tr><td>Brightness Max</td><td>1.0</td><td>Maximum brightness</td></tr>
+<tr><td>Exc. Softness Min</td><td>0.0</td><td>Minimum softness of the excitation envelope shape</td></tr>
+<tr><td>Exc. Softness Max</td><td>1.0</td><td>Maximum excitation softness</td></tr>
+<tr><td>Pluck Hardness Min</td><td>0.0</td><td>Minimum pluck attack hardness (0 = soft, wide attack)</td></tr>
+<tr><td>Pluck Hardness Max</td><td>1.0</td><td>Maximum pluck hardness</td></tr>
+<tr><td>Pick Direction Min</td><td>0.0</td><td>Minimum pick direction bias (0 = downstroke)</td></tr>
+<tr><td>Pick Direction Max</td><td>1.0</td><td>Maximum pick direction (1 = upstroke)</td></tr>
+<tr><td>Body Resonance Min</td><td>0.0</td><td>Minimum body resonance mix (0 = off)</td></tr>
+<tr><td>Body Resonance Max</td><td>1.0</td><td>Maximum body resonance contribution</td></tr>
+<tr><td>Body Freq Min</td><td>80.0 Hz</td><td>Minimum body resonance center frequency</td></tr>
+<tr><td>Body Freq Max</td><td>400.0 Hz</td><td>Maximum body resonance center frequency</td></tr>
+</tbody>
+</table>
+
+<h4 id="attack-settings">Attack Settings</h4>
+<p>The Attack container models instrument onset transients across six attack types (Flute Chiff, Clarinet, Saxophone, Brass, FM Strike, Membrane Sweep). The settings tab exposes parameter ranges grouped by which type they apply to.</p>
+
+<p><strong>Common — all attack types</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Duration Min</td><td>0.005 s</td><td>Minimum onset transient duration</td></tr>
+<tr><td>Duration Max</td><td>5.0 s</td><td>Maximum onset transient duration</td></tr>
+<tr><td>Intensity Min</td><td>0.0</td><td>Minimum transient amplitude</td></tr>
+<tr><td>Intensity Max</td><td>1.0</td><td>Maximum transient amplitude</td></tr>
+<tr><td>Mix Min</td><td>0.0</td><td>Minimum blend of transient into output signal</td></tr>
+<tr><td>Mix Max</td><td>1.0</td><td>Maximum transient mix</td></tr>
+</tbody>
+</table>
+
+<p><strong>Air Jet — Flute Chiff</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Noise Amount Min</td><td>0.0</td><td>Minimum breath noise content in jet attack</td></tr>
+<tr><td>Noise Amount Max</td><td>1.0</td><td>Maximum noise amount</td></tr>
+<tr><td>Jet Ratio Min</td><td>0.0</td><td>Minimum jet-to-embouchure ratio</td></tr>
+<tr><td>Jet Ratio Max</td><td>1.0</td><td>Maximum jet ratio</td></tr>
+</tbody>
+</table>
+
+<p><strong>Reed — Clarinet / Saxophone</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Reed Stiffness Min</td><td>0.0</td><td>Minimum reed stiffness (softer = buzzier onset)</td></tr>
+<tr><td>Reed Stiffness Max</td><td>1.0</td><td>Maximum reed stiffness</td></tr>
+<tr><td>Reed Aperture Min</td><td>0.0</td><td>Minimum reed opening size</td></tr>
+<tr><td>Reed Aperture Max</td><td>1.0</td><td>Maximum reed aperture</td></tr>
+<tr><td>Blow Position Min</td><td>0.0</td><td>Minimum blow position along body (saxophone only)</td></tr>
+<tr><td>Blow Position Max</td><td>1.0</td><td>Maximum blow position</td></tr>
+</tbody>
+</table>
+
+<p><strong>Brass</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Lip Tension Min</td><td>0.0</td><td>Minimum lip tension (looser = more buzz in attack)</td></tr>
+<tr><td>Lip Tension Max</td><td>1.0</td><td>Maximum lip tension</td></tr>
+<tr><td>Buzz Q Min</td><td>0.5</td><td>Minimum resonance sharpness of the lip buzz filter</td></tr>
+<tr><td>Buzz Q Max</td><td>50.0</td><td>Maximum buzz resonance Q</td></tr>
+</tbody>
+</table>
+
+<p><strong>FM Strike — Piano / Mallet</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Hardness Min</td><td>0.0</td><td>Minimum hammer / mallet hardness</td></tr>
+<tr><td>Hardness Max</td><td>1.0</td><td>Maximum hardness</td></tr>
+<tr><td>Brightness Min</td><td>0.0</td><td>Minimum spectral brightness of the strike transient</td></tr>
+<tr><td>Brightness Max</td><td>1.0</td><td>Maximum strike brightness</td></tr>
+</tbody>
+</table>
+
+<p><strong>Membrane Sweep — Drum / Percussion</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Tightness Min</td><td>0.0</td><td>Minimum membrane tension (affects pitch sweep speed)</td></tr>
+<tr><td>Tightness Max</td><td>1.0</td><td>Maximum membrane tightness</td></tr>
+<tr><td>Tone Min</td><td>0.0</td><td>Minimum tone color of membrane resonance</td></tr>
+<tr><td>Tone Max</td><td>1.0</td><td>Maximum tone</td></tr>
+</tbody>
+</table>
+
+<h4 id="wavetable-synth-settings">Wavetable Synth Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Position Min</td><td>0.0</td><td>Minimum wavetable scan position (0 = start of table)</td></tr>
+<tr><td>Position Max</td><td>1.0</td><td>Maximum wavetable scan position (1 = end of table)</td></tr>
+</tbody>
+</table>
+
+<h3 id="shaping-orange---sound-modification">2. Shaping (Orange) — Sound Modification</h3>
+
+<h4 id="rolloff-processor-settings">Rolloff Processor Settings</h4>
+<p>Only the maximum values are configurable; slider minimums are fixed at 0.0.</p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Low Rolloff Max</td><td>2.0</td><td>Maximum rolloff exponent applied to harmonics below the crossover point</td></tr>
+<tr><td>High Rolloff Max</td><td>3.0</td><td>Maximum rolloff exponent applied to harmonics above the crossover point</td></tr>
+<tr><td>Crossover Harmonic Max</td><td>32</td><td>Maximum harmonic number at which the high rolloff begins</td></tr>
+<tr><td>Transition Width Max</td><td>16</td><td>Maximum number of harmonics spanning the crossover transition zone</td></tr>
+</tbody>
+</table>
+
+<h4 id="formant-body-settings">Formant Body Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>F1 Frequency Min</td><td>200 Hz</td><td>Minimum first formant center frequency</td></tr>
+<tr><td>F1 Frequency Max</td><td>1000 Hz</td><td>Maximum first formant center frequency</td></tr>
+<tr><td>F2 Frequency Min</td><td>800 Hz</td><td>Minimum second formant center frequency</td></tr>
+<tr><td>F2 Frequency Max</td><td>3000 Hz</td><td>Maximum second formant center frequency</td></tr>
+<tr><td>Q Factor Max</td><td>20.0</td><td>Maximum formant resonance width (shared for both F1 and F2)</td></tr>
+</tbody>
+</table>
+
+<h4 id="noise-color-filter-settings">Noise Color Filter Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Color Min</td><td>100 Hz</td><td>Minimum noise filter center frequency</td></tr>
+<tr><td>Color Max</td><td>8000 Hz</td><td>Maximum noise filter center frequency</td></tr>
+<tr><td>Filter Q Min</td><td>0.5</td><td>Minimum filter resonance (broad bandwidth)</td></tr>
+<tr><td>Filter Q Max</td><td>10.0</td><td>Maximum filter resonance (narrow bandwidth)</td></tr>
+</tbody>
+</table>
+
+<h3 id="filters-purple---signal-processing">3. Filters (Purple) — Signal Processing</h3>
+
+<h4 id="ten-band-eq-settings">10-Band EQ Settings</h4>
+<p>These ranges apply to all ten bands simultaneously.</p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Gain Min</td><td>0.0</td><td>Minimum per-band gain (0 = mute, 1 = unity)</td></tr>
+<tr><td>Gain Max</td><td>2.0</td><td>Maximum per-band gain (2 = approx. +6 dB boost)</td></tr>
+<tr><td>Q Min</td><td>0.5</td><td>Minimum band Q factor (wide bell)</td></tr>
+<tr><td>Q Max</td><td>20.0</td><td>Maximum band Q factor (narrow bell)</td></tr>
+</tbody>
+</table>
+
+<h4 id="comb-filter-settings">Comb Filter Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Delay Min</td><td>0.1 ms</td><td>Minimum comb delay time</td></tr>
+<tr><td>Delay Max</td><td>100.0 ms</td><td>Maximum comb delay time</td></tr>
+<tr><td>Feedback Min</td><td>-0.99</td><td>Minimum feedback (negative = phase-inverted feedback, flanger character)</td></tr>
+<tr><td>Feedback Max</td><td>0.99</td><td>Maximum feedback (approaching ±1.0 causes self-oscillation)</td></tr>
+<tr><td>Damping Min</td><td>0.0</td><td>Minimum high-frequency damping of the feedback signal</td></tr>
+<tr><td>Damping Max</td><td>1.0</td><td>Maximum damping (simulates string or room absorption)</td></tr>
+</tbody>
+</table>
+
+<h4 id="lp-hp-filter-settings">LP/HP Filter Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Cutoff Min</td><td>20 Hz</td><td>Minimum filter cutoff frequency</td></tr>
+<tr><td>Cutoff Max</td><td>20000 Hz</td><td>Maximum filter cutoff frequency</td></tr>
+<tr><td>Resonance Min</td><td>0.5</td><td>Minimum Q / resonance (0.707 = Butterworth — flat response near cutoff)</td></tr>
+<tr><td>Resonance Max</td><td>20.0</td><td>Maximum resonance (high values produce a strong peak near cutoff)</td></tr>
+</tbody>
+</table>
+
+<h3 id="modifiers-green---parameter-control">4. Modifiers (Green) — Parameter Control</h3>
+
+<h4 id="physics-system-settings">Physics System Settings</h4>
+<p>Only the maximum values are configurable; slider minimums are fixed.</p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Mass Max</td><td>10.0</td><td>Maximum parameter inertia (resistance to change)</td></tr>
+<tr><td>Spring K Max</td><td>1.0</td><td>Maximum spring stiffness (return-to-target restoring force)</td></tr>
+<tr><td>Impulse Max</td><td>1000.0</td><td>Maximum impulse force magnitude</td></tr>
+</tbody>
+</table>
+
+<h4 id="drift-engine-settings">Drift Engine Settings</h4>
+<p>Only the maximum values are configurable; slider minimums are fixed.</p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Amount Max</td><td>0.1</td><td>Maximum drift deviation amplitude</td></tr>
+<tr><td>Rate Max</td><td>10.0 Hz</td><td>Maximum drift oscillation rate</td></tr>
+</tbody>
+</table>
+
+<h4 id="lfo-settings">LFO Settings</h4>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Frequency Max</td><td>20.0 Hz</td><td>Upper limit of the LFO frequency slider</td></tr>
+</tbody>
+</table>
+
+<h4 id="frequency-mapper-settings">Frequency Mapper Settings</h4>
+<p>The Frequency Mapper maps an input pitch frequency to a normalized control value. These settings define the slider ranges for both its input (frequency) and output (control value) parameters.</p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Low Freq Min</td><td>1.0 Hz</td><td>Minimum value for the input frequency floor slider</td></tr>
+<tr><td>Low Freq Max</td><td>500.0 Hz</td><td>Maximum value for the input frequency floor slider</td></tr>
+<tr><td>High Freq Min</td><td>500.0 Hz</td><td>Minimum value for the input frequency ceiling slider</td></tr>
+<tr><td>High Freq Max</td><td>20000.0 Hz</td><td>Maximum value for the input frequency ceiling slider</td></tr>
+<tr><td>Output Floor Min</td><td>-2.0</td><td>Minimum value for the output floor (lowest mapped control value)</td></tr>
+<tr><td>Output Floor Max</td><td>1.0</td><td>Maximum value for the output floor</td></tr>
+<tr><td>Output Ceiling Min</td><td>0.0</td><td>Minimum value for the output ceiling (highest mapped control value)</td></tr>
+<tr><td>Output Ceiling Max</td><td>2.0</td><td>Maximum value for the output ceiling</td></tr>
+</tbody>
+</table>
+
+<h3 id="easing-settings-shared">5. Easing Settings (Shared)</h3>
+<p>These configure the default parameter values for easing functions used by both the Sound Engine (Easing Applicator container) and Score Canvas (rhythm easing). Min/max columns indicate the full adjustable range of each default value.</p>
+
+<p><strong>Back Easing</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Range</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Overshoot Default</td><td>0.5</td><td>0.0 – 2.0</td><td>How far past the target value the curve overshoots before returning</td></tr>
+</tbody>
+</table>
+
+<p><strong>Elastic Easing</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Range</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Amplitude Default</td><td>0.5</td><td>0.1 – 2.0</td><td>Spring oscillation amplitude</td></tr>
+<tr><td>Period Default</td><td>0.4</td><td>0.1 – 1.0</td><td>Spring oscillation period</td></tr>
+</tbody>
+</table>
+
+<p><strong>Wobble Easing</strong></p>
+<table>
+<thead>
+<tr><th>Setting</th><th>Default</th><th>Range</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Frequency Default</td><td>2.0</td><td>0.5 – 5.0</td><td>Decaying oscillation frequency</td></tr>
+<tr><td>Decay Default</td><td>0.7</td><td>0.1 – 1.0</td><td>Oscillation decay rate (higher = faster fade)</td></tr>
+</tbody>
+</table>
+
+<h2 id="implementation-details">Implementation Details</h2>
+<h3 id="parameter-updating-flow">Parameter Updating Flow</h3>
+<ol type="1">
+<li><strong>User adjusts spinbox</strong> in Settings tab</li>
+<li><strong>Lambda callback → ContainerSettings field updated</strong></li>
+<li><strong><code>saveSettings()</code> called</strong> — persisted to QSettings immediately</li>
+<li><strong>Inspector panels</strong> use the stored limits as slider bounds when created</li>
+</ol>
+
+<h3 id="data-persistence">Data Persistence</h3>
+<ul>
+<li><strong>Storage</strong>: QSettings (system registry / ini file depending on platform)</li>
+<li><strong>Export</strong>: <em>Save Settings</em> button → <code>.csettings</code> JSON file</li>
+<li><strong>Import</strong>: <em>Load Settings</em> button → reads a <code>.csettings</code> file</li>
+<li><strong>Reset</strong>: <em>Reset to Defaults</em> button → restores all factory values and repopulates the tab</li>
+</ul>
+
+<h2 id="technical-architecture">Technical Architecture</h2>
+<h3 id="class-hierarchy">Class Hierarchy</h3>
+<pre><code>ContainerSettings (Singleton)
+├── HarmonicGeneratorSettings    (Essential / Blue)
+├── KarplusStrongSettings         (Essential / Blue)
+├── AttackSettings                (Essential / Blue)
+├── WavetableSynthSettings        (Essential / Blue)
+├── SpectrumToSignalSettings      (Essential / Blue)
+├── RolloffProcessorSettings      (Shaping / Orange)
+├── FormantBodySettings           (Shaping / Orange)
+├── BreathTurbulenceSettings      (Shaping / Orange)
+├── NoiseColorFilterSettings      (Shaping / Orange)
+├── BandpassEQSettings            (Filters / Purple)
+├── CombFilterSettings            (Filters / Purple)
+├── LowHighPassFilterSettings     (Filters / Purple)
+├── IRConvolutionSettings         (Filters / Purple)
+├── PhysicsSystemSettings         (Modifiers / Green)
+├── DriftEngineSettings           (Modifiers / Green)
+├── LFOSettings                   (Modifiers / Green)
+├── FrequencyMapperSettings       (Modifiers / Green)
+├── GateProcessorSettings         (hidden from UI — code retained)
+└── EasingSettings                (shared)</code></pre>
+
+<h3 id="integration-points">Integration Points</h3>
+<ul>
+<li><strong>Inspector panels</strong>: Use ContainerSettings min/max as slider bounds when building the inspector for a container</li>
+<li><strong>KalaMain</strong>: Calls <code>populateSettingsTab()</code> to build the Settings UI from ContainerSettings structures</li>
+<li><strong>Project Files</strong>: Settings serialized alongside project data via <code>toJson()</code> / <code>fromJson()</code></li>
+</ul>
+
+<h2 id="future-enhancements">Future Enhancements</h2>
+<h3 id="proposed-features">Proposed Features</h3>
+<ul>
+<li><strong>Preset Management</strong>: Named parameter range combinations for quick switching between different instrument families</li>
+<li><strong>Undo/Redo Support</strong>: Settings change history for experimentation</li>
+</ul>
+
+<hr />
+<p><em>This documentation applies to Kala v1.4 and later. For implementation details, refer to <code>ContainerSettings</code> in containersettings.h and containersettings.cpp.</em></p>
+</body>
+</html>

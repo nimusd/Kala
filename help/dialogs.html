@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="style.css">
+<title>Dialogs</title>
+</head>
+<body>
+<h1 id="kala-dialog-documentation">Kala Dialog Documentation</h1>
+<p>This document describes the UI interaction of all dialogs in
+Kala.</p>
+<hr />
+<h2 id="new-project-dialog">1. New Project Dialog</h2>
+<p><strong>Window Title:</strong> New project <strong>Size:</strong> 400
+x 300 <strong>Modal:</strong> Yes <strong>Source:</strong>
+<code>dialogNewProject.ui</code> <strong>Background Color:</strong>
+Light green (<code>rgb(220, 232, 214)</code>)</p>
+<h3 id="how-to-open">How to Open</h3>
+<p>Triggered from the File menu when creating a new project.</p>
+<h3 id="ui-components">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project name</td>
+<td>QLineEdit</td>
+<td>Text field for entering the new project name</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Accepts the dialog and creates the project with the entered
+name</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses the dialog without creating a project</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow">Interaction Flow</h3>
+<ol type="1">
+<li>User opens the dialog from the File menu.</li>
+<li>User types a project name into the text field.</li>
+<li>User clicks <strong>OK</strong> to create the project, or
+<strong>Cancel</strong> to abort.</li>
+</ol>
+<hr />
+<h2 id="scale-dialog">2. Scale Dialog</h2>
+<p><strong>Window Title:</strong> Scale Settings <strong>Size:</strong>
+400 x 200 <strong>Modal:</strong> Yes <strong>Source:</strong>
+<code>scaledialog.h</code>, <code>scaledialog.cpp</code>,
+<code>scaledialog.ui</code></p>
+<h3 id="how-to-open-1">How to Open</h3>
+<p>Click the <strong>Edit</strong> button in the Scale panel at the
+bottom of the Composition tab. The Scale panel displays the current
+scale in the format <code>1 · [Scale Name] · [Base Freq] Hz</code>.</p>
+<h3 id="ui-components-1">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scale</td>
+<td>QComboBox</td>
+<td>Dropdown populated with all available scales (20+ world scales).
+Each entry shows the scale name and stores the scale ID as user
+data.</td>
+</tr>
+<tr>
+<td>Base Frequency</td>
+<td>QDoubleSpinBox</td>
+<td>Sets the reference frequency. Range: 10.00 - 1000.00 Hz. Default:
+25.00 Hz. Suffix: ” Hz”.</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Accepts the selected scale and base frequency</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without changing the scale</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-1">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens pre-populated with the current scale selected in the
+dropdown and the current base frequency in the spinbox.</li>
+<li>User selects a different scale from the dropdown (e.g., Pythagorean,
+Just Intonation, Raga Bhairav, etc.).</li>
+<li>User optionally adjusts the base frequency.</li>
+<li>Clicking <strong>OK</strong> applies the new scale and base
+frequency to the ScoreCanvas. The canvas regenerates its scale lines
+using the new tuning ratios.</li>
+<li>Clicking <strong>Cancel</strong> discards any changes.</li>
+</ol>
+<h3 id="data-flow">Data Flow</h3>
+<ul>
+<li>On accept, the caller retrieves the selected scale via
+<code>getSelectedScale()</code> and base frequency via
+<code>getBaseFrequency()</code>.</li>
+<li>The ScoreCanvas then calls <code>setScale()</code> and
+<code>setBaseFrequency()</code>, which regenerate the colored horizontal
+scale lines across octaves 0-9.</li>
+</ul>
+<hr />
+<h2 id="composition-settings-dialog">3. Composition Settings Dialog</h2>
+<p><strong>Window Title:</strong> Composition Settings
+<strong>Size:</strong> 400 x 450 <strong>Modal:</strong> Yes
+<strong>Source:</strong> <code>compositionsettingsdialog.h</code>,
+<code>compositionsettingsdialog.cpp</code></p>
+<h3 id="how-to-open-2">How to Open</h3>
+<p>Accessible via <strong>File &gt; Composition Settings</strong>. Syncs
+with ScoreCanvasWindow toolbar controls.</p>
+<h3 id="ui-components-2">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>QLineEdit</td>
+<td>The composition name</td>
+</tr>
+<tr>
+<td>Time Mode</td>
+<td>Two QRadioButtons</td>
+<td><strong>Absolute</strong> or <strong>Musical</strong>. Determines
+whether the composition length is specified in clock time or in
+bars.</td>
+</tr>
+<tr>
+<td>Tempo</td>
+<td>QSpinBox</td>
+<td>Range: 20 - 300 BPM. Suffix: ” BPM”.</td>
+</tr>
+<tr>
+<td>Time Signature</td>
+<td>Two QSpinBoxes</td>
+<td>Numerator (1-99) / Denominator (0-99), displayed side by side with a
+“/” separator.</td>
+</tr>
+<tr>
+<td>Length (Absolute)</td>
+<td>QTimeEdit</td>
+<td>Displayed when Absolute mode is selected. Format:
+<code>HH:mm:ss</code>.</td>
+</tr>
+<tr>
+<td>Length (Musical)</td>
+<td>QSpinBox</td>
+<td>Displayed when Musical mode is selected. Range: 1 - 9999. Suffix: ”
+bars”.</td>
+</tr>
+<tr>
+<td>Calculated Info</td>
+<td>QGroupBox</td>
+<td>Read-only section showing computed values: bar duration in ms and
+total duration in bars = MM:SS.mmm format.</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Accepts settings</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without saving</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-2">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens pre-populated with current composition settings.</li>
+<li>User can change the composition name.</li>
+<li>Selecting a <strong>Time Mode</strong> radio button switches the
+Length input:
+<ul>
+<li><strong>Absolute</strong>: Shows the <code>HH:mm:ss</code> time
+editor.</li>
+<li><strong>Musical</strong>: Shows the bars spinbox.</li>
+</ul></li>
+<li>Changing <strong>Tempo</strong>, <strong>Time Signature</strong>, or
+<strong>Length</strong> values immediately updates the “Calculated Info”
+panel, showing:
+<ul>
+<li>Bar duration in milliseconds</li>
+<li>Total duration in both bars and <code>MM:SS.mmm</code> format</li>
+</ul></li>
+<li>When the user changes duration in Absolute mode, the bars count is
+auto-synced (and vice versa). Signal blocking prevents infinite update
+loops.</li>
+<li>Clicking <strong>OK</strong> returns the edited
+<code>CompositionSettings</code> struct via
+<code>getSettings()</code>.</li>
+</ol>
+<h3 id="live-updates">Live Updates</h3>
+<p>All input fields are connected to recalculation slots. Any change to
+tempo, time signature, duration, or bar count triggers
+<code>updateLengthConversion()</code>, which refreshes the Calculated
+Info labels in real time.</p>
+<hr />
+<h2 id="go-to-dialog">4. Go To Dialog</h2>
+<p><strong>Window Title:</strong> Go To <strong>Size:</strong> 350 x 200
+<strong>Modal:</strong> Yes <strong>Source:</strong>
+<code>gotodialog.h</code>, <code>gotodialog.cpp</code></p>
+<h3 id="how-to-open-3">How to Open</h3>
+<p>Triggered by pressing the <strong>G</strong> keyboard shortcut in the
+Composition tab.</p>
+<h3 id="ui-components-3">UI Components</h3>
+<p>The dialog adapts its layout based on the current time mode:</p>
+<p><strong>Absolute Mode (MM:SS:MS):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Minutes</td>
+<td>QSpinBox</td>
+<td>Range: 0 - 9999. Suffix: ” min”.</td>
+</tr>
+<tr>
+<td>Seconds</td>
+<td>QSpinBox</td>
+<td>Range: 0 - 59. Suffix: ” sec”.</td>
+</tr>
+<tr>
+<td>Milliseconds</td>
+<td>QSpinBox</td>
+<td>Range: 0 - 999. Suffix: ” ms”.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Musical Mode (Measure:Beat:MS):</strong></p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Measure</td>
+<td>QSpinBox</td>
+<td>Range: 1 - 9999. Prefix: “Bar”. 1-based.</td>
+</tr>
+<tr>
+<td>Beat</td>
+<td>QSpinBox</td>
+<td>Range: 1 - [time signature numerator]. Prefix: “Beat”. 1-based.</td>
+</tr>
+<tr>
+<td>Milliseconds</td>
+<td>QSpinBox</td>
+<td>Range: 0 - 999. Suffix: ” ms”.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Common Components:</strong></p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mode label</td>
+<td>QLabel</td>
+<td>Shows “Go to position (Minutes:Seconds:Milliseconds):” or “Go to
+position (Measure:Beat:Milliseconds):”</td>
+</tr>
+<tr>
+<td>Info label</td>
+<td>QLabel</td>
+<td>Gray italic text showing the calculated target time in ms (and in
+MM:SS.mmm format for Musical mode)</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Navigates to the target position</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without navigating</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-3">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens with the appropriate input mode based on the
+composition’s current time mode.</li>
+<li>The first input field receives focus with its value selected for
+quick typing.</li>
+<li>As the user changes any value, the info label updates in real time
+showing the calculated target time in milliseconds.</li>
+<li>In Musical mode, the calculation uses:
+<code>(bar-1) * barDuration + (beat-1) * beatDuration + ms</code>.</li>
+<li>Clicking <strong>OK</strong> returns the target time via
+<code>getTargetTimeMs()</code>, and the ScoreCanvas scrolls to that
+position.</li>
+</ol>
+<hr />
+<h2 id="easing-dialog">5. Easing Dialog</h2>
+<p><strong>Window Title:</strong> Apply Rhythmic Easing
+<strong>Size:</strong> 380 x 520 <strong>Modal:</strong> Yes
+<strong>Source:</strong> <code>easingdialog.h</code>,
+<code>easingdialog.cpp</code>, <code>easingdialog.ui</code></p>
+<h3 id="how-to-open-4">How to Open</h3>
+<p>Used by ScoreCanvas to apply easing functions that redistribute note
+positions within a time span. Triggered from the composition context
+when notes are selected.</p>
+<h3 id="ui-components-4">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Type</td>
+<td>QComboBox</td>
+<td>Dropdown of all easing types, grouped by category with separators.
+Defaults to QuadInOut.</td>
+</tr>
+<tr>
+<td>Anchor</td>
+<td>QComboBox</td>
+<td>Determines which notes stay fixed: <strong>None</strong> (all notes
+move), <strong>First note</strong>, <strong>Last note</strong>,
+<strong>First and last notes</strong>.</td>
+</tr>
+<tr>
+<td>Curve Preview</td>
+<td>EasingPreviewWidget</td>
+<td>Visual preview of the easing curve, inserted between the type
+selector and parameters. Updates in real time.</td>
+</tr>
+<tr>
+<td>Parameters</td>
+<td>QGroupBox</td>
+<td>Dynamically shown/hidden based on selected easing type. Contains
+paired slider + spinbox controls.</td>
+</tr>
+<tr>
+<td>Weight</td>
+<td>Slider + SpinBox</td>
+<td>Overall effect strength. Range: 0.00 - 2.00. Default: 1.00.</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Applies the easing</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without applying</td>
+</tr>
+</tbody>
+</table>
+<h3 id="dynamic-parameters-by-easing-type">Dynamic Parameters by Easing
+Type</h3>
+<p>The Parameters group shows/hides controls based on the selected
+easing category:</p>
+<table>
+<colgroup>
+<col style="width: 44%" />
+<col style="width: 55%" />
+</colgroup>
+<thead>
+<tr>
+<th>Easing Category</th>
+<th>Visible Parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sine</strong> (SineIn/Out/InOut)</td>
+<td>Amplitude (0.1 - 3.0), Cycles (0.25 - 4.0)</td>
+</tr>
+<tr>
+<td><strong>Power</strong> (Quad/Cubic/Quartic In/Out/InOut)</td>
+<td>Power (0.5 - 8.0). Default changes per type.</td>
+</tr>
+<tr>
+<td><strong>Expo</strong> (ExpoIn/Out/InOut)</td>
+<td>Strength (1.0 - 20.0)</td>
+</tr>
+<tr>
+<td><strong>Circ</strong> (CircIn/Out/InOut)</td>
+<td>Curvature (0.1 - 3.0)</td>
+</tr>
+<tr>
+<td><strong>Bounce</strong> (BounceIn/Out/InOut)</td>
+<td>Bounces (1.0 - 8.0), Intensity (1.0 - 20.0)</td>
+</tr>
+<tr>
+<td><strong>Back</strong> (BackIn/Out/InOut)</td>
+<td>Overshoot (configurable range from settings)</td>
+</tr>
+<tr>
+<td><strong>Elastic</strong> (ElasticIn/Out/InOut)</td>
+<td>Amplitude (configurable), Period (configurable)</td>
+</tr>
+<tr>
+<td><strong>Wobble</strong></td>
+<td>Frequency (configurable), Decay (configurable)</td>
+</tr>
+<tr>
+<td><strong>Linear</strong></td>
+<td>No parameters (group hidden)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-4">Interaction Flow</h3>
+<ol type="1">
+<li>User selects an easing type from the categorized dropdown.</li>
+<li>The curve preview updates to show the easing shape.</li>
+<li>Relevant parameter sliders appear. Each slider is bidirectionally
+synced with its spinbox.</li>
+<li>Adjusting any parameter immediately updates the curve preview.</li>
+<li>User selects an anchor mode to pin certain notes in place.</li>
+<li>User adjusts the weight to control effect intensity (1.0 = normal,
+&lt;1.0 = subtle, &gt;1.0 = exaggerated).</li>
+<li>Clicking <strong>OK</strong> returns the configured
+<code>Easing</code> object, anchor mode, and weight to the caller.</li>
+</ol>
+<hr />
+<h2 id="vibrato-editor-dialog">6. Vibrato Editor Dialog</h2>
+<p><strong>Window Title:</strong> Vibrato Editor <strong>Minimum
+Size:</strong> 500 x 500 <strong>Modal:</strong> Yes
+<strong>Source:</strong> <code>vibratoeditordialog.h</code>,
+<code>vibratoeditordialog.cpp</code></p>
+<h3 id="how-to-open-5">How to Open</h3>
+<p>Opened when editing vibrato properties on a note in the Composition
+tab.</p>
+<h3 id="ui-components-5">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Preset</td>
+<td>QComboBox</td>
+<td>Dropdown with “Custom” at index 0, followed by factory presets
+(suffixed with “(Factory)”), then user presets.</td>
+</tr>
+<tr>
+<td>Save…</td>
+<td>QPushButton</td>
+<td>Saves current settings as a named user preset</td>
+</tr>
+<tr>
+<td><strong>Parameters Group</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Rate (Hz)</td>
+<td>QDoubleSpinBox</td>
+<td>Oscillation speed. Range: 0.5 - 20.0 Hz. Step: 0.5. Typical: 4-7
+Hz.</td>
+</tr>
+<tr>
+<td>Pitch Depth (%)</td>
+<td>QDoubleSpinBox</td>
+<td>Pitch variation amount. Range: 0.0 - 20.0%. Step: 0.5. Typical:
+1-3%.</td>
+</tr>
+<tr>
+<td>Amplitude Depth (%)</td>
+<td>QDoubleSpinBox</td>
+<td>Loudness variation amount. Range: 0.0 - 100.0%. Step: 5.0.</td>
+</tr>
+<tr>
+<td>Onset (%)</td>
+<td>QDoubleSpinBox</td>
+<td>When vibrato starts as percentage into note. Range: 0.0 - 90.0%.
+Step: 5.0.</td>
+</tr>
+<tr>
+<td>Regularity</td>
+<td>QSlider (horizontal)</td>
+<td>Range: 0 - 100. Labels: “Mechanical” (left) to “Organic” (right).
+Current value shown as percentage.</td>
+</tr>
+<tr>
+<td><strong>Intensity Envelope Group</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Hint text</td>
+<td>QLabel</td>
+<td>“Click to add points, drag to move, right-click to delete.
+Shift+drag to snap to grid.”</td>
+</tr>
+<tr>
+<td>Load from Library…</td>
+<td>QPushButton</td>
+<td>Opens the Envelope Library Dialog to load a pre-made envelope
+curve</td>
+</tr>
+<tr>
+<td>Envelope Canvas</td>
+<td>EnvelopeCurveCanvas</td>
+<td>Interactive multi-point envelope editor. Minimum height: 180px.</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Accepts the vibrato configuration</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without changes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="factory-presets">Factory Presets</h3>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Rate</th>
+<th>Pitch Depth</th>
+<th>Amp Depth</th>
+<th>Onset</th>
+<th>Regularity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Classic Vocal</td>
+<td>5.5 Hz</td>
+<td>2%</td>
+<td>15%</td>
+<td>20%</td>
+<td>30%</td>
+</tr>
+<tr>
+<td>String</td>
+<td>6.0 Hz</td>
+<td>3%</td>
+<td>5%</td>
+<td>10%</td>
+<td>40%</td>
+</tr>
+<tr>
+<td>Slow Wide</td>
+<td>4.0 Hz</td>
+<td>5%</td>
+<td>25%</td>
+<td>30%</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>Fast Nervous</td>
+<td>8.0 Hz</td>
+<td>1.5%</td>
+<td>40%</td>
+<td>5%</td>
+<td>70%</td>
+</tr>
+<tr>
+<td>Gentle Fade-In</td>
+<td>5.0 Hz</td>
+<td>2%</td>
+<td>10%</td>
+<td>40%</td>
+<td>25%</td>
+</tr>
+<tr>
+<td>Tremolo</td>
+<td>7.0 Hz</td>
+<td>0%</td>
+<td>50%</td>
+<td>0%</td>
+<td>10%</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-5">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens with default values or the note’s existing vibrato
+settings (via <code>setVibrato()</code>).</li>
+<li><strong>Selecting a preset</strong> loads all its parameters into
+the controls. The preset dropdown resets to “Custom” if the user
+manually changes any parameter.</li>
+<li><strong>Adjusting parameters</strong> updates
+<code>currentVibrato</code> in real time.</li>
+<li><strong>Editing the envelope</strong> via the interactive canvas:
+click to add points, drag to reposition, right-click to delete,
+Shift+drag for grid snapping.</li>
+<li><strong>Load from Library</strong> opens the Envelope Library
+Dialog; on accept, the selected envelope replaces the current intensity
+envelope.</li>
+<li><strong>Save…</strong> prompts for a name via QInputDialog. If the
+name already exists, a confirmation dialog asks whether to overwrite.
+User presets are saved to <code>vibrato_presets.json</code> in the app
+data directory.</li>
+<li>Clicking <strong>OK</strong> returns the configured
+<code>Vibrato</code> struct. Presets preserve the note’s active state
+(on/off) separately from the preset values.</li>
+</ol>
+<hr />
+<h2 id="dynamics-curve-dialog">7. Dynamics Curve Dialog</h2>
+<p><strong>Window Title:</strong> Apply Dynamics Curve <strong>Minimum
+Size:</strong> 450 x 400 <strong>Modal:</strong> Yes
+<strong>Source:</strong> <code>dynamicscurvedialog.h</code>,
+<code>dynamicscurvedialog.cpp</code></p>
+<h3 id="how-to-open-6">How to Open</h3>
+<p>Triggered from the Composition tab when applying a dynamics curve to
+selected notes.</p>
+<h3 id="ui-components-6">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Preset</td>
+<td>QComboBox</td>
+<td>Dropdown of built-in curve presets</td>
+</tr>
+<tr>
+<td>Load…</td>
+<td>QPushButton</td>
+<td>Load curve from <code>.env.json</code> file</td>
+</tr>
+<tr>
+<td>Save…</td>
+<td>QPushButton</td>
+<td>Save curve to <code>.env.json</code> file</td>
+</tr>
+<tr>
+<td>Dynamics Curve</td>
+<td>EnvelopeCurveCanvas</td>
+<td>Interactive curve editor. Minimum height: 200px.</td>
+</tr>
+<tr>
+<td>Help text</td>
+<td>QLabel</td>
+<td>“Click to add points, drag to move. Right-click or drag off to
+delete.”</td>
+</tr>
+<tr>
+<td>Weight</td>
+<td>QSlider (horizontal)</td>
+<td>Range: 0 - 200 (representing 0.00 - 2.00). Default: 100 (1.00). Tick
+marks at 0.5 intervals.</td>
+</tr>
+<tr>
+<td>Weight value</td>
+<td>QLabel</td>
+<td>Shows current weight as decimal (e.g., “1.00”)</td>
+</tr>
+<tr>
+<td>Weight explanation</td>
+<td>QLabel</td>
+<td>“0-1: Subtle effect</td>
+</tr>
+<tr>
+<td>Selection info</td>
+<td>QLabel</td>
+<td>Shows note count and time span, e.g., “Selection: 12 notes, 3.5s
+span”</td>
+</tr>
+<tr>
+<td>Apply</td>
+<td>QPushButton</td>
+<td>Applies the dynamics curve (default button)</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>QPushButton</td>
+<td>Dismisses without applying</td>
+</tr>
+</tbody>
+</table>
+<h3 id="built-in-presets">Built-in Presets</h3>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Crescendo</td>
+<td>Linear rise from 0.3 to 1.0</td>
+</tr>
+<tr>
+<td>Decrescendo</td>
+<td>Linear fall from 1.0 to 0.3</td>
+</tr>
+<tr>
+<td>Swell</td>
+<td>Rise to 1.0 at midpoint, fall back to 0.4</td>
+</tr>
+<tr>
+<td>Accent First</td>
+<td>Start at 1.0, quick drop to 0.6</td>
+</tr>
+<tr>
+<td>Fade Out</td>
+<td>Smooth decay from 1.0 through 0.7, 0.4 to 0.15</td>
+</tr>
+<tr>
+<td>Accent Last</td>
+<td>Hold at 0.5, sharp rise to 1.0 at end</td>
+</tr>
+<tr>
+<td>Flat</td>
+<td>Uniform 0.8</td>
+</tr>
+<tr>
+<td>Custom</td>
+<td>Starts at 0.5 flat; user can freely edit</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-6">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens showing the selection info (note count and time span)
+and the Crescendo preset loaded by default.</li>
+<li><strong>Selecting a preset</strong> replaces the curve canvas with
+that preset’s shape.</li>
+<li><strong>Editing the curve</strong> interactively: click to add
+control points, drag to move, right-click or drag off canvas to
+delete.</li>
+<li><strong>Adjusting weight</strong> scales the effect. The value label
+updates in real time.</li>
+<li><strong>Save</strong> opens a file dialog for <code>.env.json</code>
+files. The curve is saved in a JSON format compatible with the Envelope
+Library.</li>
+<li><strong>Load</strong> opens a file dialog to load a
+<code>.env.json</code> file. On success, the curve is loaded into the
+canvas and the preset dropdown switches to “Custom”. A confirmation
+message shows the curve name and point count.</li>
+<li>Clicking <strong>Apply</strong> returns the curve points via
+<code>getCurve()</code> and the weight via
+<code>getWeight()</code>.</li>
+</ol>
+<h3 id="file-format">File Format</h3>
+<p>Saved files use JSON with the following structure:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;Dynamics Curve&quot;</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;description&quot;</span><span class="fu">:</span> <span class="st">&quot;Dynamics curve created in Kala&quot;</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;version&quot;</span><span class="fu">:</span> <span class="st">&quot;1.0&quot;</span><span class="fu">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;loopMode&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;points&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;time&quot;</span><span class="fu">:</span> <span class="fl">0.0</span><span class="fu">,</span> <span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="fl">0.3</span><span class="fu">,</span> <span class="dt">&quot;curveType&quot;</span><span class="fu">:</span> <span class="dv">0</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;time&quot;</span><span class="fu">:</span> <span class="fl">1.0</span><span class="fu">,</span> <span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="fl">1.0</span><span class="fu">,</span> <span class="dt">&quot;curveType&quot;</span><span class="fu">:</span> <span class="dv">0</span> <span class="fu">}</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<hr />
+<h2 id="dna-editor-dialog">8. DNA Editor Dialog</h2>
+<p><strong>Window Title:</strong> DNA Editor <strong>Minimum
+Size:</strong> 500 x 600 <strong>Modal:</strong> Yes
+<strong>Source:</strong> <code>dnaeditordialog.h</code>,
+<code>dnaeditordialog.cpp</code></p>
+<h3 id="how-to-open-7">How to Open</h3>
+<p>Opened from the Sound Engine tab when editing the harmonic
+distribution pattern (DNA) of a Harmonic Generator container.</p>
+<h3 id="ui-components-7">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Title</td>
+<td>QLabel</td>
+<td>“Edit Harmonic Distribution Pattern” (bold, larger font)</td>
+</tr>
+<tr>
+<td>Sequence</td>
+<td>QComboBox</td>
+<td>Dropdown of harmonic sequence types</td>
+</tr>
+<tr>
+<td>Spectrum Editor label</td>
+<td>QLabel</td>
+<td>Bold section header</td>
+</tr>
+<tr>
+<td>Help text</td>
+<td>QLabel</td>
+<td>“Drag bar tops to adjust - Double-click to restore - Delete key to
+zero”</td>
+</tr>
+<tr>
+<td>Spectrum Visualizer</td>
+<td>SpectrumVisualizer</td>
+<td>Interactive bar chart of harmonic amplitudes. Editable: drag bars to
+adjust individual harmonics.</td>
+</tr>
+<tr>
+<td>Save DNA…</td>
+<td>QPushButton</td>
+<td>Save pattern to <code>.dna.json</code> file</td>
+</tr>
+<tr>
+<td>Load DNA…</td>
+<td>QPushButton</td>
+<td>Load pattern from <code>.dna.json</code> file</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Accepts the current pattern</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without changes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sequence-types">Sequence Types</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Sequence</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All Harmonics</td>
+<td>Standard rolloff (1/n^1.5)</td>
+</tr>
+<tr>
+<td>Odd Only (Clarinet)</td>
+<td>Only odd harmonics present</td>
+</tr>
+<tr>
+<td>Even Only (Hollow)</td>
+<td>Only even harmonics present</td>
+</tr>
+<tr>
+<td>Odd Dominant</td>
+<td>Odd harmonics strong, even weak</td>
+</tr>
+<tr>
+<td>Fundamental+ (Near-sine)</td>
+<td>Strong fundamental, very weak upper partials</td>
+</tr>
+<tr>
+<td>Octaves Only (Organ)</td>
+<td>Only power-of-2 harmonics (1, 2, 4, 8, 16…)</td>
+</tr>
+<tr>
+<td>Fibonacci Sequence</td>
+<td>Harmonics at Fibonacci positions</td>
+</tr>
+<tr>
+<td>Prime Numbers</td>
+<td>Harmonics at prime number positions</td>
+</tr>
+<tr>
+<td>Triangular Numbers</td>
+<td>Harmonics at triangular number positions (1, 3, 6, 10…)</td>
+</tr>
+<tr>
+<td>Perfect Squares</td>
+<td>Harmonics at square number positions (1, 4, 9, 16…)</td>
+</tr>
+<tr>
+<td>Bell Curve (Gaussian)</td>
+<td>Peak at ~1/3 point, fading both directions</td>
+</tr>
+<tr>
+<td>Inverse (Bright)</td>
+<td>Higher harmonics are louder (opposite of natural rolloff)</td>
+</tr>
+<tr>
+<td><strong>Digit Formula</strong></td>
+<td>Derives amplitudes from fractional decimal digits of a formula or constant. Reveals a sub-panel with formula controls (see below).</td>
+</tr>
+<tr>
+<td>Custom</td>
+<td>Keeps current pattern for free-form editing</td>
+</tr>
+</tbody>
+</table>
+<h3 id="digit-formula-panel">Digit Formula Sub-Panel</h3>
+<p>Appears below the Sequence dropdown when <strong>Digit Formula</strong>
+is selected. The core idea: each fractional decimal digit (0–9) of the
+chosen number maps to a harmonic amplitude of <code>digit / 9.0</code>.
+The digits themselves provide a natural 0–1 normalization with no
+additional scaling needed.</p>
+<table>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 20%" />
+<col style="width: 52%" />
+</colgroup>
+<thead>
+<tr><th>Component</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>Constant</td>
+<td>QComboBox</td>
+<td>Select a built-in constant (π, e, φ, √2, √3, √5 — each with 120 hardcoded digits) or <em>Custom formula</em> to enter A and B manually.</td>
+</tr>
+<tr>
+<td>Formula A / op / B</td>
+<td>QDoubleSpinBox + QComboBox</td>
+<td>Visible when <em>Custom formula</em> is selected. Operators: ÷, ×, +, −, √A (unary), A² (unary), Aᴮ (power). B is hidden for unary operators. Rational operations (÷, ×, +, −, A², integer Aᴮ) use exact <code>__int128</code> long division — no digit limit. Irrational operations (√A, non-integer Aᴮ) use long double (~18 digits).</td>
+</tr>
+<tr>
+<td>Start digit</td>
+<td>QSpinBox</td>
+<td>Offset into the fractional expansion. Range: 0–119 for constants, 0–9999 for rational formulas, 0–17 for irrational. Sliding this explores different "regions" of the number — each window position produces a distinct spectrum from the same formula.</td>
+</tr>
+<tr>
+<td>Normalize amplitude</td>
+<td>QCheckBox</td>
+<td>When checked (default), normalizes total amplitude so all patterns have equal loudness. When unchecked, preserves raw digit/9 ratios — passages with many zeros are quieter.</td>
+</tr>
+<tr>
+<td>Result label</td>
+<td>QLabel</td>
+<td>Shows the active digit window: <code>digits [0 – 63]: 14159265358979323846264338… (120 available, 64 harmonics)</code></td>
+</tr>
+</tbody>
+</table>
+<h4>Rational vs Irrational</h4>
+<ul>
+<li><strong>Rational formulas</strong> (1÷7, 788÷1.36, etc.) produce repeating decimals. The period length is related to the denominator — prime denominators give the longest periods. Digits are computed by exact integer long division, so the window can reach offset 9999 with perfect accuracy.</li>
+<li><strong>Irrational constants</strong> (π, e, φ…) produce non-repeating sequences. Each window position is unique. These are hardcoded to 120 digits.</li>
+<li>Fractions with <strong>prime denominators</strong> (1/7, 1/17, 1/97…) are the most musically interesting: the period length divides p−1, so 1/97 has a 96-digit period — longer than 64 harmonics, effectively sounding non-repeating.</li>
+</ul>
+<h4>Window Offset as a Performance Parameter</h4>
+<p>The <strong>Start digit</strong> set in this dialog becomes the base
+value of the <code>digitWindowOffset</code> container parameter. This
+parameter has a corresponding <strong>input port</strong> on the Harmonic
+Generator, so it can be driven by a score curve via an Envelope Engine.
+As the offset changes during playback, harmonic amplitudes update in
+real time — the timbre morphs continuously through the mathematical
+landscape of the formula. See the Harmonic Generator documentation for
+the full setup.</p>
+<h3 id="interaction-flow-7">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens with 64 harmonics initialized to the “All Harmonics”
+sequence.</li>
+<li><strong>Selecting a sequence</strong> generates a new pattern and
+displays it in the spectrum visualizer. All generated patterns are
+normalized so amplitudes sum to 1.0.</li>
+<li><strong>Editing the spectrum</strong> directly: drag individual bar
+tops up or down. Double-click a bar to restore its generated value.
+Press Delete to zero out a bar. Changes feed back into the internal
+<code>customPattern</code> array.</li>
+<li><strong>Selecting “Custom”</strong> preserves the current pattern
+and allows free-form editing without regenerating.</li>
+<li><strong>Save DNA</strong> opens a file dialog for
+<code>.dna.json</code> files. <strong>Load DNA</strong> loads a file and
+switches the dropdown to “Custom”.</li>
+<li>Clicking <strong>OK</strong> returns the pattern via
+<code>getCustomDnaPattern()</code>.</li>
+<li>If <code>setCustomPattern()</code> was called before showing the
+dialog (editing an existing DNA), the dialog opens with that pattern
+displayed and the dropdown set to “Custom”.</li>
+</ol>
+<h3 id="file-format-1">File Format</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;Custom DNA Pattern&quot;</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;description&quot;</span><span class="fu">:</span> <span class="st">&quot;Custom harmonic distribution created in Kala DNA Editor&quot;</span><span class="fu">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;version&quot;</span><span class="fu">:</span> <span class="st">&quot;1.0&quot;</span><span class="fu">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;numHarmonics&quot;</span><span class="fu">:</span> <span class="dv">64</span><span class="fu">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;amplitudes&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fl">1.0</span><span class="ot">,</span> <span class="fl">0.5</span><span class="ot">,</span> <span class="fl">0.33</span><span class="ot">,</span> <span class="er">...</span><span class="ot">]</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<hr />
+<h2 id="export-audio-dialog">9. Export Audio Dialog</h2>
+<p><strong>Window Title:</strong> Export Audio <strong>Size:</strong>
+500 x 300 <strong>Modal:</strong> Yes <strong>Source:</strong>
+<code>exportaudiodialog.h</code>, <code>exportaudiodialog.cpp</code></p>
+<h3 id="how-to-open-8">How to Open</h3>
+<p>Accessible via <strong>File &gt; Export Audio</strong> (keyboard
+shortcut: <strong>Ctrl+E</strong>).</p>
+<h3 id="ui-components-8">UI Components</h3>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Export Mode</strong> group</td>
+<td>QGroupBox</td>
+<td></td>
+</tr>
+<tr>
+<td>All audio to single file</td>
+<td>QRadioButton</td>
+<td>Mixes all tracks to one WAV file. Selected by default.</td>
+</tr>
+<tr>
+<td>Each track to separate file</td>
+<td>QRadioButton</td>
+<td>Exports one WAV per track (named
+<code>ProjectName_TrackName.wav</code>).</td>
+</tr>
+<tr>
+<td>Track info</td>
+<td>QLabel</td>
+<td>“(N tracks will be exported)” - only visible when separate files
+mode is selected. Gray text.</td>
+</tr>
+<tr>
+<td><strong>Output Location</strong> group</td>
+<td>QGroupBox</td>
+<td></td>
+</tr>
+<tr>
+<td>Export path</td>
+<td>QLineEdit</td>
+<td>File path (single file) or directory path (separate files). Defaults
+to user’s Music folder + project name + <code>.wav</code>.</td>
+</tr>
+<tr>
+<td>Browse…</td>
+<td>QPushButton</td>
+<td>Opens a file save dialog (single file mode) or directory picker
+(separate files mode).</td>
+</tr>
+<tr>
+<td><strong>Settings</strong> group</td>
+<td>QGroupBox</td>
+<td>Read-only information about export format.</td>
+</tr>
+<tr>
+<td>Sample Rate</td>
+<td>QLabel</td>
+<td>Shows the AudioEngine sample rate (e.g., “44100 Hz”)</td>
+</tr>
+<tr>
+<td>Bit Depth</td>
+<td>QLabel</td>
+<td>Fixed: “24-bit”</td>
+</tr>
+<tr>
+<td>Channels</td>
+<td>QLabel</td>
+<td>Fixed: “Stereo”</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Starts the export</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without exporting</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-8">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens with single-file mode selected and the default export
+path pointing to the user’s Music folder.</li>
+<li><strong>Switching export mode</strong> updates the UI:
+<ul>
+<li><strong>Single file</strong>: Track info label hides. If the path
+doesn’t end in <code>.wav</code>, it resets to
+<code>Music/ProjectName.wav</code>.</li>
+<li><strong>Separate files</strong>: Track info label appears showing
+track count. If the path ends in <code>.wav</code>, it strips the
+filename and shows just the directory.</li>
+</ul></li>
+<li><strong>Browse</strong> opens the appropriate system dialog:
+<ul>
+<li>Single file mode: <code>QFileDialog::getSaveFileName</code> with WAV
+filter.</li>
+<li>Separate files mode:
+<code>QFileDialog::getExistingDirectory</code>.</li>
+</ul></li>
+<li>The last used export directory is remembered across sessions via
+QSettings.</li>
+<li>Clicking <strong>OK</strong> returns the export mode via
+<code>getExportMode()</code> and the path via
+<code>getExportPath()</code>.</li>
+</ol>
+<hr />
+<h2 id="envelope-library-dialog">10. Envelope Library Dialog</h2>
+<p><strong>Window Title:</strong> Envelope Library
+<strong>Size:</strong> 700 x 450 <strong>Modal:</strong> Yes
+<strong>Source:</strong> <code>envelopelibraryDialog.h</code>,
+<code>envelopelibraryDialog.cpp</code></p>
+<h3 id="how-to-open-9">How to Open</h3>
+<p>Opened from the <strong>Load from Library…</strong> button in the
+Vibrato Editor Dialog, or from other contexts that need envelope
+curves.</p>
+<h3 id="ui-components-9">UI Components</h3>
+<p><strong>Left Panel (Preset Browser):</strong></p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Presets label</td>
+<td>QLabel</td>
+<td>“Presets:”</td>
+</tr>
+<tr>
+<td>Session note</td>
+<td>QLabel</td>
+<td>Italic warning: “User presets are session-only. Use ‘Save to File…’
+to keep them.”</td>
+</tr>
+<tr>
+<td>Preset list</td>
+<td>QListWidget</td>
+<td>Max width: 200px. Factory presets shown in gray with “[Factory]”
+suffix. User presets shown in light blue.</td>
+</tr>
+<tr>
+<td>New</td>
+<td>QPushButton</td>
+<td>Creates a new blank user envelope</td>
+</tr>
+<tr>
+<td>Delete</td>
+<td>QPushButton</td>
+<td>Deletes the selected user preset (disabled for factory presets)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Right Panel (Envelope Editor):</strong></p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>QLineEdit</td>
+<td>Envelope name (disabled for factory presets)</td>
+</tr>
+<tr>
+<td>Loop Mode</td>
+<td>QComboBox</td>
+<td><strong>None</strong>, <strong>Loop</strong>, or
+<strong>Ping-pong</strong> (disabled for factory presets)</td>
+</tr>
+<tr>
+<td>Curve Canvas</td>
+<td>EnvelopeCurveCanvas</td>
+<td>Interactive envelope editor. Minimum size: 400 x 250. Disabled for
+factory presets.</td>
+</tr>
+<tr>
+<td>Instructions</td>
+<td>QLabel</td>
+<td>“Click to add points - Drag to move - Right-click to delete -
+Shift+drag to snap to grid”</td>
+</tr>
+<tr>
+<td>Save to File…</td>
+<td>QPushButton</td>
+<td>Saves the current envelope to a <code>.env.json</code> file</td>
+</tr>
+<tr>
+<td>Load from File…</td>
+<td>QPushButton</td>
+<td>Loads an envelope from a <code>.env.json</code> file</td>
+</tr>
+<tr>
+<td>Reset</td>
+<td>QPushButton</td>
+<td>Resets the curve to default linear rise (disabled for factory
+presets)</td>
+</tr>
+<tr>
+<td>Save to Presets</td>
+<td>QPushButton</td>
+<td>Saves edits to the in-session preset list (disabled for factory
+presets)</td>
+</tr>
+<tr>
+<td>OK</td>
+<td>Button</td>
+<td>Accepts the current envelope and closes</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td>Button</td>
+<td>Dismisses without accepting</td>
+</tr>
+</tbody>
+</table>
+<h3 id="factory-presets-1">Factory Presets</h3>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Curve Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linear Rise</td>
+<td>Linear</td>
+<td>Simple 0.0 to 1.0 ramp</td>
+</tr>
+<tr>
+<td>Linear Fall</td>
+<td>Linear</td>
+<td>Simple 1.0 to 0.0 ramp</td>
+</tr>
+<tr>
+<td>Attack-Decay</td>
+<td>Linear</td>
+<td>Rise to peak at 30%, then fall</td>
+</tr>
+<tr>
+<td>Swell</td>
+<td>Smooth</td>
+<td>Smooth rise to peak at 50%, then smooth fall</td>
+</tr>
+<tr>
+<td>Fade Out</td>
+<td>Smooth</td>
+<td>Hold at 1.0 until 70%, then smooth drop to 0</td>
+</tr>
+<tr>
+<td>Bell Curve</td>
+<td>Smooth</td>
+<td>Symmetric bell shape peaking at 50%</td>
+</tr>
+<tr>
+<td>Step Up</td>
+<td>Step</td>
+<td>Four ascending steps</td>
+</tr>
+<tr>
+<td>Step Down</td>
+<td>Step</td>
+<td>Four descending steps</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-9">Interaction Flow</h3>
+<ol type="1">
+<li>Dialog opens with the first factory preset selected and
+displayed.</li>
+<li><strong>Selecting a preset</strong> loads it into the editor.
+Factory presets are view-only (name, loop mode, curve canvas, and
+management buttons are all disabled).</li>
+<li><strong>New</strong> creates a new user envelope with a unique name
+(“New Envelope”, “New Envelope 2”, etc.) initialized as a linear rise.
+It is immediately added to the preset list and selected for
+editing.</li>
+<li><strong>Editing</strong>: The user can change the name, loop mode,
+and interactively edit control points on the curve canvas.</li>
+<li><strong>Save to Presets</strong> persists edits to the in-session
+preset. If the name is empty, a warning is shown. Factory presets show
+an informational message directing the user to use “New” instead.</li>
+<li><strong>Delete</strong> removes the selected user preset after
+selection. Factory presets cannot be deleted.</li>
+<li><strong>Reset</strong> restores the curve to a default linear rise
+shape.</li>
+<li><strong>Save to File</strong> exports the envelope as
+<code>.env.json</code>. <strong>Load from File</strong> imports an
+envelope file into the editor (not automatically added to presets - the
+user is prompted to click “Save to Presets” to keep it).</li>
+<li>Clicking <strong>OK</strong> returns the current envelope state
+(including any unsaved edits) via
+<code>getSelectedEnvelope()</code>.</li>
+</ol>
+<h3 id="important-notes">Important Notes</h3>
+<ul>
+<li>User presets are <strong>session-only</strong> and will be lost when
+the application closes unless saved to file.</li>
+<li>Factory presets are read-only and cannot be modified, overwritten,
+or deleted.</li>
+<li>The file format is compatible with the Dynamics Curve Dialog’s
+<code>.env.json</code> format, allowing envelope sharing between
+contexts.</li>
+</ul>
+<h3 id="file-format-2">File Format</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;Custom Envelope&quot;</span><span class="fu">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;description&quot;</span><span class="fu">:</span> <span class="st">&quot;Custom envelope created in Kala Envelope Library&quot;</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;version&quot;</span><span class="fu">:</span> <span class="st">&quot;1.0&quot;</span><span class="fu">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;loopMode&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;points&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;time&quot;</span><span class="fu">:</span> <span class="fl">0.0</span><span class="fu">,</span> <span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="fl">0.0</span><span class="fu">,</span> <span class="dt">&quot;curveType&quot;</span><span class="fu">:</span> <span class="dv">0</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;time&quot;</span><span class="fu">:</span> <span class="fl">0.5</span><span class="fu">,</span> <span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="fl">1.0</span><span class="fu">,</span> <span class="dt">&quot;curveType&quot;</span><span class="fu">:</span> <span class="dv">1</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;time&quot;</span><span class="fu">:</span> <span class="fl">1.0</span><span class="fu">,</span> <span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="fl">0.0</span><span class="fu">,</span> <span class="dt">&quot;curveType&quot;</span><span class="fu">:</span> <span class="dv">0</span> <span class="fu">}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p><strong>Curve type values:</strong> 0 = Linear, 1 = Smooth, 2 =
+Step</p>
+<hr />
+<h2 id="dialog-access-summary">Dialog Access Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Dialog</th>
+<th>Access Path</th>
+<th>Shortcut</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New Project</td>
+<td>File menu</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Scale</td>
+<td>Composition tab &gt; Scale panel &gt; Edit button</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Composition Settings</td>
+<td>File &gt; Composition Settings</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Go To</td>
+<td>Composition tab</td>
+<td>G</td>
+</tr>
+<tr>
+<td>Easing</td>
+<td>Composition tab (with notes selected)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Vibrato Editor</td>
+<td>Composition tab (note vibrato editing)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Dynamics Curve</td>
+<td>Composition tab (with notes selected)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>DNA Editor</td>
+<td>Sound Engine tab (Harmonic Generator container)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Export Audio</td>
+<td>File &gt; Export Audio</td>
+<td>Ctrl+E</td>
+</tr>
+<tr>
+<td>Envelope Library</td>
+<td>Vibrato Editor &gt; Load from Library…</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="shared-ui-patterns">Shared UI Patterns</h2>
+<h3 id="envelopecurvecanvas">EnvelopeCurveCanvas</h3>
+<p>Several dialogs share the <code>EnvelopeCurveCanvas</code> widget for
+interactive curve editing: - <strong>Vibrato Editor</strong> (intensity
+envelope) - <strong>Dynamics Curve</strong> (dynamics shape) -
+<strong>Envelope Library</strong> (general-purpose envelopes)</p>
+<p>Common interactions: - <strong>Click</strong> on empty area to add a
+control point - <strong>Drag</strong> a point to reposition it -
+<strong>Right-click</strong> a point to delete it -
+<strong>Shift+drag</strong> to snap to grid</p>
+<h3 id="slider-spinbox-pairs">Slider-Spinbox Pairs</h3>
+<p>The Easing Dialog and Vibrato Editor use paired slider/spinbox
+controls where adjusting one automatically updates the other. The
+sliders use integer values scaled by 10x or 100x to represent decimal
+ranges.</p>
+<h3 id="preset-systems">Preset Systems</h3>
+<p>Three dialogs include preset systems: - <strong>Vibrato
+Editor</strong>: Factory + user presets (persisted to JSON in app data)
+- <strong>Dynamics Curve</strong>: Built-in presets + file save/load -
+<strong>Envelope Library</strong>: Factory presets (read-only) +
+session-only user presets + file save/load</p>
+<h3 id="file-persistence">File Persistence</h3>
+<p>File-based save/load uses <code>.env.json</code> (envelopes/dynamics)
+and <code>.dna.json</code> (harmonic patterns) formats. All file dialogs
+remember the last used directory via QSettings.</p>
+</body>
+</html>

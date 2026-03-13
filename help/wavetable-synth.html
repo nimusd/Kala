@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Wavetable Synth</title>
+  </head>
+  <body>
+    <h1 id="wavetable-synth-documentation">Wavetable Synth
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Wavetable Synth is a <strong>wavetable oscillator</strong> that
+      plays back cyclic waveforms with band-limited aliasing control and
+      optional multi-frame morphing. Six built-in presets (Saw, Square,
+      Triangle, Pulse, SuperSaw, Formant) are available immediately, and
+      custom wavetables can be loaded from WAV files for fully user-defined
+      timbres.</p>
+    <p>It outputs both a <strong>signal</strong> (direct audio playback) and
+      a <strong>spectrum</strong> (FFT-derived harmonic amplitudes), so it can
+      feed directly into signal chains or spectrum-processing chains, or both
+      simultaneously.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Core sound generation</p>
+    <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZoAAAEcCAIAAABxjeXxAAAaRElEQVR4nO2dXW8b152H+yVyYfhrJNnVhW+EAru6KLBFr4wAvSSUetcL9cUIkLpOULRNjARooSJ2Wrepm6T1RnHSptiLrHbhFXaRWIqUlWxFfqFeLEeWSEm0hhxSJGVL3AuK5JyZM8OZ4QzPzOHz4HcjiRJHM+f/8JwzL+cbJgCAFnxD9QYAAEQDOgMATUBnAKAJ6AwANAGdAYAmoDMA0AR0BgCagM4AQBPQGQBoAjoDAE1AZwCgCegMADQBnQGAJqAzANAEdAYAmoDOAEAT0BkAaAI6AwBNQGcAoAnoDAA0AZ0BgCagMwDQBHQGAJqAzgBAE9AZAGgCOgMATUBnAKAJ6AwANAGdAYAmoDMA0AR0BgCagM4AQBPQGQBoAjoDAE1AZwCgCegMADQBnQGAJqAzANAEdAYAmoDOAEAT0BkAaAI6AwBNQGcAoAnoDAA0AZ0BgCagMwDQBHQGAJqAzgBAE9AZAGgCOgMATUBnAKAJ6AwANAGdAYAmoDMA0AR0BgCagM4AQBPQGQBoAjoDAE1AZwCgCegMADQBnQGAJqAzANAEdAYAmoDOAEAT0BkAaAI6AwBNQGcAoAla6WyvWLpxf/dnNx69MPHgH66uPv929tnLhJDsqSvL//T+6plPHv5xNr+cM1RXalxoorNiyfxkcedb760qbzeEJDzPv509P7mxltdQajroLP+49M+fPFTeSghJUU5dWf70zq7q2o2Y1Otsfbv4nT+vKW8chKQuz13O/mE2p7qCoyTdOisYpe9++EB5syAkpXnuclanPlq6dfb61KbyBkFIqnPqyrI282gp1tndTePvfrOsvDUQkvb8ZHJDdTVHQ4p1dmFyQ3k7IESDPP92Vo+rN1Kss2++s6K8HRCiR96dy6su6AhIsc6UtwBCtMmZTx6qLugIQGeEkOy3/7SmuqAjAJ0RQrKnriyrLugIQGeEkOyzl7OqCzoC0BkhJPssOlOL8sNPiE5RXdARgM4IIdln0ZlalB/+uPJBYb1Rv/qB6wtemKs3GuYF5dspz/rVvcb63LrqzSCBo7qgI0B/nV1YbUiKf9JsNBxV90Fh3fnN/idWnU2aDSt7hRci3n50ltaoLugI0F9nzQKemhS++cJcvdFoNFa3HK/08kgPCVLksenMYfatqZ519sJcXXQiOktrVBd0BAyAzi5vTdn7XOtX95qdE0EK8n5cNEmAzj4orDu03nvQmTZRXdARMAg6W7+6J46qmoW9auuLrV/dc/TXIksCdBZP3xOdaRPVBR0Bg6CzZv1bKnnSbDTMC7Zem9B5aXffhAkmmUckf0T2W25/rY1l81o6u7Da+bG1V+XcDLdXPuvYVJmvnb1Xi/skG9N6a+s/2/kXWjqzTNJF3iUkcUR1QUfAQOjMNs66sHpc1RdWLb02a+dl0rSUt8UCzvGa+FsNmxA73RZnn0WYtxLGuR8U1hv19b3OGzXFJ37Z1pn4RrKJQnFrG84+mrAf2n/T8i+7/1/y3pl1XtL+WUKSGtUFHQGDoTNhINnpjFi94CjpTiwVax+Qts0oGas6unteQzDrAFN2gtW6eYLOHENIj3+k/e/L+oMWCVq/dG6M+I5ynQnfkfX+SPKiuqAjYEB0ZilyhzimJrNS3VhHcC762JoSyt7WB7GWsYvOxMsm3P+UoDC7hcXxo7+ZtWOpCX0ua3+q7SPnxoju8zF3FuukJIksqgs6AgZFZ20NieXXqj1nidqHS21ByDt39uu5Wrjq7HgQJ8xDBdeZOMfnlK9nrCNc298UZwPR2UBEdUFHwMDo7FhDW5LR4l7hglVMjgkyW3+n1dHrVvZCbEXuOTJ105lssOnsnQWI8J+2epq2d0dnAxPVBR0Bg6OzZlGZU5K5fHPKKgW7zpo9IEt/p1nhk7Y6954h6qIzYbJfMnfmGAzKBp6BI6qqaUa7H9HZwER1QUfA4OisfWGE5EqLhqAP4YIG2W/ZT95ZXyl4cFU8d+l1KtM2dyZM1V9Ybdhn38XBryCUSVN+ZnPSFDfYcd3GpNkQz6i2NsZLZ45zEegsrVFd0BEwQDo71oT9rF/TTZKKbU9+OXtADnO1Ip3at/1N60nS9nckg832KUi7gh3bI79KznvbGpK+pKMfetmHzjrvLl53Zvuz6CzxUV3QETBIOiNdwgX9Ax3VBR0B6Iy0EuMd+CQFUV3QEYDOCCHZZ9GZWpQffkK0CSs5KUZ5CyBEm7DOpmKUtwBCtAmroCvmm++sKG8EhOiRd+fyqgs6AlKsswuTG8obASEa5Pm3s8s5Q3VBR0CKdXZvy/j73ywrbwqEpD0/mdxQXc3RkGKdmab5+tSm8qZASKpz6sryWl6HrpmZdp0VjNJ3P3ygvEEQktI8dzn76Z1d1XUcGenWmWma69vF7/x5TXmzICR1ee5y9g+zOdUVHCWp15lpmvnHpX/520PljYOQFOXUlWWd+mVNdNCZaZol0/zb4s633ltV3koISXiefzv7k8kNbebLrGiisyZ7xdJ/Z3d/fuPRCxMP/vHq6vNvq286hCQhp64sf/tPa2c+efjuXF6PazKkaKUzABhk0BkAaAI6AwBNQGcAoAnoDAA0AZ0BgCagMwDQBHQGAJqAzgBAE3TTWblc2a9Wq7V6rV6v1Q8IIbX6QbVWr9bq1VqtUtlXXaMxoo/OKpVKtYbCCOme/f2q6nqNBR10Vi6X96tV5U2EkBSlWqtXKhXVtRsxGuisTKeMkHDRbOyZep1VqzXlbYKQ9EanPlq6dcYYk5AeU63VVddxZKRYZ+VyWXlTIESDaHNmIMU629+na0ZINFFdzdGQYp3VOANASETR45xAmnWmugUQok2qtZrqgo4AdEYI0eSEADojhKAz1ShvAYToFNUFHQHojBByUENnagl92IrVJ1njcHancTNP1GR2p5E1DovVJz1WIIeynduFo03zaRWdpZQQB2y/drBiHE6rbnmkmel8Y8U43K+FqT0OpTTzu0eFSsgPCdUFHQEDpLNy7eBW4Uh5gyO23C4clQMajUPpkel8Y7P0FJ2ljECHqlI7mN+lABKa+d2jim+jcSj9JITRVBd0BAyKzpb4ME92lh4fcSgjzHS+EXTUqbqgI2AgdLZlPlXevEjXbJW7dyg4lP4zv3sU6MyA6oKOAP11Vq0ffLnD53kK8uVOl/LjUAbNphlgyKm6oCMgHTorPi493ijt3i/mvzJyC0Zuvnvyt4rbS8VC1sw/qn6xeai8YRE/2fEcH+1UnijfwhRlOte49+hgb728e7eUXyz6qZrcvJFfNHbuFAtrRSNfMkuqKz8gSddZca+0u+L3SHhk+f7+LFJLfFb2Dj10trzHEfSb2+sHG7dLPVZNftHY20qT0hKtMyNX8tkX85PNheKthwfK2xnxyK1drxMCtzih6SMzW0drd8tRVU1u3ti5b5hF1S7wR3J19nij188WaZZW68obHHHL3LaXzma31W9hwvPF1tHXi9EXzvaSUTJUG8EHCdWZkYvFZc3QR0tyPHSmfNsSnul8Y33JjKlqtu8apcSPO5Oos+JelGNMZzYXisyjJTboLHTuZ6vxVU1u3ig8SLrPkqizSOb+vbN8b1954yPSoLNwmXt0uBVnJyA3b+QWjNKeajt4kjidFR/HOMy0hqs3khl0Fi7Ze/t9qJrd1USfFEiczmI6A+DMV5wTSGTQWbg8uhX7mCY3b+RvG0m+GC1xOtu934+jkps31u6UlTdB4gw6C5f+VE1u3ijuqnaEO4nTWf6rPh2VjcWS8iZInEFn4dI3nSX5wtrE6SzWc5rWbC4UlTdB4gw6C5e+6ezx18mdPkuezvp1VHLzRp+a2sTYMydGzs24vWDl3PDJZ0YnlddDQoLOwqVvVVNYR2e+0V5n1y+OPDN86XrnBehMSJp1Nnn6xMnTE2reHZ2Z6Kz/ceiMCEFn4YLOTHTW/6Az76CzcEFnZip0tvnZ4r+Pv/7y2TOZTCaTefHs2E/fuPwfc58VYtDZcXO8fnHkmRMnmxm6uCK+ZuXc8Mn2T+2DxImxzo9OjI13vjlybqZxc+bS0AnL7x6PQJ2DTY+3cG6hx6xcKhO1zoSd2TqaK+eGTw5dXBGOl328b/1Fx04WD+Xpicb4qPXIHv+144+u4xePnJtpHrhWw7A1D8vx7fy15iefZTvddOlo3jtfffzR+I9/eHY0k8lkMt8be/mV3/7bx8sb6KyfiPuucOfa+A+bx8PG6I9+dW11MwadDQ2PdBQ2MSYYrdkuO+1+8nS7wdnbZWN81KGzfONm17kz77dofmnZpPHRk/bySHki1Zl935626mx4pMtub315/eKIYDRbq5gYaynG3ju7fnHkmeGRIcvh9qOzjrNmLg2dODk03Gkw9i2xRGjbN+ffO39GVjaZM+evzdxEZ/3C6rKF3736ovSYHPP9X3+0GbnObJ/S1vY3Pur4DJ+5NNRqfK6jyCA6834LyRYKP9UhkerMbfS3cm74pP1gWQ6TQzrWYzR5WtJnl7+d0z6+dGY5vuOjtr6h67tbXPa/v/5Xr7J58eWPFr5EZ32hvdc2/2vivNdBafbRXvvr/0SsM3vr77Q2aW1YGnpzROA8RxlAZ93eQvICj+pKZaLvnUm6M63BpvWbnQ8GyU/HR63jPrcBvlRngrx8DjbdX99VZ5v/+bqnzDKZTCYz9qvZ0CMbdBaA1l7Lffpzz55Zi7O/nAl9YLo2R6G1yftBsqHiCXEA6F9n3d8CnQVOex7Kspe8dXY84rNn+NJ1qY/c24+zwx67ziavveSnbDI/+zhsPwCdBaC11z5/Szpl5uT778/GrrNme+radRK/2W6j9M6CJK4zm0Lf2U1nnZMzrru00x6c6a4zya9HqrOld171VzaZN67l0FnsHO+1qb+84vOwZC7diFRnNjd1RhlSc7lOXVnaZQCddX0LdBY+lj0vmTuzT5K6XUzjNVnpU2fCWFWcHetVZ1Nv+hrTZDKZ87+7j85iR73OLO2peT1Ep3l1Of81Jp78kvfOHA3ax5lN8Ut05juTpzu7zvGxIZ6d9DyFLRxce6vonNm0fxrJzg45z4ajs8hIns4W+jTYlN2C3mxMnhcciRMr1oZlvVqtu7+8rjtzfQt0FjDiLJiotqGLK9aLxRwdLrffbR9TxwWG1u9brzuzbZX1mrXRydQNNrkFPQCtBwTFfipA9oAglVd1k2b6cleA5+xYOnPcsOM/FcADggLQfnyjvws1Xv3wRsijInt8IzpTH3QWLq2G7e9CjTc/Xw9VNTke3xgIy8O1u19G+9r7Icf/OfnDtdGZ+qCzcOk8XLvrZbQ/+uNnMyGrhodrB0Nc+qSw8O6bMd3kJFv6BJ2pDzoLF2Hpk5szv38plpucWPokMLaF6cRb0DNnzp7/xXivt6CzMF1ik+YnaqjM3KZtYTrxFvTRsz/48Vu93oLOwnQhKLFs8AAHnYUOywYnUWemaRq5GJenu/WQwkhu0FnoTOcb60txPTFw+65RSrrNkqozM7YFN5dYXjPZQWe95Iuto68Xoy+c7SWjZKg2gg+SqzPTNI18lKPOzYUi/bLkB531mJmto7U75QhdtnPfMBN9AqBDonVmmqaxW9z+KoKFhDdum/+38UR5UyNdg84iyf1sdSsKl+2upcRkpmkmXGdGjt7ZwAWd9ZiZraO1u/TOEgZzZ4MZdNZLmDtLIpzZHNigs9DhzGYSdVbkurMBDjoLHa47S6LObHcFxBHuCkhs0Fm4zD2y3RUQQ7grICjiPZsxRnbPJlEfdBYuwj2bsYV7NoMR0xkAZ2RP1CDqg87CpfNEjTjDEzWC0X7eWdyRPe+MqA86C5f+VE2O550FovU02tgjexotUR90Fi590xlPow1ArOc0rZGtFRBT+vt0La91bcNsuWQh5Dijhc4U7Le+6Yy1AgLQt6OSk6zk1CWeS8Z2adxeOmuul+G2ElprURW/Quyis0CVJrw47L8fLDHrrD8rxch3snWllQAH1F/6VjWs5BSAFOlsfNSnF/zpzHP1xvA6s69Ti85U6Ky5epPwidU8rEH2Z2dhY0nQmYnOekmkOhsZcrNM66cR6ay3sow/Og42JctRd17m3iu3B511A52FT7Q6O3dROkhs/u6lAH0KdKY+vnu1XmuqS1+MzrxIgc7EtQJePDv20zcu97pWgIvOjpc+sS4A7FgYeGw8b1s11mXhWHFh4KGLK9YfCS34WECycZDkRxLFjI/aFtZuvq+48O3xmzoqbfjSdeGVriNTZ1m6LLt7/P8e70b/vY9842aUOhP+/dbmOXaydRHf4Uvjwv/obA+iTay/K/xZx4rrrh8Jlp9K1NbeWutS1vKZB0fzFtcK+N7Yy6/8tte1AtBZUMR9V7hzbTymlZzcdDY0PNJpKxNj1qbTde6s2e7bLfL6xbHOOucnbF6QLJMu98XopFiE/nXW/tLTUMMjQ50XNDdV/FKuM3GgNDFm+cdXzg2Lu1GBzkRtTYzJdSZsdltbgs6sDWB89KTYAGz7WdgDrf3WZbauc+y8dNa2p7/e2c35987HspITOguG1WVd19n89UebketMZqjjFtxFZ64DB+cUibOoOv0psfk2/2CcOrNXiOt7Cf++4/ypZRsCTgnFoTPXyrf/dzbRiMJytAevsaH1rynVWdd1Nl/+aOFLdNYX2nvN3yror/017Nr0bjqzN1ZL3XrrzH2KxFk2opIsb2EVU2skGLPO7N5xHShZ/0GXnmnzpz3NuEXYO5MdDsuelLnpumyw6eqXzhu1ItlvPnTWfbDpX2f+VkH/1WzokQ06C0Brr+U+/blnz6zF2V/OhD4w0epMcEpYndl6ZLIhUhJ0Zp/KEefderpsOLq5s85GWo6pZU/KLtALorPjvy8bYAabO3PXa3CdTV57yU/ZZH72cdh+ADoLQGuvff6WdMrMyfffn41dZ74GmzI1BNdZ60fOuhJmcGLWWdfBpudZ3YTozGqo9vZEpjNHZ9xXr9YewVDdOoM+dLb0zqv+yibzxrUcOoud47029ZdXfB6WzKUbkerMwxRd5s5cL8cPpDPphWYOnTkvyIxq7kzoI7iWpecltcnSmXikrHvSOQy0nQkJorPmWU55j8zzujPxZcL2iGei/Ohs6k1fY5pMJnP+d/fRWeyo15njVJf4ZacFu1y40Glw1jObAXR2XFTW70jOx4mn29x1Zh/COA1llaNoRq9ehu2V1rOHCdDZzKXT8g8DYU/Kjq9fnUlOZbrqzP2uALFrLLYf590gXtNw6MxMos4W+jTYlN2C3my+1okh4cPQ4a/2NLDNcZ3rmNpn+oLorHH94oj4YW5vx9Z3OT3hOdi0XB3met2Z9Vo54X29B03iDJooQeU6c7kizGtPtq6V83sqQLwerft8me2eTdeT4J1G5bq1bted9WGwyS3oAWg9ICj2UwGyBwTJ5s60jvt8n7KovSsggTvEZ44bdvynAnhAUADaj2/0d6HGqx/eCHlUZI9vRGfqo1RnCm7qiiqthu3vQo03P18PVTU5Ht8YCMvDtbtfRvva+yHH/zn5w7XRmfr0U2fCZf2Oi/7Tlc7DtbteRvujP342E7JqeLh2MMSlTwoL774Z001OsqVP0Jn69FNnwkRn8NtLExVh6ZObM79/KZabnFj6JDC2henEW9AzZ86e/8V4r7egszBdYqPFEzUUZG7TtjCdeAv66Nkf/PitXm9BZ2G6EJRYNniAg85Ch2WDk6gz0zSNXIzL0916SGEkN+gsdKbzjfWluJ4YuH3XKCXdZknVmRnbgptLLK+Z4MxtH3nobHZb/RYmPF9sHX29GH3hbC8ZJUO1EXyQXJ2Zpmnkoxx1bi4U6ZclPLd2vXR2a/dI+RYmPzNbR2t3yhG6bOe+YSb6BECHROvMNM3SXsl2ZiBclu/tM1+W/KzsHXrobHmPI+g3tx8cbNzutZuWX0z0RbNOkq6zJsXHpccbpd37xe2vDJ/9tfyt4s5SsZA184+qsmsySBKzU3niobOdyhPlW5iiTOca9x4d7K2Xd++V8ot++wT5xeLO3WJhrWjkS0m+xExKOnQmxaPdW1OtH3y5wyAlBfly56jKoYw0m+ZTn2VSqx+oLugI0F9ntfrBlvlUecMiXbNV7l57HEr/md/t8vGAzhKE/+NUqx8sPeZTPdFZeux1EoBDGTTT+UbBc+SOzpJFoENVqR3Mc14sqZnfParUOJRRJtAwE52pJ+jRKtcObhUog8TlduGo7NtlHMqumQ7lMnSmmBAHbL92sGIcTqtucKSZ6XxjxTjcD+gyDqVH5nePgo4x0VkiCHfMavWDYvVJ1jic3VHf+AY2szuNrHFYrIYsPA6lM7cLR5vm00Bz/+gsQfRYCdX6QaHyZMt8+rD09EHxkPQhD0tPt8ynhcqTXqqOQ2nJ00elp9uVJ0FH6+gscURYD4QQ1QUdAeiMEHJQrdVVF3QEoDNCCDpTjfIWQIg2qdZqqgs6AtKss1pdeSMgRI9UKvuqCzoCUqyz/f2q8kZAiB5RXc3RkGKdlctl5Y2AEA2yv19VXc3RkGKdmaa5X6WDRkhP0eMkQJN068w0zWq1prxBEJLeVCoV1UUcGanXmWmWq5wTICRU9DgD0EYDnZnlcplRJyGBUq3VdeqXNdFBZ00qlQrdNEL8RJu5fxv66KxJuVzZr1bxGiHWVGv1aq1erdU0G13a0E1nADCwoDMA0AR0BgCagM4AQBPQGQBoAjoDAE1AZwCgCegMADQBnQGAJqAzANAEdAYAmoDOAEAT0BkAaAI6AwBNQGcAoAnoDAA0AZ0BgCagMwDQBHQGAJqAzgBAE9AZAGgCOgMATUBnAKAJ6AwANAGdAYAmoDMA0AR0BgCagM4AQBPQGQBoAjoDAE1AZwCgCegMADQBnQGAJqAzANAEdAYAmoDOAEAT0BkAaAI6AwBNQGcAoAnoDAA0AZ0BgCagMwDQBHQGAJqAzgBAE9AZAGgCOgMATUBnAKAJ6AwANAGdAYAmoDMA0AR0BgCa8P+W1DRDiLTgVQAAAABJRU5ErkJggg=="
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>position</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Frame morph position (0.0–1.0). Interpolates between wavetable
+            frames when the table has multiple frames</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency before synthesis. 1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down. Any ratio works — the system is
+            tuning-agnostic. Can be driven by LFO (vibrato), Envelope Engine
+            (pitch glide), or Physics System (spring pitch wobble).</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> The base pitch is provided automatically by
+      the audio graph. The <code>pitchMultiplier</code> port scales it before
+      playback, enabling vibrato, pitch glide, and static transposition.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Audio-rate waveform output (-1.0 to 1.0)</td>
+        </tr>
+        <tr>
+          <td><code>spectrum</code></td>
+          <td>Spectrum</td>
+          <td>FFT-derived harmonic amplitudes at the current position</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Both ports are active when <code>outputMode</code> is set to
+      <strong>Both</strong> (default). Either port can be disabled
+      individually via <code>outputMode</code>.</p>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>wavetableSelect</code></td>
+          <td>Integer</td>
+          <td>0 (Saw)</td>
+          <td>0–5</td>
+          <td>Built-in preset selection (ignored when a WAV file is loaded)</td>
+        </tr>
+        <tr>
+          <td><code>position</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0.0–1.0</td>
+          <td>Frame morph position (overridden by <code>position</code> input
+            when
+            connected)</td>
+        </tr>
+        <tr>
+          <td><code>cycleLength</code></td>
+          <td>Integer</td>
+          <td>2048</td>
+          <td>—</td>
+          <td>Samples per single wavetable frame (set via inspector)</td>
+        </tr>
+        <tr>
+          <td><code>outputMode</code></td>
+          <td>Integer</td>
+          <td>0 (Both)</td>
+          <td>0–2</td>
+          <td>Controls which output ports are active</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25–4.0</td>
+          <td>Pitch ratio applied before synthesis (1.0 = no change, 2.0 =
+            octave up, 0.5 = octave down)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="built-in-presets">Built-In Presets</h2>
+    <h3 id="saw">0: Saw</h3>
+    <p>Classic sawtooth wave generated by additive synthesis:</p>
+    <pre><code>amplitude = 1/n  for harmonics n = 1, 2, 3, ...</code></pre>
+    <p><strong>Character:</strong> Bright, buzzy, rich in harmonics. The
+      most harmonically dense of the presets. <strong>Use for:</strong>
+      Strings, brass-like tones, bright pads, leads.</p>
+    <h3 id="square">1: Square</h3>
+    <p>Square wave generated by additive synthesis (odd harmonics only):</p>
+    <pre><code>amplitude = 1/n  for harmonics n = 1, 3, 5, 7, ...</code></pre>
+    <p><strong>Character:</strong> Hollow, woody quality with strong odd
+      harmonics. <strong>Use for:</strong> Clarinets, reed-like timbres, nasal
+      pads.</p>
+    <h3 id="triangle">2: Triangle</h3>
+    <p>Triangle wave (odd harmonics with alternating phase and 1/n²
+      rolloff):</p>
+    <pre><code>amplitude = 1/n²  for harmonics n = 1, 3, 5, ...  (alternating sign)</code></pre>
+    <p><strong>Character:</strong> Smooth, flute-like. Much softer than
+      Square due to rapid harmonic rolloff. <strong>Use for:</strong> Flutes,
+      soft leads, gentle sub-bass.</p>
+    <h3 id="pulse">3: Pulse</h3>
+    <p>Pulse wave with 25% duty cycle:</p>
+    <pre><code>amplitude = (2 / (n × π)) × sin(n × π × 0.25)</code></pre>
+    <p><strong>Character:</strong> Thinner than square, nasal quality. The
+      duty cycle produces a characteristic “hollow” sound. <strong>Use
+        for:</strong> Harpsichord-like tones, thin electronic leads.</p>
+    <h3 id="supersaw">4: SuperSaw</h3>
+    <p>Seven detuned sawtooth waves stacked together:</p>
+    <pre><code>Detune offsets: −11%, −6%, −2%, 0%, +2%, +6%, +11%</code></pre>
+    <p><strong>Character:</strong> Massive, chorus-like detuned texture. The
+      defining sound of classic trance synths. <strong>Use for:</strong> Lush
+      pads, walls of sound, electronic leads with width.</p>
+    <h3 id="formant">5: Formant</h3>
+    <p>Harmonics shaped by two Gaussian spectral bumps approximating the
+      “ah” vowel:</p>
+    <pre><code>F1 ≈ 5th harmonic  (−3 dB gaussian bump)
+F2 ≈ 9th harmonic  (−3 dB gaussian bump)</code></pre>
+    <p><strong>Character:</strong> Vocal, nasal, with built-in formant
+      color. The bump positions are fixed at preset load. <strong>Use
+        for:</strong> Voice-like timbres, vowel textures, organic pads.</p>
+    <h2 id="output-mode">Output Mode</h2>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 13%">
+        <col style="width: 25%">
+        <col style="width: 22%">
+        <col style="width: 22%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Value</th>
+          <th>Name</th>
+          <th>signalOut</th>
+          <th>spectrum</th>
+          <th>Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0</td>
+          <td>Both</td>
+          <td>Active</td>
+          <td>Active</td>
+          <td>Feed both signal and spectrum chains simultaneously</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>SignalOnly</td>
+          <td>Active</td>
+          <td>Inactive</td>
+          <td>Pure signal output — skip spectrum computation</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>SpectrumOnly</td>
+          <td>Inactive</td>
+          <td>Active</td>
+          <td>Feed into spectrum-processing chain (Rolloff, Spectrum Blender,
+            etc.)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> Even in SpectrumOnly mode, the phase
+      accumulator still advances each sample to keep playback in sync.</p>
+    <h2 id="position-and-frame-morphing">Position and Frame Morphing</h2>
+    <p>The <code>position</code> parameter selects where within the
+      wavetable’s frame stack playback occurs. Preset wavetables have a
+      <strong>single frame</strong> (position is irrelevant unless a
+      multi-frame WAV is loaded). Multi-frame WAV files unlock smooth
+      morphing:</p>
+    <pre><code>frame_pos = position × (num_frames - 1)
+output    = lerp(frame[floor(frame_pos)], frame[ceil(frame_pos)], frac)</code></pre>
+    <p>Frame interpolation is bilinear: it interpolates both across frames
+      and within the cycle (sample interpolation), producing smooth morphing
+      without zipper noise.</p>
+    <h3 id="modulating-position">Modulating Position</h3>
+    <p>Connect any control source to the <code>position</code> input port to
+      animate the morph point:</p>
+    <pre><code>[Envelope Engine] → controlOut → position → [Wavetable Synth]</code></pre>
+    <p>An envelope sweeping from 0.0 to 1.0 across the note duration scans
+      through the entire wavetable, creating timbral evolution.</p>
+    <h2 id="loading-custom-wavetables-wav-files">Loading Custom Wavetables
+      (WAV Files)</h2>
+    <p>Custom wavetables can be loaded via the inspector. The WAV file is
+      interpreted as a sequence of single-cycle frames:</p>
+    <pre><code>num_frames = total_samples / cycleLength
+frame[n]   = samples[n × cycleLength ... (n+1) × cycleLength - 1]</code></pre>
+    <ul>
+      <li><strong>Mono files</strong>: Loaded directly</li>
+      <li><strong>Stereo files</strong>: Channels are averaged to mono</li>
+      <li><strong>Normalization</strong>: Each frame is independently
+        normalized to peak ±1.0</li>
+    </ul>
+    <p>Set <code>cycleLength</code> in the inspector to match the WAV file’s
+      cycle length before loading. Common values: 256, 512, 1024, 2048,
+      4096.</p>
+    <p>When a WAV file is loaded, <code>wavetableSelect</code> is ignored —
+      the custom table takes priority. The built-in preset is restored if the
+      WAV is cleared.</p>
+    <h2 id="anti-aliasing-mipmaps">Anti-Aliasing (Mipmaps)</h2>
+    <p>The Wavetable Synth uses <strong>mipmap anti-aliasing</strong> to
+      prevent aliasing at high pitches. At load time, a chain of band-limited
+      copies of the wavetable is computed:</p>
+    <pre><code>Level 0: Full bandwidth (all harmonics up to tableSize/2)
+Level 1: Harmonics up to tableSize/4
+Level 2: Harmonics up to tableSize/8
+...</code></pre>
+    <p>At runtime, the mipmap level is selected based on pitch and sample
+      rate:</p>
+    <pre><code>safeHarmonics = sampleRate / (2 × pitch)</code></pre>
+    <p>The lowest mipmap level whose harmonic ceiling is ≤
+      <code>safeHarmonics</code> is used. This ensures the playback never
+      produces harmonics above Nyquist, eliminating aliasing without a runtime
+      lowpass filter.</p>
+    <h2 id="spectrum-output">Spectrum Output</h2>
+    <p>The <code>spectrum</code> output reflects the FFT-derived harmonic
+      content of the current frame position. It is updated whenever the
+      <code>position</code> value changes significantly (&gt;1e-6). The
+      spectrum contains up to 64 harmonics, normalized so the loudest harmonic
+      has amplitude 1.0.</p>
+    <p>This makes the Wavetable Synth useful as a replacement for the
+      Harmonic Generator in spectrum-processing chains:</p>
+    <pre><code>[Wavetable Synth] → spectrum → [Rolloff Processor] → [Spectrum To Signal] → signalOut</code></pre>
+    <p>The Rolloff Processor and Spectrum Blender will shape the wavetable’s
+      spectral content just as they would a Harmonic Generator’s output.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="simple-wavetable-oscillator">Simple Wavetable Oscillator</h3>
+    <pre><code>[Wavetable Synth] → signalOut → [Output]
+  wavetableSelect: 0 (Saw)
+  outputMode: 1 (SignalOnly)</code></pre>
+    <h3 id="wavetable-into-spectrum-chain">Wavetable into Spectrum
+      Chain</h3>
+    <pre><code>[Wavetable Synth] → spectrum → [Rolloff Processor] → [Spectrum To Signal] → signalOut
+  wavetableSelect: 2 (Triangle)
+  outputMode: 2 (SpectrumOnly)</code></pre>
+    <h3 id="morphing-pad-with-envelope">Morphing Pad with Envelope</h3>
+    <pre><code>[Envelope Engine] → controlOut → position → [Wavetable Synth]
+                                                   ↓ signalOut
+                                             [Formant Body] → signalOut</code></pre>
+    <p>The envelope sweeps through the wavetable frames over the note
+      duration, creating a sound that evolves timbrally from start to
+      finish.</p>
+    <h3 id="supersaw-pad">SuperSaw Pad</h3>
+    <pre><code>[Wavetable Synth] → signalOut → [Rolloff Processor (signalIn)] → signalOut → [Output]
+  wavetableSelect: 4 (SuperSaw)
+  outputMode: 1 (SignalOnly)</code></pre>
+    <p>The signal-mode Rolloff Processor shapes the high end of the
+      supersaw.</p>
+    <h3 id="vibrato-via-pitch-multiplier">Vibrato via Pitch Multiplier</h3>
+    <pre><code>[LFO] → valueOut → pitchMultiplier → [Wavetable Synth]
+  LFO frequency:  5.5 Hz
+  LFO amplitude:  0.015
+  LFO center:     1.0</code></pre>
+    <p>Drives frequency vibrato via the pitch ratio port. Works with any
+      wavetable preset and is independent of the built-in envelope or
+      morphing.</p>
+    <h3 id="parallel-wavetable-harmonic-generator">Parallel Wavetable +
+      Harmonic Generator</h3>
+    <pre><code>[Harmonic Generator] → [Spectrum To Signal] → signalA → [Signal Mixer] → [Output]
+                                                                 ↑
+[Wavetable Synth (SuperSaw)] → signalOut → signalB ─────────────┘</code></pre>
+    <p>Blend the wavetable texture with the harmonic generator’s clean
+      tone.</p>
+    <h2 id="comparison-with-other-generators">Comparison with Other
+      Generators</h2>
+    <table>
+      <colgroup>
+        <col style="width: 22%">
+        <col style="width: 16%">
+        <col style="width: 26%">
+        <col style="width: 34%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Domain</th>
+          <th>Pitch Source</th>
+          <th>Spectral Control</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Wavetable Synth</strong></td>
+          <td>Signal + Spectrum</td>
+          <td>Auto (note pitch)</td>
+          <td>Preset/WAV waveform; position morphing</td>
+        </tr>
+        <tr>
+          <td><strong>Harmonic Generator</strong></td>
+          <td>Spectrum</td>
+          <td>Auto</td>
+          <td>Per-harmonic amplitude sliders</td>
+        </tr>
+        <tr>
+          <td><strong>Karplus Strong</strong></td>
+          <td>Signal</td>
+          <td>Auto</td>
+          <td>Pluck position, damping</td>
+        </tr>
+        <tr>
+          <td><strong>Noise Color Filter</strong></td>
+          <td>Signal</td>
+          <td>—</td>
+          <td>Noise color/filter type</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Wavetable Synth is the fastest way to get classic electronic
+      waveforms. For harmonic control more granular than a preset shape, use
+      the Harmonic Generator instead.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="phase-accumulation">Phase Accumulation</h3>
+    <p>The phase accumulator runs in the range
+      <code>[0, cycleLength)</code>:</p>
+    <pre><code>phaseIncrement = pitch × cycleLength / sampleRate
+phase += phaseIncrement
+while (phase &gt;= cycleLength) phase -= cycleLength</code></pre>
+    <p>Sample interpolation within the table is linear (fractional
+      phase).</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p><code>reset()</code> returns phase to 0.0. Called at note start (but
+      not for legato transitions). This means all notes start at the same
+      phase position in the waveform.</p>
+    <h3 id="spectrum-cache">Spectrum Cache</h3>
+    <p>The spectrum is lazily recomputed only when <code>position</code>
+      changes by more than 1e-6. This avoids FFT overhead for static-position
+      playback.</p>
+    <h3 id="cpu-cost">CPU Cost</h3>
+    <ul>
+      <li><strong>Single-frame presets</strong>: Very lightweight — one table
+        lookup with linear interpolation per sample</li>
+      <li><strong>Multi-frame WAV</strong>: Same cost as single-frame
+        (bilinear interpolation adds one multiply per sample)</li>
+      <li><strong>Mipmap selection</strong>: Computed once per container
+        execution (not per sample)</li>
+      <li><strong>Spectrum output</strong>: FFT runs only when position
+        changes — negligible for slow or static position</li>
+    </ul>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>wavetablesynth.h</code>, <code>wavetablesynth.cpp</code></em></p>
+  </body>
+</html>
