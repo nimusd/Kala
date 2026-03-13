@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Easing Applicator</title>
+  </head>
+  <body>
+    <h1 id="easing-applicator-documentation">Easing Applicator
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Easing Applicator is a <strong>stateless mathematical
+        interpolator</strong> that applies easing functions to blend between two
+      values based on a progress input. Unlike a transition engine that
+      manages time internally, the Easing Applicator is a pure function: given
+      a start value, end value, and progress (0-1), it outputs an eased
+      interpolation.</p>
+    <p>This design makes it highly composable - you control the progress
+      externally (from an Envelope Engine, LFO, Physics System, or any other
+      source), and the Easing Applicator shapes how that progress translates
+      to the output value.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) - Shapes how parameter changes are
+      interpolated</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>easedValue = startValue + (endValue - startValue) × easingFunction(progress)</code></pre>
+    <p>The easing function transforms the linear progress (0→1) into a
+      curved progress, creating acceleration, deceleration, overshoot, bounce,
+      or other motion characteristics.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>startValue</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Beginning value of the interpolation</td>
+        </tr>
+        <tr>
+          <td><code>endValue</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Target value of the interpolation</td>
+        </tr>
+        <tr>
+          <td><code>progress</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Normalized position in transition (0.0 to 1.0, clamped)</td>
+        </tr>
+        <tr>
+          <td><code>easingSelect</code></td>
+          <td>Control</td>
+          <td>0</td>
+          <td>Easing function ID (0-28, see table below)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>easedValue</code></td>
+          <td>Control</td>
+          <td>Interpolated result with easing applied</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>easingSelect</code></td>
+          <td>Integer</td>
+          <td>0</td>
+          <td>0-28</td>
+          <td>Which easing function to use</td>
+        </tr>
+        <tr>
+          <td><code>easingOvershoot</code></td>
+          <td>Float</td>
+          <td>1.70158</td>
+          <td>0.0-5.0</td>
+          <td>Back easings: how far past target</td>
+        </tr>
+        <tr>
+          <td><code>easingAmplitude</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.1-3.0</td>
+          <td>Elastic easings: oscillation height</td>
+        </tr>
+        <tr>
+          <td><code>easingPeriod</code></td>
+          <td>Float</td>
+          <td>0.3</td>
+          <td>0.1-2.0</td>
+          <td>Elastic easings: oscillation period</td>
+        </tr>
+        <tr>
+          <td><code>easingFrequency</code></td>
+          <td>Float</td>
+          <td>3.0</td>
+          <td>1.0-10.0</td>
+          <td>Wobble easing: oscillation frequency</td>
+        </tr>
+        <tr>
+          <td><code>easingDecay</code></td>
+          <td>Float</td>
+          <td>0.8</td>
+          <td>0.1-2.0</td>
+          <td>Wobble easing: oscillation decay rate</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Additional parameters available through the underlying Easing class:
+      - <code>power</code> (0.5-8.0): For Quad/Cubic/Quartic - controls the
+      exponent - <code>sineAmplitude</code> (0.1-3.0): For Sine easings - wave
+      intensity - <code>sineCycles</code> (0.25-4.0): For Sine easings -
+      number of wave cycles - <code>expoStrength</code> (1.0-20.0): For Expo
+      easings - exponential steepness - <code>circStrength</code> (0.1-3.0):
+      For Circ easings - circular curve intensity - <code>bounceCount</code>
+      (1.0-8.0): For Bounce easings - number of bounces -
+      <code>bounceStrength</code> (1.0-20.0): For Bounce easings - bounce
+      intensity</p>
+    <h2 id="easing-functions-29-types">Easing Functions (29 Types)</h2>
+    <h3 id="linear-id-0">Linear (ID: 0)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Formula</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0</td>
+          <td>Linear</td>
+          <td><code>t</code></td>
+          <td>Constant rate, no acceleration</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="quadratic-ids-1-3">Quadratic (IDs: 1-3)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Formula</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Quad In</td>
+          <td><code>t^power</code></td>
+          <td>Accelerating start</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Quad Out</td>
+          <td><code>1 - (1-t)^power</code></td>
+          <td>Decelerating end</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Quad In-Out</td>
+          <td>Combined</td>
+          <td>Smooth acceleration/deceleration</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="cubic-ids-4-6">Cubic (IDs: 4-6)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Formula</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>4</td>
+          <td>Cubic In</td>
+          <td><code>t^power</code></td>
+          <td>Stronger acceleration</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Cubic Out</td>
+          <td><code>1 - (1-t)^power</code></td>
+          <td>Stronger deceleration</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>Cubic In-Out</td>
+          <td>Combined</td>
+          <td>Smoother S-curve</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="quartic-ids-7-9">Quartic (IDs: 7-9)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Formula</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>7</td>
+          <td>Quartic In</td>
+          <td><code>t^power</code></td>
+          <td>Even stronger acceleration</td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td>Quartic Out</td>
+          <td><code>1 - (1-t)^power</code></td>
+          <td>Even stronger deceleration</td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td>Quartic In-Out</td>
+          <td>Combined</td>
+          <td>Pronounced S-curve</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="sine-ids-10-12">Sine (IDs: 10-12)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>10</td>
+          <td>Sine In</td>
+          <td>Gentle acceleration based on cosine</td>
+        </tr>
+        <tr>
+          <td>11</td>
+          <td>Sine Out</td>
+          <td>Gentle deceleration based on sine</td>
+        </tr>
+        <tr>
+          <td>12</td>
+          <td>Sine In-Out</td>
+          <td>Natural wave-like motion</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="exponential-ids-13-15">Exponential (IDs: 13-15)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>13</td>
+          <td>Expo In</td>
+          <td>Very slow start, rapid acceleration</td>
+        </tr>
+        <tr>
+          <td>14</td>
+          <td>Expo Out</td>
+          <td>Rapid start, very slow end</td>
+        </tr>
+        <tr>
+          <td>15</td>
+          <td>Expo In-Out</td>
+          <td>Extreme contrast between ends and middle</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="circular-ids-16-18">Circular (IDs: 16-18)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>16</td>
+          <td>Circ In</td>
+          <td>Curved acceleration (quarter circle)</td>
+        </tr>
+        <tr>
+          <td>17</td>
+          <td>Circ Out</td>
+          <td>Curved deceleration (quarter circle)</td>
+        </tr>
+        <tr>
+          <td>18</td>
+          <td>Circ In-Out</td>
+          <td>Full circular motion feel</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="back-ids-19-21---can-overshoot">Back (IDs: 19-21) - Can
+      Overshoot</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>19</td>
+          <td>Back In</td>
+          <td>Pulls back before moving forward</td>
+        </tr>
+        <tr>
+          <td>20</td>
+          <td>Back Out</td>
+          <td>Overshoots target, then settles</td>
+        </tr>
+        <tr>
+          <td>21</td>
+          <td>Back In-Out</td>
+          <td>Anticipation and follow-through</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> Back easings produce values outside 0-1 range.
+      The <code>overshoot</code> parameter (default 1.70158) controls how
+      far.</p>
+    <h3 id="elastic-ids-22-24---can-overshoot">Elastic (IDs: 22-24) - Can
+      Overshoot</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>22</td>
+          <td>Elastic In</td>
+          <td>Spring compression at start</td>
+        </tr>
+        <tr>
+          <td>23</td>
+          <td>Elastic Out</td>
+          <td>Spring release at end</td>
+        </tr>
+        <tr>
+          <td>24</td>
+          <td>Elastic In-Out</td>
+          <td>Spring on both ends</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> Elastic easings oscillate outside 0-1 range.
+      Control with <code>amplitude</code> and <code>period</code>
+      parameters.</p>
+    <h3 id="bounce-ids-25-27">Bounce (IDs: 25-27)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>25</td>
+          <td>Bounce In</td>
+          <td>Bouncing approach</td>
+        </tr>
+        <tr>
+          <td>26</td>
+          <td>Bounce Out</td>
+          <td>Bouncing settlement</td>
+        </tr>
+        <tr>
+          <td>27</td>
+          <td>Bounce In-Out</td>
+          <td>Bouncing on both ends</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="wobble-id-28">Wobble (ID: 28)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>28</td>
+          <td>Wobble</td>
+          <td>Decaying oscillation overlaid on cubic ease-out</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> Wobble adds oscillation to base motion.
+      Control with <code>frequency</code> and <code>decay</code>
+      parameters.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-value-interpolation">Basic Value Interpolation</h3>
+    <p>The simplest use: interpolate between two fixed values based on
+      external progress.</p>
+    <pre><code>LFO (0-1 output) ──→ progress
+                              ├──→ Easing Applicator ──→ easedValue
+Constant (0.2) ──→ startValue
+Constant (0.8) ──→ endValue</code></pre>
+    <p>Result: The LFO’s linear 0-1 ramp becomes an eased transition between
+      0.2 and 0.8.</p>
+    <h3 id="envelope-driven-parameter-morphing">Envelope-Driven Parameter
+      Morphing</h3>
+    <p>Use an envelope to drive progress while easing shapes the motion.</p>
+    <pre><code>Envelope Engine ──→ progress
+                              ├──→ Easing Applicator ──→ [Filter Cutoff]
+Note Attack (500 Hz) ──→ startValue
+Note Sustain (2000 Hz) ──→ endValue</code></pre>
+    <p>Result: Filter cutoff follows envelope timing but with eased (not
+      linear) motion.</p>
+    <h3 id="pitch-glide-portamento">Pitch Glide / Portamento</h3>
+    <p>Connect pitch values and use progress from a timing source.</p>
+    <pre><code>Previous Note Pitch ──→ startValue
+                                     ├──→ Easing Applicator ──→ Spectrum to Signal (pitch)
+Current Note Pitch ──→ endValue
+Envelope (glide) ──→ progress</code></pre>
+    <p>Result: Pitch slides between notes with customizable acceleration
+      curve.</p>
+    <h3 id="physics-controlled-easing">Physics-Controlled Easing</h3>
+    <p>Let a Physics System provide the progress for organic motion.</p>
+    <pre><code>Physics System ──→ progress
+                              ├──→ Easing Applicator ──→ [Parameter]</code></pre>
+    <p>Result: Physics-based acceleration combined with easing
+      character.</p>
+    <h3 id="lfo-shaped-modulation">LFO-Shaped Modulation</h3>
+    <p>Apply easing to reshape an LFO’s waveform.</p>
+    <pre><code>LFO (sawtooth) ──→ progress
+                              ├──→ Easing Applicator (Bounce Out) ──→ [Vibrato depth]</code></pre>
+    <p>Result: Each LFO cycle bounces rather than ramps linearly.</p>
+    <h2 id="easing-selection-guide">Easing Selection Guide</h2>
+    <h3 id="by-musical-application">By Musical Application</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Application</th>
+          <th>Recommended Easings</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Pitch slides</strong></td>
+          <td>Sine, Cubic, Quartic</td>
+          <td>Natural vocal/string feel</td>
+        </tr>
+        <tr>
+          <td><strong>Filter sweeps</strong></td>
+          <td>Quad In-Out, Circ</td>
+          <td>Smooth frequency motion</td>
+        </tr>
+        <tr>
+          <td><strong>Attack transients</strong></td>
+          <td>Expo Out, Circ Out</td>
+          <td>Fast initial response</td>
+        </tr>
+        <tr>
+          <td><strong>Release tails</strong></td>
+          <td>Expo In, Quad In</td>
+          <td>Natural decay shape</td>
+        </tr>
+        <tr>
+          <td><strong>Bouncy effects</strong></td>
+          <td>Bounce Out, Elastic Out</td>
+          <td>Playful character</td>
+        </tr>
+        <tr>
+          <td><strong>Anticipation</strong></td>
+          <td>Back In</td>
+          <td>“Wind up” before action</td>
+        </tr>
+        <tr>
+          <td><strong>Overshoot settle</strong></td>
+          <td>Back Out</td>
+          <td>Natural physics feel</td>
+        </tr>
+        <tr>
+          <td><strong>Spring effects</strong></td>
+          <td>Elastic Out</td>
+          <td>Mechanical spring response</td>
+        </tr>
+        <tr>
+          <td><strong>Wobble/Vibrato</strong></td>
+          <td>Wobble</td>
+          <td>Organic tremolo character</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="by-character">By Character</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Character</th>
+          <th>Easings</th>
+          <th>IDs</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Gentle</strong></td>
+          <td>Linear, Sine variants</td>
+          <td>0, 10-12</td>
+        </tr>
+        <tr>
+          <td><strong>Natural</strong></td>
+          <td>Quad, Cubic</td>
+          <td>1-6</td>
+        </tr>
+        <tr>
+          <td><strong>Dramatic</strong></td>
+          <td>Quartic, Expo</td>
+          <td>7-9, 13-15</td>
+        </tr>
+        <tr>
+          <td><strong>Mechanical</strong></td>
+          <td>Linear, Circ</td>
+          <td>0, 16-18</td>
+        </tr>
+        <tr>
+          <td><strong>Playful</strong></td>
+          <td>Bounce, Elastic</td>
+          <td>22-27</td>
+        </tr>
+        <tr>
+          <td><strong>Organic</strong></td>
+          <td>Back, Wobble</td>
+          <td>19-21, 28</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="overshoot-handling">Overshoot Handling</h3>
+    <p>Back and Elastic easings can produce output values outside the
+      startValue-endValue range:</p>
+    <ul>
+      <li><strong>Back In</strong>: Output briefly goes below startValue</li>
+      <li><strong>Back Out</strong>: Output briefly goes above endValue</li>
+      <li><strong>Elastic</strong>: Output oscillates past both
+        boundaries</li>
+    </ul>
+    <p>If your target parameter has hard limits, either: 1. Choose
+      non-overshooting easings (IDs 0-18, 25-27) 2. Clamp the output in your
+      signal chain 3. Use smaller overshoot/amplitude parameters</p>
+    <h3 id="progress-clamping">Progress Clamping</h3>
+    <p>The <code>progress</code> input is automatically clamped to 0.0-1.0.
+      Values outside this range are brought to the boundaries before the
+      easing function is applied.</p>
+    <h3 id="parameter-update-timing">Parameter Update Timing</h3>
+    <p>Easing parameters (easingSelect, overshoot, amplitude, etc.) are read
+      each processing cycle. You can modulate these in real-time for evolving
+      easing behavior.</p>
+    <h3 id="stateless-operation">Stateless Operation</h3>
+    <p>The Easing Applicator has no internal state or memory. Given the same
+      inputs, it always produces the same output. This makes it: -
+      <strong>Predictable</strong>: Output depends only on current inputs -
+      <strong>Composable</strong>: Chain multiple easings or use in parallel -
+      <strong>Efficient</strong>: No internal buffers or state management</p>
+    <h2 id="comparison-with-other-modifiers">Comparison with Other
+      Modifiers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 40%">
+        <col style="width: 33%">
+        <col style="width: 25%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Purpose</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Easing Applicator</strong></td>
+          <td>Shape interpolation between values</td>
+          <td>Stateless</td>
+        </tr>
+        <tr>
+          <td><strong>Physics System</strong></td>
+          <td>Emergent motion from mass/spring</td>
+          <td>Stateful (momentum)</td>
+        </tr>
+        <tr>
+          <td><strong>Envelope Engine</strong></td>
+          <td>Time-based value automation</td>
+          <td>Stateful (position in envelope)</td>
+        </tr>
+        <tr>
+          <td><strong>LFO</strong></td>
+          <td>Periodic oscillation</td>
+          <td>Stateful (phase)</td>
+        </tr>
+        <tr>
+          <td><strong>Drift Engine</strong></td>
+          <td>Random wandering</td>
+          <td>Stateful (current drift)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Easing Applicator is unique in being purely mathematical - it
+      transforms input to output with no memory of previous values. This makes
+      it ideal for reshaping the output of stateful containers.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="implementation">Implementation</h3>
+    <p>The Easing Applicator wraps the <code>Easing</code> class, which
+      implements all 29 easing functions. The core calculation:</p>
+    <div class="sourceCode" id="cb7">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a
+href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> easedProgress <span
+class="op">=</span> easing<span class="op">.</span>calculate<span class="op">(</span>progress<span
+class="op">);</span>  <span class="co">// Apply easing to 0-1 progress</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="cf">return</span> startValue <span
+class="op">+</span> <span class="op">(</span>endValue <span class="op">-</span> startValue<span
+class="op">)</span> <span class="op">*</span> easedProgress<span class="op">;</span>  <span
+class="co">// Interpolate</span></span></code></pre>
+    </div>
+    <h3 id="performance">Performance</h3>
+    <ul>
+      <li>Pure mathematical operations (no allocations, no I/O)</li>
+      <li>Single function call per sample</li>
+      <li>Negligible CPU impact even with many instances</li>
+    </ul>
+    <h3 id="serialization">Serialization</h3>
+    <p>Easing configurations are saved/loaded as part of the Sounit graph.
+      The <code>Easing</code> class supports JSON serialization including all
+      custom parameters.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>easingapplicator.h</code>, <code>easingapplicator.cpp</code>,
+        <code>easing.h</code>, <code>easing.cpp</code></em></p>
+  </body>
+</html>

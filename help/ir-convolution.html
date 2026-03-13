@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>IR Convolution</title>
+  </head>
+  <body>
+    <h1 id="ir-convolution-documentation">IR Convolution Documentation</h1>
+    <h2 id="”overview”">Overview</h2>
+    <p>The IR Convolution container applies an <strong>impulse response
+        (IR)</strong> to any input signal using partitioned FFT convolution.
+      This is the standard technique for realistic reverb, room simulation,
+      and cabinet/body modeling — the impulse response captures the acoustic
+      “fingerprint” of a real space or physical resonator, and convolution
+      applies that fingerprint to the dry signal.</p>
+    <p>The IR can come from two sources: a loaded <strong>WAV file</strong>
+      (classic reverb/cabinet use), or a <strong>live signal</strong> from any
+      other container via the <code>irIn</code> port (cross-synthesis). When
+      <code>irIn</code> is connected, the graph is first pre-rendered for
+      <code>captureLength</code> seconds at the note's pitch to capture that
+      signal as the IR, which is then used for the full note — so the
+      timbral and resonant character of one instrument is applied to
+      another.</p>
+    <p>Four post-processing parameters shape the wet signal: high-frequency
+      damping, low-cut filtering, pre-delay, and exponential decay trim.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Filters</strong> (Purple) - Signal processing and spatial
+      effects</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>Dry input signal to convolve</td>
+        </tr>
+        <tr>
+          <td><code>irIn</code></td>
+          <td>Signal</td>
+          <td>—</td>
+          <td>Live signal to use as the impulse response (cross-synthesis). When
+            connected, the WAV file IR is replaced by a capture of this signal.
+            See <em>Live Signal Cross-Synthesis</em> below.</td>
+        </tr>
+        <tr>
+          <td><code>wetDry</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Wet/dry blend (0.0 = fully dry, 1.0 = fully wet)</td>
+        </tr>
+        <tr>
+          <td><code>predelay</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Pre-delay before wet signal arrives (0–500 ms)</td>
+        </tr>
+        <tr>
+          <td><code>highDamp</code></td>
+          <td>Control</td>
+          <td>20000.0</td>
+          <td>High-frequency damping cutoff (200–20000 Hz)</td>
+        </tr>
+        <tr>
+          <td><code>lowCut</code></td>
+          <td>Control</td>
+          <td>20.0</td>
+          <td>Low-frequency cut (20–2000 Hz)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> <code>decay</code>, <code>fadeInPct</code>,
+      <code>captureLength</code>, and IR file loading are set via the
+      inspector only and are not modulatable.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Wet/dry blended output</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <h3 id="modulatable-ports-and-inspector">Modulatable (Ports and
+      Inspector)</h3>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>wetDry</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0–1.0</td>
+          <td>Wet/dry blend ratio</td>
+        </tr>
+        <tr>
+          <td><code>predelay</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0–500</td>
+          <td>Pre-delay in milliseconds</td>
+        </tr>
+        <tr>
+          <td><code>highDamp</code></td>
+          <td>Float</td>
+          <td>20000.0</td>
+          <td>200–20000</td>
+          <td>High-frequency damping cutoff (Hz)</td>
+        </tr>
+        <tr>
+          <td><code>lowCut</code></td>
+          <td>Float</td>
+          <td>20.0</td>
+          <td>20–2000</td>
+          <td>Low-cut filter frequency (Hz)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="inspector-only-not-modulatable">Inspector Only (Not
+      Modulatable)</h3>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>captureLength</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.1–20.0</td>
+          <td>Seconds of the <code>irIn</code> signal to capture for the IR
+            (only used when <code>irIn</code> is connected). Longer values
+            capture more of the sustained tone; shorter values capture just the
+            attack character. Must be less than the note duration. Longer
+            captures increase pre-render time significantly.</td>
+        </tr>
+        <tr>
+          <td><code>decay</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0–1.0</td>
+          <td>Exponential decay applied to IR before convolution (1.0 = full IR,
+            0.0 = extreme shortening)</td>
+        </tr>
+        <tr>
+          <td><code>fadeInPct</code></td>
+          <td>Float</td>
+          <td>10.0</td>
+          <td>0–100</td>
+          <td>Percentage of pre-delay used as a fade-in ramp to eliminate onset
+            artifacts</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="wetdry-blend">Wet/Dry Blend</h2>
+    <pre><code>signalOut = signalIn × (1.0 - wetDry) + wet_signal × wetDry</code></pre>
+    <table>
+      <colgroup>
+        <col style="width: 50%">
+        <col style="width: 50%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>wetDry</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>Fully dry — input signal passes through unchanged (no convolution
+            applied)</td>
+        </tr>
+        <tr>
+          <td>0.25</td>
+          <td>Mostly dry with subtle space</td>
+        </tr>
+        <tr>
+          <td>0.5 (default)</td>
+          <td>Equal blend</td>
+        </tr>
+        <tr>
+          <td>0.75</td>
+          <td>Mostly wet — strong reverb/effect character</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>Fully wet — only the convolved signal</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="pre-delay">Pre-Delay</h2>
+    <p>Pre-delay adds a gap before the wet (reverbed) signal begins. The dry
+      signal passes through immediately; the wet signal is delayed by
+      <code>predelay</code> milliseconds.</p>
+    <pre><code>Time:    0ms         predelay         predelay + IR length
+         │               │                │
+Dry:     ████████████████████████████████
+Wet:                     ████████████████(fade-in)█████████████</code></pre>
+    <table>
+      <thead>
+        <tr>
+          <th>predelay (ms)</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0 (default)</td>
+          <td>Wet signal starts immediately with the dry signal</td>
+        </tr>
+        <tr>
+          <td>5–20</td>
+          <td>Subtle separation — natural room feel</td>
+        </tr>
+        <tr>
+          <td>20–60</td>
+          <td>Clearly separated reverb onset — useful for drum rooms</td>
+        </tr>
+        <tr>
+          <td>60–200</td>
+          <td>Slapback + reverb effect</td>
+        </tr>
+        <tr>
+          <td>200–500</td>
+          <td>Long pre-delay for special effects</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="fade-in-ramp-fadeinpct">Fade-In Ramp
+      (<code>fadeInPct</code>)</h3>
+    <p>When <code>predelay &gt; 0</code>, the wet signal can fade in
+      linearly over the first <code>fadeInPct</code> percent of the pre-delay
+      window. This prevents the abrupt onset of the reverb tail from sounding
+      unnatural (an artifact of sample-accurate convolution starting
+      mid-buffer).</p>
+    <ul>
+      <li><strong>0%</strong>: No fade — wet signal appears at full level
+        immediately after pre-delay</li>
+      <li><strong>10% (default)</strong>: Short ramp — smooth onset of
+        reverb</li>
+      <li><strong>50%</strong>: Long ramp — gradual swell of reverb</li>
+      <li><strong>100%</strong>: Full pre-delay used as ramp — very gentle
+        bloom</li>
+    </ul>
+    <h2 id="high-frequency-damping-highdamp">High-Frequency Damping
+      (<code>highDamp</code>)</h2>
+    <p>A one-pole lowpass filter applied to the wet signal only. Frequencies
+      above <code>highDamp</code> are progressively attenuated.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>highDamp (Hz)</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>20000 (default)</td>
+          <td>No damping — full bandwidth wet signal</td>
+        </tr>
+        <tr>
+          <td>8000</td>
+          <td>Gentle darkening — models soft wall surfaces</td>
+        </tr>
+        <tr>
+          <td>4000</td>
+          <td>Moderate damping — warm, padded room character</td>
+        </tr>
+        <tr>
+          <td>2000</td>
+          <td>Strong damping — very warm, muffled reverb</td>
+        </tr>
+        <tr>
+          <td>500–1000</td>
+          <td>Extreme damping — submerged or heavily padded effect</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>High damping is useful when the IR contains too much brightness for
+      the application, or to model acoustically absorbent materials (carpets,
+      heavy drapes, foam).</p>
+    <h2 id="low-cut-filter-lowcut">Low-Cut Filter (<code>lowCut</code>)</h2>
+    <p>A one-pole highpass filter applied to the wet signal only.
+      Frequencies below <code>lowCut</code> are progressively attenuated.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>lowCut (Hz)</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>20 (default)</td>
+          <td>No low-cut — full bandwidth wet signal</td>
+        </tr>
+        <tr>
+          <td>80–150</td>
+          <td>Removes sub-bass from reverb — cleaner low end</td>
+        </tr>
+        <tr>
+          <td>200–400</td>
+          <td>Removes bass warmth from reverb — tight, precise reverb</td>
+        </tr>
+        <tr>
+          <td>500–800</td>
+          <td>Strong low-cut — only upper harmonics reverberate</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Low-cut prevents the reverb tail from building up muddy low-frequency
+      content, especially important when multiple voices are playing
+      simultaneously.</p>
+    <h2 id="decay-trim-decay">Decay Trim (<code>decay</code>)</h2>
+    <p>An exponential fade applied to the IR itself before the partitioned
+      FFT convolution is computed. This effectively shortens the reverb tail
+      without changing its early-reflection character.</p>
+    <pre><code>IR[n] = IR[n] × exp(−decay_rate × n)</code></pre>
+    <table>
+      <thead>
+        <tr>
+          <th>decay</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0 (default)</td>
+          <td>Full IR — maximum reverb length and density</td>
+        </tr>
+        <tr>
+          <td>0.8</td>
+          <td>Slightly shortened tail</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>Half the effective reverb time</td>
+        </tr>
+        <tr>
+          <td>0.2</td>
+          <td>Very short — only early reflections remain</td>
+        </tr>
+        <tr>
+          <td>0.0</td>
+          <td>Maximum shortening — nearly impulse-like</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Decay changes trigger IR re-preparation (the partitioned FFT chain is
+      recomputed), so changes during playback may cause a brief interruption.
+      Set decay before playback.</p>
+    <h2 id="loading-impulse-responses">Loading Impulse Responses</h2>
+    <p>IR files are loaded via the inspector. Accepted format:
+      <strong>WAV</strong> (any bit depth, any sample rate; stereo files are
+      averaged to mono).</p>
+    <p>The IR file is interpreted as a linear sequence of samples describing
+      how the space or device responds to an impulse. No special formatting is
+      needed — any standard IR WAV file from third-party libraries will
+      work.</p>
+    <h3 id="typical-ir-sources">Typical IR Sources</h3>
+    <ul>
+      <li>Room and hall IRs (reverb)</li>
+      <li>Speaker cabinet IRs (guitar/bass amp simulation)</li>
+      <li>Body resonance IRs (acoustic instrument body)</li>
+      <li>Hardware unit IRs (convolution synths, vintage plate reverbs)</li>
+    </ul>
+    <h3 id="without-an-ir-file">Without an IR File</h3>
+    <p>If no IR is loaded, the container passes the input signal through
+      unchanged (<code>signalOut = signalIn</code>). <code>wetDry</code> has
+      no effect without an IR. The inspector will indicate that no IR is
+      loaded.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-room-reverb">Basic Room Reverb</h3>
+    <pre><code>[Signal Source] → signalIn → [IR Convolution] → signalOut
+                               wetDry: 0.3
+                               predelay: 15 ms
+                               highDamp: 6000 Hz
+                               lowCut: 80 Hz
+                               [Load a room IR]</code></pre>
+    <p>Subtle room ambience: dry signal dominates, reverb adds spatial
+      depth.</p>
+    <h3 id="large-hall">Large Hall</h3>
+    <pre><code>[Signal Source] → signalIn → [IR Convolution] → signalOut
+                               wetDry: 0.5
+                               predelay: 40 ms
+                               highDamp: 12000 Hz
+                               lowCut: 60 Hz
+                               decay: 0.85
+                               [Load a large hall IR]</code></pre>
+    <h3 id="cabinet-body-simulation">Cabinet / Body Simulation</h3>
+    <pre><code>[Karplus Strong] → signalIn → [IR Convolution] → signalOut
+                                wetDry: 0.85
+                                predelay: 0 ms
+                                highDamp: 8000 Hz
+                                lowCut: 120 Hz
+                                decay: 0.7
+                                [Load a guitar body IR]</code></pre>
+    <p>High wet/dry for a cabinet sim — the IR provides most of the tonal
+      character. Short decay to avoid excessive tail.</p>
+    <h3 id="wetdry-modulation-with-envelope">Wet/Dry Modulation with
+      Envelope</h3>
+    <p>Reverb amount that increases toward the end of a note:</p>
+    <pre><code>[Envelope Engine] → controlOut → wetDry → [IR Convolution]
+  (envelope rises from 0.0 to 0.6 over note duration)</code></pre>
+    <p>The note starts dry and blooms into the reverb space as it
+      progresses.</p>
+    <h3 id="pitch-adaptive-reverb-mix">Pitch-Adaptive Reverb Mix</h3>
+    <p>More reverb on high notes:</p>
+    <pre><code>[Frequency Mapper] → controlOut → wetDry
+  outputMin: 0.1, outputMax: 0.7
+  curveType: Logarithmic</code></pre>
+    <p>High notes are more reverberated; low notes remain relatively
+      dry.</p>
+    <h3 id="pre-delay-for-separation">Pre-Delay for Separation</h3>
+    <pre><code>wetDry: 0.4
+predelay: 30 ms
+fadeInPct: 20</code></pre>
+    <p>30 ms pre-delay with a 20% fade-in ramp (6 ms ramp) creates a clearly
+      separated reverb that doesn’t blur the attack of short sounds.</p>
+    <h3 id="cross-synthesis-irin">Cross-Synthesis with Another Instrument</h3>
+    <pre><code>[Recorder]  → irIn     → [IR Convolution] → signalOut
+[KS Attack] → signalIn →
+                          captureLength: 2.0
+                          wetDry: 1.0</code></pre>
+    <p>The spectral and resonant character of the Recorder is imprinted onto
+      the Karplus Strong attack. The convolution operates at the note's pitch,
+      so resonant modes in the captured IR naturally reinforce harmonics of
+      the main signal.</p>
+    <h2 id="live-signal-cross-synthesis">Live Signal Cross-Synthesis</h2>
+    <p>When the <code>irIn</code> port is connected, IR Convolution enters
+      cross-synthesis mode. The WAV file IR (if any) is replaced for that
+      note by a live capture of the <code>irIn</code> signal.</p>
+    <h3 id="how-it-works">How It Works</h3>
+    <p>Because Kala pre-renders all notes, the capture can be done cleanly
+      before any audio is produced:</p>
+    <ol type="1">
+      <li><strong>Pre-roll</strong>: Before rendering each note, a temporary
+        clone of the graph is run silently for <code>captureLength</code>
+        seconds at the note's pitch.</li>
+      <li><strong>Capture</strong>: The <code>irIn</code> source's output
+        during that pre-roll is recorded into a ring buffer.</li>
+      <li><strong>Commit</strong>: The captured signal is set as the IR, with
+        full partitioned FFT preparation.</li>
+      <li><strong>Render</strong>: The note renders from sample 0 using the
+        captured IR — no mid-note switch, no artifact.</li>
+    </ol>
+    <p>Each note independently captures its own IR at its own pitch, so the
+      cross-synthesis is pitch-coherent: a Recorder or reed model captured at
+      A4 produces a different IR than one captured at C3.</p>
+    <h3 id="captureLength-as-timbral-control">captureLength as a Timbral
+      Control</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>captureLength</th>
+          <th>What is captured</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.1–0.5 s</td>
+          <td>Attack transient</td>
+          <td>Sharp, percussive coloring</td>
+        </tr>
+        <tr>
+          <td>1–3 s</td>
+          <td>Early sustain</td>
+          <td>Tonal body of the source</td>
+        </tr>
+        <tr>
+          <td>5–20 s</td>
+          <td>Full sustained tone or decay</td>
+          <td>Deep resonant fingerprint; long pre-render time</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="irIn-vs-file-ir">irIn vs. File IR</h3>
+    <p>The two sources are mutually exclusive per note: if <code>irIn</code>
+      is connected, the file IR is ignored for that note. To use a file IR,
+      leave <code>irIn</code> unconnected.</p>
+    <h3 id="render-time-warning">Render Time</h3>
+    <p>The pre-roll runs the full signal graph for
+      <code>captureLength × sampleRate</code> extra samples per note. A
+      20-second capture at 44100 Hz adds ~880,000 samples of pre-render per
+      note. For large scores with long capture lengths, overnight rendering
+      may be appropriate.</p>
+    <h2 id="tail-behavior">Tail Behavior</h2>
+    <p>IR Convolution is recognized by the audio graph as a
+      <strong>tail-producing container</strong> (via <code>hasTail()</code>).
+      After a note ends, Kala renders additional tail samples to capture
+      the full reverb decay — so the reverb tail is heard completely even if
+      the note is short.</p>
+    <p>The tail length is determined by the IR length and the
+      <code>decay</code> setting.</p>
+    <h2 id="comparison-with-other-spatial-coloring-containers">Comparison
+      with Other Spatial / Coloring Containers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 39%">
+        <col style="width: 21%">
+        <col style="width: 39%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Type</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>IR Convolution</strong></td>
+          <td>True convolution reverb</td>
+          <td>Realistic space, cabinet, room</td>
+        </tr>
+        <tr>
+          <td><strong>Comb Filter (Feedback)</strong></td>
+          <td>Delay-based resonator</td>
+          <td>Metallic, pitched reverb</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Resonant filter</td>
+          <td>Instrument body resonance</td>
+        </tr>
+        <tr>
+          <td><strong>Breath Turbulence</strong></td>
+          <td>Signal mixer</td>
+          <td>Voice/air texture blending</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>IR Convolution is the most realistic but also the most CPU-intensive
+      option. For abstract metallic reverb effects, a Comb Filter is much
+      lighter. For instrument body resonance, Formant Body may be more
+      controllable.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="”no-reverb-effect”">No Reverb Effect</h3>
+    <ol type="”1”">
+      <li>Confirm an IR file is loaded (the inspector shows the IR file path
+        or “No IR loaded”), or that <code>irIn</code> is connected</li>
+      <li>Check that <code>wetDry</code> is &gt; 0.0</li>
+      <li>Verify <code>signalIn</code> is connected and producing audio</li>
+    </ol>
+    <h3 id="”irIn-no-effect”">irIn Connected but No Cross-Synthesis Effect</h3>
+    <ol type="”1”">
+      <li>Confirm the <code>irIn</code> source is a signal-producing container
+        (outputs to <code>signalOut</code>). Control-only sources like LFO will
+        produce a silent IR.</li>
+      <li>Check that <code>captureLength</code> is shorter than the note
+        duration — if the note ends before the capture threshold is reached, the
+        pre-roll completes correctly, but very short notes combined with long
+        capture lengths may produce thin IRs.</li>
+      <li>Set <code>wetDry</code> to 1.0 to hear only the convolved signal
+        while testing.</li>
+    </ol>
+    <h3 id="muddy-low-end">Muddy Low End</h3>
+    <ol type="1">
+      <li>Increase <code>lowCut</code> to 100–200 Hz to remove sub-bass from
+        the reverb tail</li>
+      <li>Reduce <code>wetDry</code> slightly</li>
+    </ol>
+    <h3 id="too-bright-harsh-reverb">Too Bright / Harsh Reverb</h3>
+    <ol type="1">
+      <li>Reduce <code>highDamp</code> — try 4000–8000 Hz for darker
+        character</li>
+      <li>Some IRs are inherently bright; this parameter compensates</li>
+    </ol>
+    <h3 id="reverb-too-long">Reverb Too Long</h3>
+    <ol type="1">
+      <li>Reduce <code>decay</code> to shorten the IR tail</li>
+      <li>Note: decay changes require IR re-preparation — set before
+        playback</li>
+    </ol>
+    <h3 id="click-at-reverb-onset">Click at Reverb Onset</h3>
+    <ol type="1">
+      <li>Increase <code>fadeInPct</code> to extend the fade-in ramp after
+        pre-delay</li>
+      <li>Ensure <code>predelay</code> is &gt; 0 when using
+        <code>fadeInPct</code> (fade-in only applies during the pre-delay
+        window)</li>
+    </ol>
+    <h3 id="high-cpu-usage">High CPU Usage</h3>
+    <ol type="1">
+      <li>IR Convolution is the most CPU-intensive container. Long IRs with
+        many partitions are expensive.</li>
+      <li>Use <code>decay</code> to shorten the effective IR length</li>
+      <li>Avoid using multiple IR Convolution containers simultaneously</li>
+      <li>High-frequency damping and low-cut add minimal overhead (simple
+        one-pole filters)</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="algorithm-partitioned-overlap-save-fft-convolution">Algorithm:
+      Partitioned Overlap-Save FFT Convolution</h3>
+    <p>The container uses a partitioned overlap-save algorithm for efficient
+      convolution of long IRs:</p>
+    <ol type="1">
+      <li>The IR is divided into blocks of <code>blockSize</code> samples
+        (default: 512)</li>
+      <li>Each block is FFT’d into frequency-domain IR partitions</li>
+      <li>During playback, input samples are accumulated in blocks</li>
+      <li>Each block: FFT the input, multiply with all IR partition spectra,
+        accumulate, IFFT, overlap-add</li>
+      <li>One output sample is retrieved from the output buffer each call</li>
+    </ol>
+    <p>This approach has O(N log N) complexity per output sample rather than
+      O(N) for direct convolution, making long IRs practical. The FFT is a
+      simple radix-2 Cooley-Tukey implementation with no external
+      dependency.</p>
+    <h3 id="pre-allocated-buffers">Pre-Allocated Buffers</h3>
+    <p>All FFT work buffers (<code>m_fftRe</code>, <code>m_fftIm</code>,
+      <code>m_accumRe</code>, <code>m_accumIm</code>) are pre-allocated at IR
+      load time to avoid per-block memory allocation during audio
+      rendering.</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p>All internal buffers (pre-delay circular buffer, FFT delay line,
+      output buffer, overlap buffer, damping and low-cut filter states) are
+      zeroed at note start for non-legato notes. Preserved for legato
+      transitions.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>irconvolution.h</code>, <code>irconvolution.cpp</code></em></p>
+  </body>
+</html>

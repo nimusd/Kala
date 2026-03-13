@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Formant Body</title>
+  </head>
+  <body>
+    <h1 id="formant-body-documentation">Formant Body Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>Resonant filtering creating vowel-like character - the “throat” of
+      Kala. Uses two parallel resonant bandpass filters (biquad) to create
+      formant peaks that give sounds vowel-like qualities, mimicking the
+      resonant cavities of human vocal tracts.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Shaping</strong> (Orange) - Transforms sound character</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 25%">
+        <col style="width: 25%">
+        <col style="width: 20%">
+        <col style="width: 29%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port Name</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>-</td>
+          <td>Audio signal to be filtered (typically from Spectrum to Signal)</td>
+        </tr>
+        <tr>
+          <td><code>f1Freq</code></td>
+          <td>Control</td>
+          <td>500.0</td>
+          <td>First formant frequency (Hz) - typically 200-1000 Hz</td>
+        </tr>
+        <tr>
+          <td><code>f2Freq</code></td>
+          <td>Control</td>
+          <td>1500.0</td>
+          <td>Second formant frequency (Hz) - typically 500-4000 Hz</td>
+        </tr>
+        <tr>
+          <td><code>f1Q</code></td>
+          <td>Control</td>
+          <td>8.0</td>
+          <td>First formant resonance (1.0-20.0, higher = narrower, more
+            resonant)</td>
+        </tr>
+        <tr>
+          <td><code>f2Q</code></td>
+          <td>Control</td>
+          <td>10.0</td>
+          <td>Second formant resonance (1.0-20.0, higher = narrower, more
+            resonant)</td>
+        </tr>
+        <tr>
+          <td><code>directMix</code></td>
+          <td>Control</td>
+          <td>0.3</td>
+          <td>Dry/wet blend (0.0 = all filtered, 1.0 = all direct)</td>
+        </tr>
+        <tr>
+          <td><code>f1f2Balance</code></td>
+          <td>Control</td>
+          <td>0.6</td>
+          <td>Balance between F1 and F2 (0.0 = F2 only, 1.0 = F1 only)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port Name</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Audio signal with formant character applied</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>f1Freq</code></td>
+          <td>Float</td>
+          <td>500.0</td>
+          <td>200.0 - 1000.0</td>
+          <td>First formant center frequency (Hz)</td>
+        </tr>
+        <tr>
+          <td><code>f2Freq</code></td>
+          <td>Float</td>
+          <td>1500.0</td>
+          <td>500.0 - 4000.0</td>
+          <td>Second formant center frequency (Hz)</td>
+        </tr>
+        <tr>
+          <td><code>f1Q</code></td>
+          <td>Float</td>
+          <td>8.0</td>
+          <td>1.0 - 20.0</td>
+          <td>First formant Q/resonance factor</td>
+        </tr>
+        <tr>
+          <td><code>f2Q</code></td>
+          <td>Float</td>
+          <td>10.0</td>
+          <td>1.0 - 20.0</td>
+          <td>Second formant Q/resonance factor</td>
+        </tr>
+        <tr>
+          <td><code>directMix</code></td>
+          <td>Float</td>
+          <td>0.3</td>
+          <td>0.0 - 1.0</td>
+          <td>Direct signal vs filtered balance</td>
+        </tr>
+        <tr>
+          <td><code>f1f2Balance</code></td>
+          <td>Float</td>
+          <td>0.6</td>
+          <td>0.0 - 1.0</td>
+          <td>Balance between formant outputs</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="formant-system-architecture">Formant System Architecture</h2>
+    <h3 id="dual-parallel-filters">Dual Parallel Filters</h3>
+    <p>The Formant Body uses two independent bandpass filters:</p>
+    <h4 id="f1-filter-first-formant">F1 Filter (First Formant)</h4>
+    <ul>
+      <li><strong>Frequency Range</strong>: 200-1000 Hz (typical vowel
+        fundamentals)</li>
+      <li><strong>Purpose</strong>: Creates the “body” of vowel sound</li>
+      <li><strong>Character</strong>: Lower frequency resonances give warmth
+        and fullness</li>
+    </ul>
+    <h4 id="f2-filter-second-formant">F2 Filter (Second Formant)</h4>
+    <ul>
+      <li><strong>Frequency Range</strong>: 500-4000 Hz (vowel character
+        defining region)</li>
+      <li><strong>Purpose</strong>: Defines vowel identity and clarity</li>
+      <li><strong>Character</strong>: Higher frequencies determine vowel
+        type</li>
+    </ul>
+    <h3 id="signal-flow">Signal Flow</h3>
+    <pre><code>  Input ──┬─→ F1 Bandpass Filter ──┐
+          │                        │
+          └─→ F2 Bandpass Filter ──┼─→ Blend → Mix → Output
+                                   │
+                                   └─→ Direct Signal</code></pre>
+    <h2 id="processing-algorithm">Processing Algorithm</h2>
+    <h3 id="biquad-bandpass-filters">Biquad Bandpass Filters</h3>
+    <p>Each formant uses a 2nd-order bandpass filter (biquad structure):</p>
+    <h4 id="coefficient-calculation">Coefficient Calculation</h4>
+    <div class="sourceCode" id="cb2">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a
+href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> omega <span
+class="op">=</span> <span class="dv">2</span>π <span class="op">*</span> frequency <span
+class="op">/</span> sampleRate<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> sinOmega <span
+class="op">=</span> sin<span class="op">(</span>omega<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> cosOmega <span
+class="op">=</span> cos<span class="op">(</span>omega<span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> alpha <span
+class="op">=</span> sinOmega <span class="op">/</span> <span class="op">(</span><span
+class="fl">2.0</span> <span class="op">*</span> Q<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> a0 <span
+class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> alpha<span
+class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>b0 <span
+class="op">=</span> alpha <span class="op">/</span> a0<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>b1 <span
+class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>b2 <span
+class="op">=</span> <span class="op">-</span>alpha <span class="op">/</span> a0<span
+class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>a1 <span
+class="op">=</span> <span class="op">-</span><span class="fl">2.0</span> <span class="op">*</span> cosOmega <span
+class="op">/</span> a0<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>a2 <span
+class="op">=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> alpha<span
+class="op">)</span> <span class="op">/</span> a0<span class="op">;</span></span></code></pre>
+    </div>
+    <h4 id="sample-processing-direct-form-i">Sample Processing (Direct Form
+      I)</h4>
+    <div class="sourceCode" id="cb3">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a
+href="#cb3-1" aria-hidden="true" tabindex="-1"></a>output <span class="op">=</span> b0 <span
+class="op">*</span> input <span class="op">+</span> b1 <span class="op">*</span> x1 <span
+class="op">+</span> b2 <span class="op">*</span> x2 <span class="op">-</span> a1 <span
+class="op">*</span> y1 <span class="op">-</span> a2 <span class="op">*</span> y2<span
+class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Update filter state</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>x2 <span
+class="op">=</span> x1<span class="op">;</span> x1 <span class="op">=</span> input<span
+class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>y2 <span
+class="op">=</span> y1<span class="op">;</span> y1 <span class="op">=</span> output<span
+class="op">;</span></span></code></pre>
+    </div>
+    <h3 id="formant-blending">Formant Blending</h3>
+    <h4 id="f1f2-balance">F1/F2 Balance</h4>
+    <div class="sourceCode" id="cb4">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a
+href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// f1f2Balance: 0.0 = F2 only, 1.0 = F1 only</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>formantBlend <span
+class="op">=</span> f1Output <span class="op">*</span> f1f2Balance <span class="op">+</span> f2Output <span
+class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f1f2Balance<span
+class="op">);</span></span></code></pre>
+    </div>
+    <h4 id="directfiltered-mix">Direct/Filtered Mix</h4>
+    <div class="sourceCode" id="cb5">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a
+href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// directMix: 0.0 = all filtered, 1.0 = all direct</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>output <span
+class="op">=</span> input <span class="op">*</span> directMix <span class="op">+</span> formantBlend <span
+class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> directMix<span
+class="op">);</span></span></code></pre>
+    </div>
+    <h2 id="configuration-preferences">Configuration (Preferences)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Setting</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>f1FreqMin</code></td>
+          <td>Float</td>
+          <td>200.0</td>
+          <td>Minimum F1 frequency</td>
+        </tr>
+        <tr>
+          <td><code>f1FreqMax</code></td>
+          <td>Float</td>
+          <td>1000.0</td>
+          <td>Maximum F1 frequency</td>
+        </tr>
+        <tr>
+          <td><code>f2FreqMin</code></td>
+          <td>Float</td>
+          <td>500.0</td>
+          <td>Minimum F2 frequency</td>
+        </tr>
+        <tr>
+          <td><code>f2FreqMax</code></td>
+          <td>Float</td>
+          <td>4000.0</td>
+          <td>Maximum F2 frequency</td>
+        </tr>
+        <tr>
+          <td><code>qMin</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>Minimum Q factor</td>
+        </tr>
+        <tr>
+          <td><code>qMax</code></td>
+          <td>Float</td>
+          <td>20.0</td>
+          <td>Maximum Q factor</td>
+        </tr>
+        <tr>
+          <td><code>mixMin</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>Minimum direct mix</td>
+        </tr>
+        <tr>
+          <td><code>mixMax</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>Maximum direct mix</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="vowel-formant-presets">Vowel Formant Presets</h2>
+    <h3 id="english-vowels">English Vowels</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Vowel</th>
+          <th>F1 (Hz)</th>
+          <th>F2 (Hz)</th>
+          <th>F1 Q</th>
+          <th>F2 Q</th>
+          <th>Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>/a/ (as in “cat”)</td>
+          <td>730</td>
+          <td>1090</td>
+          <td>8.0</td>
+          <td>10.0</td>
+          <td>0.4</td>
+        </tr>
+        <tr>
+          <td>/e/ (as in “met”)</td>
+          <td>500</td>
+          <td>1840</td>
+          <td>6.0</td>
+          <td>12.0</td>
+          <td>0.3</td>
+        </tr>
+        <tr>
+          <td>/i/ (as in “sit”)</td>
+          <td>270</td>
+          <td>2140</td>
+          <td>4.0</td>
+          <td>15.0</td>
+          <td>0.2</td>
+        </tr>
+        <tr>
+          <td>/o/ (as in “hot”)</td>
+          <td>570</td>
+          <td>840</td>
+          <td>8.0</td>
+          <td>8.0</td>
+          <td>0.7</td>
+        </tr>
+        <tr>
+          <td>/u/ (as in “put”)</td>
+          <td>300</td>
+          <td>1390</td>
+          <td>5.0</td>
+          <td>10.0</td>
+          <td>0.6</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="musical-instrument-formants">Musical Instrument Formants</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>F1 (Hz)</th>
+          <th>F2 (Hz)</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Trumpet</td>
+          <td>800</td>
+          <td>1500</td>
+          <td>Bright, brassy</td>
+        </tr>
+        <tr>
+          <td>Clarinet</td>
+          <td>1500</td>
+          <td>2500</td>
+          <td>Woody, reedy</td>
+        </tr>
+        <tr>
+          <td>Violin</td>
+          <td>400</td>
+          <td>1800</td>
+          <td>Bright, stringy</td>
+        </tr>
+        <tr>
+          <td>Bassoon</td>
+          <td>400</td>
+          <td>1200</td>
+          <td>Dark, reedy</td>
+        </tr>
+        <tr>
+          <td>Flute</td>
+          <td>500</td>
+          <td>2200</td>
+          <td>Breathy, pure</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-examples">Usage Examples</h2>
+    <h3 id="basic-vowel-shaping">Basic Vowel Shaping</h3>
+    <pre><code>Pitch → Harmonic Generator → Rolloff → Spectrum to Signal → Formant Body → [Output]</code></pre>
+    <h3 id="with-formant-modulation">With Formant Modulation</h3>
+    <pre><code>         ┌────────────────────────────────┐
+         │                                │
+ Pitch → │ Harmonic → Rolloff → Spectrum  │
+         │ Generator                   → Signal│
+         │                                │
+LFO → f2Freq                              │
+         │                                │
+         └────────────────────────────────┘</code></pre>
+    <h3 id="multiple-formant-bodies-complex-vowels">Multiple Formant Bodies
+      (Complex Vowels)</h3>
+    <pre><code>Pitch → Harmonic → Rolloff → Spectrum → Formant Body (F1/F2) → Formant Body (F3/F4) → [Output]
+         Generator                      Processor          Signal                  (additional formants)</code></pre>
+    <h3 id="with-direct-signal-control">With Direct Signal Control</h3>
+    <pre><code>         ┌────────────────────────┐
+         │                        │
+ Fixed → │ Harmonic Generator     │
+Input    │                        │
+         └─→ Rolloff → Spectrum → Formant Body → [Output]
+         └───────────────────────┘
+             (clean signal bypasses formants)</code></pre>
+    <h2 id="practical-applications">Practical Applications</h2>
+    <h3 id="sound-design-techniques">Sound Design Techniques</h3>
+    <h4 id="vocal-synthesis">1. Vocal Synthesis</h4>
+    <ul>
+      <li><strong>Talking Effects</strong>: Automate F1/F2 frequencies to
+        create speech-like movement</li>
+      <li><strong>Choir Effects</strong>: Use multiple Formant Bodies with
+        slightly different settings</li>
+      <li><strong>Vowel Morphing</strong>: Crossfade between formant
+        presets</li>
+    </ul>
+    <h4 id="instrument-character">2. Instrument Character</h4>
+    <ul>
+      <li><strong>Acoustic Simulation</strong>: Match formant frequencies to
+        real instruments</li>
+      <li><strong>Hybrid Instruments</strong>: Combine acoustic formants with
+        synthetic sources</li>
+      <li><strong>Enhanced Realism</strong>: Add subtle formant shaping to any
+        sound</li>
+    </ul>
+    <h4 id="creative-effects">3. Creative Effects</h4>
+    <ul>
+      <li><strong>Formant Sweeps</strong>: LFO on F2 frequency for “wah-wah”
+        effects</li>
+      <li><strong>Resonance Modulation</strong>: Dynamic Q changes for
+        expressive filtering</li>
+      <li><strong>Formant Rhythms</strong>: Gate formant control for rhythmic
+        texture</li>
+    </ul>
+    <h3 id="performance-parameters">Performance Parameters</h3>
+    <h4 id="formant-frequency-selection">Formant Frequency Selection</h4>
+    <ul>
+      <li><strong>Male Voice</strong>: F1 300-700 Hz, F2 800-2000 Hz</li>
+      <li><strong>Female Voice</strong>: F1 400-900 Hz, F2 1200-3000 Hz</li>
+      <li><strong>Child Voice</strong>: F1 500-1000 Hz, F2 1500-3500 Hz</li>
+      <li><strong>Low Instruments</strong>: Lower F1, moderate F2</li>
+      <li><strong>High Instruments</strong>: Higher F1 and F2</li>
+    </ul>
+    <h4 id="q-factor-effects">Q Factor Effects</h4>
+    <ul>
+      <li><strong>Low Q (1-3)</strong>: Broad, subtle formants, natural
+        sound</li>
+      <li><strong>Medium Q (4-10)</strong>: Defined formants, balanced
+        character</li>
+      <li><strong>High Q (11-20)</strong>: Sharp, resonant peaks, pronounced
+        character</li>
+    </ul>
+    <h4 id="direct-mix-control">Direct Mix Control</h4>
+    <ul>
+      <li><strong>0.0 - 0.2</strong>: Strong formant character, highly
+        filtered</li>
+      <li><strong>0.3 - 0.7</strong>: Balanced direct and formant content</li>
+      <li><strong>0.8 - 1.0</strong>: Minimal formant effect, mostly direct
+        signal</li>
+    </ul>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-formant-effect">No Formant Effect</h3>
+    <ol type="1">
+      <li>Verify signalIn is connected from Spectrum to Signal</li>
+      <li>Check F1 and F2 frequencies are in audible range</li>
+      <li>Ensure directMix &lt; 1.0 (allows filtered signal through)</li>
+      <li>Verify f1f2Balance isn’t at extremes (0 or 1)</li>
+    </ol>
+    <h3 id="harshthin-sound">Harsh/Thin Sound</h3>
+    <ol type="1">
+      <li>Increase F1 frequency for more body</li>
+      <li>Adjust f1f2Balance toward center (0.5-0.7)</li>
+      <li>Increase Q factors for stronger resonance</li>
+      <li>Reduce directMix to emphasize formants</li>
+    </ol>
+    <h3 id="muffled-sound">Muffled Sound</h3>
+    <ol type="1">
+      <li>Decrease F1 frequency for clarity</li>
+      <li>Increase F2 frequency for brightness</li>
+      <li>Reduce Q factors for broader resonances</li>
+      <li>Increase directMix for more direct signal</li>
+    </ol>
+    <h3 id="self-oscillationinstability">Self-Oscillation/Instability</h3>
+    <ol type="1">
+      <li>Check Q factors aren’t excessively high (&gt;15)</li>
+      <li>Verify frequencies aren’t too low for sample rate</li>
+      <li>Ensure input signal isn’t too loud</li>
+      <li>Reduce sample rate or formant gains if needed</li>
+    </ol>
+    <h3 id="unwanted-resonance">Unwanted Resonance</h3>
+    <ol type="1">
+      <li>Lower Q factors to reduce peak sharpness</li>
+      <li>Adjust formant frequencies away from problem ranges</li>
+      <li>Increase directMix to dilute formant effect</li>
+      <li>Use multiple Formant Bodies for smoother transitions</li>
+    </ol>
+    <h2 id="best-practices">Best Practices</h2>
+    <h3 id="parameter-optimization">Parameter Optimization</h3>
+    <ol type="1">
+      <li><strong>Start with vowels</strong>: Use known vowel formant
+        frequencies as starting points</li>
+      <li><strong>Balance formants</strong>: Adjust f1f2Balance for desired
+        character</li>
+      <li><strong>Moderate Q values</strong>: 4-12 typically sounds most
+        natural</li>
+      <li><strong>Controlled direct mix</strong>: 0.2-0.5 often works
+        best</li>
+    </ol>
+    <h3 id="signal-chain-design">Signal Chain Design</h3>
+    <ol type="1">
+      <li><strong>Position after Spectrum</strong>: Formant Body needs
+        audio-rate input</li>
+      <li><strong>Allow sufficient harmonics</strong>: More harmonics = richer
+        formant response</li>
+      <li><strong>Consider gain staging</strong>: May need level adjustment
+        after formants</li>
+      <li><strong>Multiple formants</strong>: Chain multiple Formant Bodies
+        for complex vowels</li>
+    </ol>
+    <h3 id="modulation-strategies">Modulation Strategies</h3>
+    <ol type="1">
+      <li><strong>Slow frequency changes</strong>: 0.1-2 Hz for expressive
+        vowel morphing</li>
+      <li><strong>Q automation</strong>: Dynamic resonance for expressive
+        filtering</li>
+      <li><strong>Balance modulation</strong>: Crossfade between different
+        vowel characters</li>
+      <li><strong>Direct mix control</strong>: Dynamic filtering vs dry
+        signal</li>
+    </ol>
+    <h3 id="performance-considerations">Performance Considerations</h3>
+    <ol type="1">
+      <li><strong>Filter stability</strong>: Extreme Q can cause
+        instability</li>
+      <li><strong>Sample rate limits</strong>: Very high frequencies may
+        alias</li>
+      <li><strong>CPU efficiency</strong>: Formant Body is lightweight, can
+        use many instances</li>
+      <li><strong>Real-time safety</strong>: Avoid extreme parameter changes
+        during audio</li>
+    </ol>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="filter-mathematics">Filter Mathematics</h3>
+    <h4 id="bandpass-transfer-function">Bandpass Transfer Function</h4>
+    <pre><code>H(s) = (s²/Q + 1/Q) / (s² + s/Q + 1)</code></pre>
+    <p>Where s = jω, ω = 2πf, Q = quality factor</p>
+    <h4 id="frequency-response-characteristics">Frequency Response
+      Characteristics</h4>
+    <ul>
+      <li><strong>Center Frequency</strong>: Peak response at
+        f1Freq/f2Freq</li>
+      <li><strong>Bandwidth</strong>: f_center / Q (higher Q = narrower
+        band)</li>
+      <li><strong>Insertion Loss</strong>: 0 dB at peak (constant gain
+        implementation)</li>
+    </ul>
+    <h4 id="biquad-advantages">Biquad Advantages</h4>
+    <ul>
+      <li><strong>Computational Efficiency</strong>: 5 multiplications, 4
+        additions per sample</li>
+      <li><strong>Numerical Stability</strong>: Direct Form I
+        implementation</li>
+      <li><strong>Memory Efficient</strong>: Only 4 state variables per
+        filter</li>
+    </ul>
+    <h3 id="formant-acoustics">Formant Acoustics</h3>
+    <h4 id="vocal-tract-model">Vocal Tract Model</h4>
+    <ul>
+      <li><strong>F1</strong>: Represents pharynx cavity resonance</li>
+      <li><strong>F2</strong>: Represents oral cavity resonance<br>
+      </li>
+      <li><strong>Combined Shape</strong>: Creates vowel-specific spectral
+        envelope</li>
+      <li><strong>Natural Variations</strong>: Real voices have additional
+        formants (F3, F4)</li>
+    </ul>
+    <h4 id="parameter-relationships">Parameter Relationships</h4>
+    <ul>
+      <li><strong>Vowel Space</strong>: Different F1/F2 combinations create
+        vowel continuum</li>
+      <li><strong>Speaker Variations</strong>: Size and shape affect optimal
+        frequencies</li>
+      <li><strong>Dynamic Range</strong>: Real voices continuously vary
+        formants during speech</li>
+    </ul>
+    <h2 id="version-history">Version History</h2>
+    <ul>
+      <li><strong>v1.0</strong>: Basic dual-bandpass implementation</li>
+      <li><strong>v1.1</strong>: Added directMix and f1f2Balance
+        parameters</li>
+      <li><strong>v1.2</strong>: Improved coefficient calculation for
+        numerical stability</li>
+      <li><strong>v1.3</strong>: Enhanced parameter ranges and presets</li>
+      <li><strong>v1.4</strong>: Current version with comprehensive formant
+        control</li>
+    </ul>
+    <hr>
+    <p><em>This documentation applies to Kala v1.4 and later. For most
+        current implementation, refer to source code in formantbody.h and
+        formantbody.cpp.</em></p>
+  </body>
+</html>

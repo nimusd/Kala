@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Signal Mixer</title>
+  </head>
+  <body>
+    <h1 id="signal-mixer-documentation">Signal Mixer Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Signal Mixer is a <strong>signal combining tool</strong> that
+      takes two audio signal inputs with independent, modulatable gain
+      controls and outputs their weighted sum. It is the missing building
+      block for combining independent signal chains into a single output.</p>
+    <p>For three or more chains, cascade multiple Signal Mixers.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) - Core signal routing</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>output = signalA * gainA + signalB * gainB</code></pre>
+    <p>Where <code>signalA</code> and <code>signalB</code> are audio-rate
+      inputs (typically from containers with <code>signalOut</code> ports),
+      and <code>gainA</code>/<code>gainB</code> are per-channel amplitude
+      controls (default 1.0, modulatable range 0.0-2.0).</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalA</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>First audio signal source</td>
+        </tr>
+        <tr>
+          <td><code>signalB</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>Second audio signal source</td>
+        </tr>
+        <tr>
+          <td><code>gainA</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain multiplier for signal A (0.0-2.0)</td>
+        </tr>
+        <tr>
+          <td><code>gainB</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Gain multiplier for signal B (0.0-2.0)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Weighted sum of both input signals</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gainA</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0-2.0</td>
+          <td>Static gain for channel A (overridden when modulated)</td>
+        </tr>
+        <tr>
+          <td><code>gainB</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0-2.0</td>
+          <td>Static gain for channel B (overridden when modulated)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="gain-values">Gain Values</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Gain</th>
+          <th>Effect</th>
+          <th>Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>Channel muted</td>
+          <td>Solo the other channel</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>Half volume</td>
+          <td>Subtle blend</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>Unity gain (default)</td>
+          <td>Full signal, no attenuation</td>
+        </tr>
+        <tr>
+          <td>1.5</td>
+          <td>Boost</td>
+          <td>Emphasize one channel</td>
+        </tr>
+        <tr>
+          <td>2.0</td>
+          <td>Maximum boost</td>
+          <td>Strong emphasis (watch for clipping)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-two-chain-mix">Basic Two-Chain Mix</h3>
+    <p>Combine a Spectrum to Signal chain with a Karplus Strong chain:</p>
+    <pre><code>Harmonic Generator --&gt; Spectrum to Signal --signalOut--&gt; signalA --+
+                                                                    |
+                                                          Signal Mixer --&gt; [Output]
+                                                                    |
+        Noise Color Filter --&gt; Karplus Strong --signalOut--&gt; signalB --+</code></pre>
+    <h3 id="envelope-controlled-crossfade">Envelope-Controlled
+      Crossfade</h3>
+    <p>Fade channel B in over the note’s duration:</p>
+    <pre><code>Spectrum to Signal --signalOut--&gt; signalA --+
+                                             |
+                                   Signal Mixer --&gt; [Output]
+                                             |
+    Formant Body --signalOut-----&gt; signalB --+
+                                        ^
+                  Envelope Engine --&gt; gainB</code></pre>
+    <p>Set gainA to 1.0 (static) and wire an Envelope Engine to gainB. As
+      the envelope rises from 0.0 to 1.0, the second signal fades in.</p>
+    <h3 id="lfo-modulated-blend">LFO-Modulated Blend</h3>
+    <p>Rhythmic pulsing between two signals:</p>
+    <pre><code>Spectrum to Signal --signalOut--&gt; signalA --+
+                                             |
+                                   Signal Mixer --&gt; [Output]
+                                             |
+    Formant Body --signalOut-----&gt; signalB --+
+                                        ^
+                             LFO --&gt; gainB</code></pre>
+    <p>A slow LFO (0.5-2 Hz) on gainB creates a pulsing effect. The gain is
+      clamped to 0.0-2.0 so bipolar LFO output is safe.</p>
+    <h3 id="three-way-mix-cascaded">Three-Way Mix (Cascaded)</h3>
+    <p>Combine three independent signal chains:</p>
+    <pre><code>Chain A --signalOut--&gt; signalA --+
+                                  |
+                        Mixer 1 --signalOut--&gt; signalA --+
+                                  |                       |
+Chain B --signalOut--&gt; signalB --+              Mixer 2 --&gt; [Output]
+                                                          |
+Chain C ----------------------signalOut--&gt; signalB ------+</code></pre>
+    <p>Set all gains to balance the three chains. For equal contribution
+      from all three, set Mixer 1 gains to 1.0 and Mixer 2’s gainA to 0.67,
+      gainB to 0.33 (or simply leave all at 1.0 and accept the louder
+      sum).</p>
+    <h3 id="solomute-with-static-gains">Solo/Mute With Static Gains</h3>
+    <p>Quick A/B comparison of two signal chains:</p>
+    <ul>
+      <li><strong>Solo A</strong>: Set gainA = 1.0, gainB = 0.0</li>
+      <li><strong>Solo B</strong>: Set gainA = 0.0, gainB = 1.0</li>
+      <li><strong>Equal mix</strong>: Set gainA = 1.0, gainB = 1.0</li>
+      <li><strong>A dominant</strong>: Set gainA = 1.0, gainB = 0.3</li>
+    </ul>
+    <h3 id="parallel-processing">Parallel Processing</h3>
+    <p>Process one signal two different ways and combine:</p>
+    <pre><code>                          +--&gt; Formant Body --signalOut--&gt; signalA --+
+                          |                                          |
+Spectrum to Signal --+----|                                Signal Mixer --&gt; [Output]
+                          |                                          |
+                          +--&gt; Karplus Strong --signalOut--&gt; signalB --+</code></pre>
+    <h2 id="practical-applications">Practical Applications</h2>
+    <h3 id="sound-design-techniques">Sound Design Techniques</h3>
+    <h4 id="layered-timbres">1. Layered Timbres</h4>
+    <ul>
+      <li>Combine a bright harmonic chain with a filtered noise chain for
+        textured pads</li>
+      <li>Mix a clean tone with a formant-processed version for vocal
+        character</li>
+    </ul>
+    <h4 id="attack-layering">2. Attack Layering</h4>
+    <ul>
+      <li>Chain A: Sustained tone (Spectrum to Signal)</li>
+      <li>Chain B: Plucked attack (Karplus Strong) with envelope on gainB</li>
+      <li>Result: Pluck attack decays into sustained body</li>
+    </ul>
+    <h4 id="noise-blending">3. Noise Blending</h4>
+    <ul>
+      <li>Chain A: Clean pitched signal</li>
+      <li>Chain B: Noise Color Filter output</li>
+      <li>Use gainB to control noise floor amount</li>
+    </ul>
+    <h4 id="dynamic-mixing">4. Dynamic Mixing</h4>
+    <ul>
+      <li>Wire separate Envelope Engines to gainA and gainB</li>
+      <li>Create crossfade effects, ducking, or swell patterns</li>
+    </ul>
+    <h3 id="gain-amount-guidelines">Gain Amount Guidelines</h3>
+    <ul>
+      <li><strong>Subtle layer</strong>: 0.1-0.3 - Background texture</li>
+      <li><strong>Equal blend</strong>: 0.5-1.0 - Both chains prominent</li>
+      <li><strong>Emphasis</strong>: 1.0-1.5 - Featured chain</li>
+      <li><strong>Boost</strong>: 1.5-2.0 - Strong emphasis (monitor
+        levels)</li>
+    </ul>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-audio-output">No Audio Output</h3>
+    <ol type="1">
+      <li>Verify at least one signalA or signalB port is connected</li>
+      <li>Check that the connected source containers are producing audio</li>
+      <li>Verify gain parameters are not both set to 0.0</li>
+      <li>Ensure the Signal Mixer is the final output container (no outgoing
+        signalOut connections)</li>
+    </ol>
+    <h3 id="only-hearing-one-channel">Only Hearing One Channel</h3>
+    <ol type="1">
+      <li>Check that both signal input ports have valid connections</li>
+      <li>Verify the silent channel’s gain is not 0.0</li>
+      <li>Confirm the source container for the silent channel is working (test
+        by connecting it directly as the final output)</li>
+    </ol>
+    <h3 id="clipping-or-distortion">Clipping or Distortion</h3>
+    <ol type="1">
+      <li>Reduce gain values - two full-amplitude signals summed at unity gain
+        can exceed 1.0</li>
+      <li>Try gainA = 0.7, gainB = 0.7 for headroom</li>
+      <li>Avoid gain values above 1.5 unless one channel is quiet</li>
+    </ol>
+    <h3 id="unexpected-volume">Unexpected Volume</h3>
+    <ol type="1">
+      <li>Remember that gains default to 1.0 - summing two signals doubles
+        peak amplitude</li>
+      <li>For equal-loudness mixing, try gains of 0.5-0.7 per channel</li>
+      <li>Use envelope modulation on gains for controlled dynamics</li>
+    </ol>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="signal-domain">Signal Domain</h3>
+    <p>The Signal Mixer operates in the <strong>signal domain</strong>
+      (audio-rate samples), not the spectrum domain. Connect it to containers
+      with <code>signalOut</code> ports (Spectrum to Signal, Formant Body,
+      Breath Turbulence, Noise Color Filter, Karplus Strong, or another Signal
+      Mixer).</p>
+    <h3 id="gain-clamping">Gain Clamping</h3>
+    <p>When gain ports are modulated via connections, the resulting gain
+      values are clamped to 0.0-2.0 after the connection function is applied.
+      This prevents negative gain (phase inversion) and excessive boost.</p>
+    <h3 id="no-state">No State</h3>
+    <p>The Signal Mixer is stateless - the output depends only on the
+      current sample’s inputs. This means: - No reset needed at note
+      boundaries - No artifacts from abrupt gain changes - Deterministic
+      output for given inputs - Negligible CPU cost (two multiplies and one
+      add per sample)</p>
+    <h3 id="unconnected-inputs">Unconnected Inputs</h3>
+    <p>If a signal input has no connection, it defaults to 0.0 (silence).
+      This means: - A mixer with only signalA connected outputs
+      <code>signalA * gainA</code> - A mixer with no signal connections
+      outputs silence</p>
+    <h2 id="comparison-with-other-containers">Comparison with Other
+      Containers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 30%">
+        <col style="width: 22%">
+        <col style="width: 47%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Domain</th>
+          <th>Combining Method</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Signal Mixer</strong></td>
+          <td>Signal</td>
+          <td>Weighted sum of two audio signals</td>
+        </tr>
+        <tr>
+          <td><strong>Spectrum Blender</strong></td>
+          <td>Spectrum</td>
+          <td>Linear interpolation between two spectra</td>
+        </tr>
+        <tr>
+          <td><strong>Breath Turbulence</strong></td>
+          <td>Signal</td>
+          <td>Voice/noise crossfade blend</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Signal</td>
+          <td>Resonant filter (single input)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Signal Mixer differs from Breath Turbulence in that it performs a
+      pure weighted sum (both signals can be at full volume simultaneously),
+      whereas Breath Turbulence performs a crossfade (the two signals share a
+      fixed total energy). The Signal Mixer also differs from the Spectrum
+      Blender, which operates in the harmonic/spectrum domain before audio
+      conversion.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="processing-formula">Processing Formula</h3>
+    <pre><code>signalOut = signalA * gainA + signalB * gainB</code></pre>
+    <p>No normalization, limiting, or saturation is applied. The output is
+      the raw weighted sum. If both inputs are at full amplitude with unity
+      gains, the output can reach 2.0 peak.</p>
+    <h3 id="cpu-cost">CPU Cost</h3>
+    <p>Minimal - two multiplications and one addition per sample. The Signal
+      Mixer is one of the cheapest containers in the graph.</p>
+    <h3 id="connection-functions">Connection Functions</h3>
+    <p>The <code>gainA</code> and <code>gainB</code> ports support all
+      standard connection functions (passthrough, add, multiply, subtract,
+      replace, modulate). The source value comes from the upstream container’s
+      <code>controlOut</code>. After the connection function is applied, the
+      result is clamped to 0.0-2.0.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>signalmixer.h</code>, <code>signalmixer.cpp</code></em></p>
+  </body>
+</html>

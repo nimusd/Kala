@@ -1,0 +1,3 @@
+C:\Qt\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\teststops.dir/objects.a
+C:\Qt\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\teststops.dir/objects.a @CMakeFiles\teststops.dir\objects1.rsp
+C:\Qt\Tools\mingw1310_64\bin\c++.exe  -Wall -Wl,--whole-archive CMakeFiles\teststops.dir/objects.a -Wl,--no-whole-archive -o teststops.exe -Wl,--out-implib,libteststops.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\teststops.dir\linkLibs.rsp

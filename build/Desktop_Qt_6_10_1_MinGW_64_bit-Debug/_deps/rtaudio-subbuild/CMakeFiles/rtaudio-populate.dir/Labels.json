@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate-complete.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-build.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-configure.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-download.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-install.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-mkdir.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-patch.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-test.rule"
+		},
+		{
+			"file" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"rtaudio-populate"
+		],
+		"name" : "rtaudio-populate"
+	}
+}

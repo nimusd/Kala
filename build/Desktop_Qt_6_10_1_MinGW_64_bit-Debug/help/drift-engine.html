@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Drift Engine</title>
+  </head>
+  <body>
+    <h1 id="drift-engine-documentation">Drift Engine Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Drift Engine is a <strong>control signal generator</strong> that
+      produces slow-moving detuning multipliers for organic, living sound
+      quality. It outputs values oscillating around 1.0 (e.g., 0.995 to
+      1.005), which can be multiplied with pitch or other parameters to create
+      subtle beating and micro-variations.</p>
+    <p>Unlike a signal processor, the Drift Engine doesn’t take audio input
+      - it generates control values that you connect to modulation targets
+      elsewhere in your graph.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) - Generates time-varying control
+      signals</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>output = 1.0 + (driftSignal × amount)</code></pre>
+    <p>The drift signal oscillates between -1 and +1, so the output ranges
+      from <code>(1.0 - amount)</code> to <code>(1.0 + amount)</code>. When
+      multiplied with a frequency, this creates detuning.</p>
+    <p><strong>Example:</strong> With amount = 0.005, output ranges from
+      0.995 to 1.005. A 440 Hz pitch becomes 437.8 Hz to 442.2 Hz - subtle but
+      audible as organic movement.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>amount</code></td>
+          <td>Control</td>
+          <td>0.005</td>
+          <td>Drift intensity (0.0 = none, 0.1 = extreme)</td>
+        </tr>
+        <tr>
+          <td><code>rate</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Drift speed in Hz (how fast it wanders)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>driftOut</code></td>
+          <td>Control</td>
+          <td>Detuning multiplier centered around 1.0</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> There is no signal input port. The Drift
+      Engine generates control values, not processed audio.</p>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>amount</code></td>
+          <td>Float</td>
+          <td>0.005</td>
+          <td>0.0 - 0.1</td>
+          <td>Drift intensity (deviation from 1.0)</td>
+        </tr>
+        <tr>
+          <td><code>rate</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.01 - 11.0</td>
+          <td>Drift oscillation speed in Hz</td>
+        </tr>
+        <tr>
+          <td><code>driftPattern</code></td>
+          <td>Integer</td>
+          <td>2</td>
+          <td>0-2</td>
+          <td>Oscillation pattern (see below)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="drift-patterns">Drift Patterns</h2>
+    <p>The <code>driftPattern</code> parameter selects how the drift
+      oscillates:</p>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 34%">
+        <col style="width: 50%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Pattern</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0</td>
+          <td><strong>Sine</strong></td>
+          <td>Simple sine wave LFO - smooth, predictable</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td><strong>Random</strong></td>
+          <td>Sample-and-hold random values - stepped, unpredictable</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><strong>Perlin</strong></td>
+          <td>Simulated Perlin noise (multiple layered sines) - smooth, organic
+            (default)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="perlin-pattern-details">Perlin Pattern Details</h3>
+    <p>The Perlin pattern combines three sine waves at related but
+      irrational frequency ratios (1.0, 0.83, 1.27) with decreasing amplitudes
+      (1.0, 0.5, 0.25). This creates smooth, non-repeating drift that sounds
+      more natural than a single sine wave.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-pitch-drift">Basic Pitch Drift</h3>
+    <p>Connect drift output to modulate pitch for organic detuning.</p>
+    <pre><code>Drift Engine ──→ driftOut ──→ [multiply with pitch]
+     │
+     └── amount: 0.005, rate: 0.3</code></pre>
+    <p>The drift output (around 1.0) is multiplied with pitch frequency to
+      create micro-detuning.</p>
+    <h3 id="harmonic-generator-detuning">Harmonic Generator Detuning</h3>
+    <p>Apply drift to the purity or drift input of a Harmonic Generator.</p>
+    <pre><code>Drift Engine ──→ driftOut ──→ Harmonic Generator (drift input)</code></pre>
+    <h3 id="ensemble-effect-multiple-drift-engines">Ensemble Effect
+      (Multiple Drift Engines)</h3>
+    <p>Use several Drift Engines with different rates for chorus-like
+      beating.</p>
+    <pre><code>Drift Engine 1 (rate: 0.3) ──→ Voice 1 pitch
+Drift Engine 2 (rate: 0.5) ──→ Voice 2 pitch
+Drift Engine 3 (rate: 0.7) ──→ Voice 3 pitch</code></pre>
+    <p>The slightly different drift rates create natural beating patterns
+      like an acoustic ensemble.</p>
+    <h3 id="filter-modulation">Filter Modulation</h3>
+    <p>Connect drift to filter parameters for subtle timbral movement.</p>
+    <pre><code>Drift Engine ──→ driftOut ──→ Rolloff Processor (lowRolloff)
+     │
+     └── amount: 0.02, rate: 0.8</code></pre>
+    <h3 id="dynamic-drift-amount">Dynamic Drift Amount</h3>
+    <p>Modulate the drift amount from another source for evolving
+      intensity.</p>
+    <pre><code>Envelope Engine ──→ Drift Engine (amount input)
+                          │
+                          └──→ driftOut ──→ [target]</code></pre>
+    <h2 id="parameter-guidelines">Parameter Guidelines</h2>
+    <h3 id="amount-by-musical-context">Amount by Musical Context</h3>
+    <table>
+      <colgroup>
+        <col style="width: 32%">
+        <col style="width: 28%">
+        <col style="width: 39%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Context</th>
+          <th>Amount</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Subtle/Natural</strong></td>
+          <td>0.001 - 0.005</td>
+          <td>Barely perceptible, acoustic feel</td>
+        </tr>
+        <tr>
+          <td><strong>Moderate</strong></td>
+          <td>0.005 - 0.02</td>
+          <td>Audible movement, still natural</td>
+        </tr>
+        <tr>
+          <td><strong>Pronounced</strong></td>
+          <td>0.02 - 0.05</td>
+          <td>Clear detuning, synth-like</td>
+        </tr>
+        <tr>
+          <td><strong>Extreme</strong></td>
+          <td>0.05 - 0.1</td>
+          <td>Special effects, warble</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="rate-by-musical-context">Rate by Musical Context</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Context</th>
+          <th>Rate (Hz)</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Very slow</strong></td>
+          <td>0.01 - 0.1</td>
+          <td>Gradual, atmospheric drift</td>
+        </tr>
+        <tr>
+          <td><strong>Slow</strong></td>
+          <td>0.1 - 0.5</td>
+          <td>Natural breathing quality</td>
+        </tr>
+        <tr>
+          <td><strong>Medium</strong></td>
+          <td>0.5 - 2.0</td>
+          <td>Active movement</td>
+        </tr>
+        <tr>
+          <td><strong>Fast</strong></td>
+          <td>2.0 - 6.0</td>
+          <td>Vibrato-like</td>
+        </tr>
+        <tr>
+          <td><strong>Very fast</strong></td>
+          <td>6.0 - 11.0</td>
+          <td>Electronic effects</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="pattern-selection">Pattern Selection</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Pattern</th>
+          <th>Best For</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Sine</strong></td>
+          <td>Predictable LFO effects, sync with tempo</td>
+        </tr>
+        <tr>
+          <td><strong>Random</strong></td>
+          <td>Chaotic, electronic textures</td>
+        </tr>
+        <tr>
+          <td><strong>Perlin</strong></td>
+          <td>Natural acoustic instrument simulation (default)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="output-range">Output Range</h3>
+    <p>The output is always centered around 1.0: - Minimum:
+      <code>1.0 - amount</code> - Maximum: <code>1.0 + amount</code></p>
+    <p>With default amount (0.005): output ranges from 0.995 to 1.005.</p>
+    <h3 id="multiplicative-use">Multiplicative Use</h3>
+    <p>The drift output is designed to be <strong>multiplied</strong> with
+      frequencies, not added:</p>
+    <pre><code>effectivePitch = basePitch × driftOut</code></pre>
+    <p>This maintains musical intervals regardless of the base
+      frequency.</p>
+    <h3 id="stateful-operation">Stateful Operation</h3>
+    <p>Unlike the Easing Applicator, the Drift Engine is
+      <strong>stateful</strong> - it maintains internal phase counters that
+      advance each sample. The output depends on the history of processing,
+      not just current inputs.</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p>Calling <code>reset()</code> returns all phase counters to zero,
+      restarting the drift pattern from the beginning.</p>
+    <h2 id="comparison-with-other-modifiers">Comparison with Other
+      Modifiers</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Purpose</th>
+          <th>Output Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Drift Engine</strong></td>
+          <td>Organic micro-detuning</td>
+          <td>Multiplier around 1.0</td>
+        </tr>
+        <tr>
+          <td><strong>LFO</strong></td>
+          <td>Periodic oscillation</td>
+          <td>Configurable range</td>
+        </tr>
+        <tr>
+          <td><strong>Physics System</strong></td>
+          <td>Emergent motion</td>
+          <td>Value tracking target</td>
+        </tr>
+        <tr>
+          <td><strong>Envelope Engine</strong></td>
+          <td>Time-based automation</td>
+          <td>0.0 to 1.0 (typically)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Drift Engine is specialized for detuning - its output centered at
+      1.0 is designed specifically for multiplication with frequencies.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="implementation">Implementation</h3>
+    <p>The Drift Engine generates samples using phase accumulators:</p>
+    <div class="sourceCode" id="cb8">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a
+href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sine pattern</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>driftValue <span
+class="op">=</span> sin<span class="op">(</span>phase<span class="op">);</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>phase <span
+class="op">+=</span> <span class="dv">2</span>π × rate <span class="op">/</span> sampleRate<span
+class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Convert to multiplier</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>output <span
+class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> <span
+class="op">(</span>driftValue × amount<span class="op">);</span></span></code></pre>
+    </div>
+    <h3 id="perlin-noise-simulation">Perlin Noise Simulation</h3>
+    <p>The Perlin pattern uses three sine waves with irrational frequency
+      ratios: - Primary: rate × 1.0 - Secondary: rate × 0.83, amplitude 0.5 -
+      Tertiary: rate × 1.27, amplitude 0.25</p>
+    <p>The sum is normalized to stay within -1 to +1.</p>
+    <h3 id="phase-wrapping">Phase Wrapping</h3>
+    <p>Phases wrap at <code>2π × 1000</code> to prevent floating-point
+      precision loss over long playback times.</p>
+    <h3 id="performance">Performance</h3>
+    <ul>
+      <li>Lightweight trigonometric operations</li>
+      <li>Minimal state (3 phase values + random state)</li>
+      <li>Efficient for many simultaneous instances</li>
+    </ul>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>driftengine.h</code>, <code>driftengine.cpp</code></em></p>
+  </body>
+</html>

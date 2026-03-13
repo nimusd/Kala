@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="style.css">
+<title>Saxophone</title>
+</head>
+<body>
+<h1 id="saxophone-documentation">Saxophone Documentation</h1>
+<h2 id="overview">Overview</h2>
+<p>The Saxophone container is a <strong>digital waveguide physical
+model</strong> of a conical-bore reed instrument, based on the
+<em>Saxofony</em> algorithm developed by Perry R. Cook and Gary P.
+Scavone in the Synthesis ToolKit (STK) and extended with the nonlinear
+waveguide technique by Romain Michon. It models the interaction between
+a reed and a conical air column: a ReedTable nonlinearity drives two
+coupled delay lines split at the blow position, filtered through a
+OneZero loss filter, producing a tone that blends the character of
+soprano saxophone, clarinet, and oboe depending on the parameter
+settings.</p>
+<p>Because the model is <strong>self-oscillating</strong>, it produces a
+continuous pitched tone for the full duration of any note. The pitch is
+tracked continuously, so pitch curves and portamento in the Score Canvas
+work without artifacts. Legato transitions preserve the bore's vibrating
+state, allowing smooth slurs between notes. The optional nonlinear
+allpass section (Michon extension) adds harmonic richness inside the
+waveguide feedback loop, pushing the timbre toward richer, brasier, or
+more complex territory.</p>
+<h2 id="category">Category</h2>
+<p><strong>Essential</strong> (Blue) — Core sound generation</p>
+<h2 id="ports">Ports</h2>
+<h3 id="input-ports">Input Ports</h3>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 14%" />
+<col style="width: 12%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Port</th>
+<th>Data Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>breathPressure</code></td>
+<td>Control</td>
+<td>0.70</td>
+<td>Breath pressure driving the reed (0.0–1.0)</td>
+</tr>
+<tr>
+<td><code>reedStiffness</code></td>
+<td>Control</td>
+<td>0.50</td>
+<td>Reed spring stiffness — shapes the slope of the reed table (0.0–1.0)</td>
+</tr>
+<tr>
+<td><code>reedAperture</code></td>
+<td>Control</td>
+<td>0.50</td>
+<td>Reed resting opening — sets the offset of the reed table (0.0–1.0)</td>
+</tr>
+<tr>
+<td><code>blowPosition</code></td>
+<td>Control</td>
+<td>0.20</td>
+<td>Normalised position of the reed in the bore (0.0–1.0)</td>
+</tr>
+<tr>
+<td><code>noiseGain</code></td>
+<td>Control</td>
+<td>0.20</td>
+<td>Breath turbulence noise amplitude (0.0–0.4)</td>
+</tr>
+<tr>
+<td><code>vibratoFreq</code></td>
+<td>Control</td>
+<td>5.735</td>
+<td>Vibrato oscillator frequency in Hz (0.0–12.0)</td>
+</tr>
+<tr>
+<td><code>vibratoGain</code></td>
+<td>Control</td>
+<td>0.0</td>
+<td>Vibrato depth — 0.0 disables vibrato entirely (0.0–0.5)</td>
+</tr>
+<tr>
+<td><code>nlType</code></td>
+<td>Control</td>
+<td>0</td>
+<td>Nonlinear modulation source: 0–4 (see Nonlinear Section)</td>
+</tr>
+<tr>
+<td><code>nlAmount</code></td>
+<td>Control</td>
+<td>0.0</td>
+<td>Depth of nonlinear filtering — 0.0 fully bypasses it (0.0–1.0)</td>
+</tr>
+<tr>
+<td><code>nlFreqMod</code></td>
+<td>Control</td>
+<td>10.0</td>
+<td>Modulation frequency in Hz, used by NL types 3 and 4 (0–200 Hz)</td>
+</tr>
+<tr>
+<td><code>nlAttack</code></td>
+<td>Control</td>
+<td>0.10</td>
+<td>Ramp-in time for the nonlinearity at note start (0.001–2.0 s)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-ports">Output Ports</h3>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>Port</th>
+<th>Data Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>signalOut</code></td>
+<td>Signal</td>
+<td>Generated saxophone / reed instrument tone</td>
+</tr>
+</tbody>
+</table>
+<h2 id="parameters">Parameters</h2>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 8%" />
+<col style="width: 12%" />
+<col style="width: 14%" />
+<col style="width: 48%" />
+</colgroup>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>breathPressure</code></td>
+<td>Float</td>
+<td>0.70</td>
+<td>0.0–1.0</td>
+<td>Overall blowing strength</td>
+</tr>
+<tr>
+<td><code>reedStiffness</code></td>
+<td>Float</td>
+<td>0.50</td>
+<td>0.0–1.0</td>
+<td>Reed table slope coefficient</td>
+</tr>
+<tr>
+<td><code>reedAperture</code></td>
+<td>Float</td>
+<td>0.50</td>
+<td>0.0–1.0</td>
+<td>Reed table offset / resting opening</td>
+</tr>
+<tr>
+<td><code>blowPosition</code></td>
+<td>Float</td>
+<td>0.20</td>
+<td>0.0–1.0</td>
+<td>Split point of the two bore delay lines</td>
+</tr>
+<tr>
+<td><code>noiseGain</code></td>
+<td>Float</td>
+<td>0.20</td>
+<td>0.0–0.4</td>
+<td>Breath noise / breathiness</td>
+</tr>
+<tr>
+<td><code>vibratoFreq</code></td>
+<td>Float</td>
+<td>5.735</td>
+<td>0.0–12.0 Hz</td>
+<td>Vibrato rate in Hz</td>
+</tr>
+<tr>
+<td><code>vibratoGain</code></td>
+<td>Float</td>
+<td>0.0</td>
+<td>0.0–0.5</td>
+<td>Vibrato depth (0.0 = off)</td>
+</tr>
+<tr>
+<td><code>nlType</code></td>
+<td>Int</td>
+<td>0</td>
+<td>0–4</td>
+<td>Nonlinear modulation source selector</td>
+</tr>
+<tr>
+<td><code>nlAmount</code></td>
+<td>Float</td>
+<td>0.0</td>
+<td>0.0–1.0</td>
+<td>Nonlinearity depth (0 = bypassed)</td>
+</tr>
+<tr>
+<td><code>nlFreqMod</code></td>
+<td>Float</td>
+<td>10.0</td>
+<td>0–200 Hz</td>
+<td>Oscillator frequency for NL types 3 &amp; 4</td>
+</tr>
+<tr>
+<td><code>nlAttack</code></td>
+<td>Float</td>
+<td>0.10</td>
+<td>0.001–2.0 s</td>
+<td>Nonlinearity envelope ramp-in time</td>
+</tr>
+</tbody>
+</table>
+<h2 id="how-it-works">How It Works</h2>
+<p>The algorithm is a <strong>split digital waveguide</strong> simulation
+of a conical-bore reed instrument (Cook &amp; Scavone, STK Saxofony).
+The bore is modelled as two delay lines split at the blow position; the
+reed is modelled by a clamped linear function (ReedTable); a OneZero
+filter models high-frequency losses at the open end. Each sample is
+computed as follows:</p>
+<pre><code>breathP      = breathPressure × envelope
+             + noiseGain × noise()
+             + vibratoGain × 0.1 × sin(vibratoPhase)
+
+d0           = delay0.lastOut        (open-end segment)
+d1           = delay1.lastOut        (reed-end segment)
+
+[NL allpass applied to d0 if nlAmount &gt; 0]
+
+temp         = −0.95 × oneZeroFilter( d0 )   (open-end reflection)
+output       = temp − d1                      (pressure at blow point)
+pressureDiff = breathP − output
+reedCoeff    = reedTable( pressureDiff )
+
+delay1.tick( temp )
+delay0.tick( breathP − pressureDiff × reedCoeff − temp )
+
+return output × 0.3</code></pre>
+<p>The key components are:</p>
+<ul>
+<li><strong>Delay 0 (open-end segment)</strong>: A
+linearly-interpolating delay line modelling the longer bore section from
+the blow position to the open bell end. Its length is proportional to
+<code>(1 − blowPosition) × totalDelay</code>.</li>
+<li><strong>Delay 1 (reed-end segment)</strong>: A shorter delay line
+modelling the bore from the blow position back to the reed. Length is
+<code>blowPosition × totalDelay</code>, where
+<code>totalDelay = sampleRate / pitch − 1.5</code> (the 1.5 compensates
+for the OneZero filter's phase delay).</li>
+<li><strong>ReedTable</strong>: A clamped linear function modelling the
+reed valve:
+<code>clamp(offset + slope × pressureDiff, −1, 1)</code>, where
+<code>offset = 0.4 + 0.6 × reedAperture</code> and
+<code>slope = 0.1 + 0.4 × reedStiffness</code>. This approximation of
+Smith's 1986 clarinet reed model is the primary nonlinear oscillation
+mechanism.</li>
+<li><strong>OneZero filter</strong>: A simple one-zero FIR low-pass
+<code>y[n] = 0.5 × (x[n] + x[n−1])</code> applied to the open-end
+output, modelling high-frequency absorption at the bell.</li>
+<li><strong>Nonlinear allpass (Michon extension)</strong>: A first-order
+allpass filter applied to the open-end delay output (d0) before the
+OneZero filter, inside the waveguide feedback loop. See
+<a href="#nonlinear-section">Nonlinear Section</a> below.</li>
+</ul>
+<h2 id="breath-envelope">Breath Envelope</h2>
+<p>A simple <strong>attack/release envelope</strong> is applied to the
+breath pressure based on note progress:</p>
+<ul>
+<li><strong>Attack</strong>: 8% of note duration — ramps from 0 to full
+breath pressure. Simulates the onset of blowing. Skipped for legato
+notes.</li>
+<li><strong>Sustain</strong>: Full breath pressure.</li>
+<li><strong>Release</strong>: Last 5% of note duration — ramps back to
+zero. Simulates stopping the breath.</li>
+</ul>
+<p>This envelope affects only the <em>internal</em> excitation; the
+overall dynamics of the note are controlled by the Score Canvas as
+usual.</p>
+<h2 id="nonlinear-section">Nonlinear Section (Michon Extension)</h2>
+<p>When <code>nlAmount &gt; 0</code>, a <strong>first-order nonlinear
+allpass filter</strong> is applied to the open-end delay output on each
+sample, before the OneZero reflection filter:</p>
+<pre><code>H(z) = (θ + z⁻¹) / (1 + θ·z⁻¹)
+y[n] = θ·(x[n] − y[n−1]) + x[n−1]</code></pre>
+<p>Because it is placed <em>inside</em> the waveguide loop (not as a
+post-processing effect), the allpass genuinely modifies the bore
+resonance — each round trip the signal passes through it, accumulating
+harmonic content with every reflection. The allpass coefficient θ is
+derived from one of five modulation sources, scaled by
+<code>nlAmount</code> and the ramp-in envelope, then clamped to
+(−0.999, 0.999) for stability:</p>
+<table>
+<colgroup>
+<col style="width: 8%" />
+<col style="width: 24%" />
+<col style="width: 68%" />
+</colgroup>
+<thead>
+<tr>
+<th>Type</th>
+<th>Source</th>
+<th>Character</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Open-end signal</td>
+<td>Direct signal-dependent modulation. Thickens tone and adds subtle
+harmonic richness that tracks the bore vibration. The most natural-sounding
+type for saxophone-like timbres.</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Leaky average of open-end signal</td>
+<td>Slow, DC-like drift of the allpass coefficient. Produces a gentle
+tonal shift over time rather than per-sample modulation.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Open-end signal²</td>
+<td>Always positive; responds to energy bursts in the bore. Asymmetric
+modulation that emphasises the attack and forte moments.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Sine wave at <code>nlFreqMod</code> Hz</td>
+<td>Periodic, independent tremolo-like modulation. At low
+<code>nlFreqMod</code> values produces slow tonal wobble; at higher
+values produces audible sidebands.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Sine wave at pitch Hz</td>
+<td>Sine locked to the fundamental frequency. Produces harmonically
+coherent waveshaping that tracks pitch — consistent timbre across
+the register.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>nlAttack</code> parameter ramps the effect from zero to
+full depth over the specified number of seconds at the start of each
+note. This prevents a hard click when the nonlinearity switches on and
+allows the bore tone to establish itself before the effect is
+applied.</p>
+<p class="tip"><strong>Tip:</strong> Start with <code>nlType = 0</code>
+at low <code>nlAmount</code> (0.05–0.15) for the most musical, natural-sounding
+extension — it adds upper harmonics that give the model more of the
+characteristic "cutting" quality of a real saxophone. Types 3 and 4 at
+higher amounts produce more overtly electronic or FM-like timbres.</p>
+<h2 id="parameter-guide">Parameter Guide</h2>
+<h3 id="breath-pressure">Breath Pressure</h3>
+<p>Controls the overall driving force of the simulated breath and is the
+primary volume control.</p>
+<ul>
+<li><strong>Below ~0.55</strong>: Insufficient to sustain oscillation at
+most reed settings — the model underblows</li>
+<li><strong>0.60–0.75</strong>: Lighter, more clarinet-like tone —
+stable with a prominent fundamental</li>
+<li><strong>0.75–0.85</strong>: Full-bodied tone with good harmonic
+content (default 0.70)</li>
+<li><strong>Above 0.90</strong>: Risk of instability or overblowing,
+especially at high pitches</li>
+</ul>
+<h3 id="reed-stiffness">Reed Stiffness</h3>
+<p>Controls the slope of the ReedTable function, determining how sharply
+the reed valve transitions between open and closed states.</p>
+<ul>
+<li><strong>0.2–0.4</strong>: Soft reed — gradual transition, rounder
+tone with a strong fundamental</li>
+<li><strong>0.4–0.6</strong>: Balanced reed character (default 0.5)</li>
+<li><strong>0.7–0.9</strong>: Stiff reed — abrupt valve action, brighter
+and more nasal tone with more upper harmonics</li>
+</ul>
+<h3 id="reed-aperture">Reed Aperture</h3>
+<p>Sets the resting opening of the reed — the offset in the ReedTable
+function. This determines how much of the breath pressure range is
+"seen" by the reed as open vs. closed.</p>
+<ul>
+<li><strong>0.2–0.4</strong>: Nearly closed at rest — requires higher
+breath pressure to open; produces a more focused, darker tone</li>
+<li><strong>0.5–0.6</strong>: Moderate opening (default 0.5)</li>
+<li><strong>0.7–0.9</strong>: Wide opening — the reed is biased open;
+softer articulation and a more hollow quality</li>
+</ul>
+<h3 id="blow-position">Blow Position</h3>
+<p>Determines the split point of the two bore delay lines. This is the
+most distinctive parameter of the Saxofony model — it sets which part
+of the bore each delay line represents.</p>
+<ul>
+<li><strong>0.05–0.15</strong>: Near the reed end — the shorter reed
+segment dominates; bright, clarinet-like tone with strong odd harmonics</li>
+<li><strong>0.20–0.30</strong>: Balanced split; fuller harmonic content
+more reminiscent of soprano saxophone (default 0.20)</li>
+<li><strong>0.40–0.60</strong>: Near-equal split; produces a rounder,
+more oboe-like tone</li>
+<li><strong>Above 0.6</strong>: Increasingly unstable — the open-end
+segment becomes very short</li>
+</ul>
+<h3 id="noise-gain">Noise Gain</h3>
+<p>Adds breath turbulence noise additively to the breath pressure,
+simulating the aerodynamic noise of real wind playing.</p>
+<ul>
+<li><strong>0.0</strong>: Pure, clean tone</li>
+<li><strong>0.05–0.15</strong>: Subtle breathiness — natural reed
+instrument character (default 0.20)</li>
+<li><strong>0.25–0.40</strong>: Noticeably breathy, airy sound; useful
+for sul fiato effects</li>
+</ul>
+<h3 id="vibrato">Vibrato</h3>
+<p>Vibrato is disabled by default (<code>vibratoGain = 0.0</code>).
+When enabled, a sine wave modulates the breath pressure at
+<code>vibratoFreq</code> Hz with a depth proportional to
+<code>vibratoGain</code>.</p>
+<ul>
+<li>Musical vibrato: <code>vibratoFreq</code> = 4.5–6.5 Hz,
+<code>vibratoGain</code> = 0.05–0.15</li>
+<li>Jazz-style wide vibrato: <code>vibratoFreq</code> = 4.0–5.0 Hz,
+<code>vibratoGain</code> = 0.15–0.25</li>
+<li><code>vibratoFreq</code> has no effect when
+<code>vibratoGain = 0.0</code></li>
+</ul>
+<h3 id="nl-amount">NL Amount</h3>
+<p>The primary nonlinearity control. At 0.0 the nonlinear allpass is
+completely bypassed. As the value increases, the allpass coefficient
+modulation grows and the tone becomes progressively richer in upper
+partials.</p>
+<ul>
+<li><strong>0.0</strong>: Pure STK Saxofony — no nonlinearity</li>
+<li><strong>0.05–0.15</strong>: Subtle harmonic enrichment — adds the
+"cut" and brightness associated with real saxophones</li>
+<li><strong>0.20–0.40</strong>: Clearly audible tonal thickening and
+increased upper harmonic content</li>
+<li><strong>0.5–0.8</strong>: Strong modulation — noticeable waveshaping
+and spectral spread</li>
+<li><strong>0.9–1.0</strong>: Aggressive; experimental territory</li>
+</ul>
+<h3 id="nl-freq-mod">NL Freq Mod</h3>
+<p>Only active with <code>nlType = 3</code> (independent sine). For
+<code>nlType = 4</code> the pitch frequency is used automatically and
+this parameter is ignored.</p>
+<ul>
+<li><strong>0.1–5 Hz</strong>: Very slow sweep — almost static tonal
+drift</li>
+<li><strong>5–15 Hz</strong>: Tremolo-rate modulation; audible as a
+rhythmic tonal pulse</li>
+<li><strong>30–80 Hz</strong>: Audio-rate sideband generation</li>
+<li><strong>80–200 Hz</strong>: Rich FM-like sidebands at high
+<code>nlAmount</code></li>
+</ul>
+<h3 id="nl-attack">NL Attack</h3>
+<p>Ramps the nonlinearity from 0 to full depth at note start. A short
+attack (0.01–0.05 s) lets the effect appear almost immediately. A long
+attack (0.5–2.0 s) gradually introduces the nonlinearity as the note
+progresses.</p>
+<h2 id="legato-behavior">Legato Behavior</h2>
+<p>For legato note transitions the bore delay buffers are
+<strong>preserved</strong>. The oscillation continues uninterrupted from
+the previous note; only the delay line lengths are updated to the new
+pitch. The breath attack ramp is skipped so there is no re-onset
+transient between slurred notes. The nonlinear allpass state (filter
+memory and oscillator phase) is also preserved.</p>
+<p>For non-legato notes, all delay lines, the OneZero filter state, and
+the nonlinear allpass state are fully cleared.</p>
+<h2 id="tail-behavior">Tail Behavior</h2>
+<p>Like other breath-driven models, the saxophone tone decays rapidly
+once blowing stops. In tail mode the breath pressure envelope ramps to
+zero and the bore delay buffers drain to silence. This typically takes
+less than 100 ms, after which the audio engine detects silence and
+closes the tail cleanly. The nonlinear allpass remains active during the
+tail so the decay character is consistent with the sustained tone.</p>
+<h2 id="usage-patterns">Usage Patterns</h2>
+<h3 id="basic-saxophone-tone">Basic Saxophone Tone</h3>
+<pre><code>[Saxophone] → signalOut → [Output]
+  breathPressure: 0.70
+  reedStiffness:  0.50
+  reedAperture:   0.50
+  blowPosition:   0.20
+  noiseGain:      0.20
+  nlAmount:       0.0</code></pre>
+<h3 id="soprano-saxophone">Soprano Saxophone Character</h3>
+<pre><code>breathPressure: 0.72
+reedStiffness:  0.60
+reedAperture:   0.45
+blowPosition:   0.18
+noiseGain:      0.15
+nlType:         0
+nlAmount:       0.10
+nlAttack:       0.08</code></pre>
+<p>Higher reed stiffness and a lower blow position give more upper
+harmonics and a brighter, more cutting tone. The type-0 nonlinearity
+adds further edge without fundamentally changing the character.</p>
+<h3 id="mellow-alto-saxophone">Mellow Alto Saxophone Character</h3>
+<pre><code>breathPressure: 0.68
+reedStiffness:  0.40
+reedAperture:   0.55
+blowPosition:   0.28
+noiseGain:      0.18</code></pre>
+<p>A softer reed and higher blow position produce a rounder, darker tone
+closer to a mellow alto saxophone or even an oboe-like quality.</p>
+<h3 id="clarinet-like">Clarinet-Like Tone</h3>
+<pre><code>breathPressure: 0.75
+reedStiffness:  0.65
+reedAperture:   0.40
+blowPosition:   0.08
+noiseGain:      0.10</code></pre>
+<p>A very low blow position makes the reed-end segment dominant, which
+strongly emphasises odd harmonics — giving the characteristic hollow,
+clarinet-like tone where even harmonics are weak.</p>
+<h3 id="vibrato-expression">Vibrato Expression</h3>
+<pre><code>vibratoFreq:  5.2
+vibratoGain:  0.10</code></pre>
+<p>Or modulate <code>vibratoGain</code> with an Envelope Engine to bring
+vibrato in gradually over the note, simulating a classical saxophone
+performance style.</p>
+<h3 id="nonlinear-warmth">Nonlinear Warmth (Michon Type 0)</h3>
+<pre><code>nlType:   0
+nlAmount: 0.10
+nlAttack: 0.12</code></pre>
+<p>Signal-dependent modulation inside the waveguide loop adds harmonic
+richness that grows naturally with the bore's own vibration. At this
+level, the effect is subtle but clearly audible as additional upper
+partials and a slightly more complex, "alive" tone.</p>
+<h3 id="harmonic-locking">Harmonic Locking (Michon Type 4)</h3>
+<pre><code>nlType:   4
+nlAmount: 0.20
+nlAttack: 0.10</code></pre>
+<p>The modulation sine is locked to the fundamental pitch, so the added
+harmonics track every note. Gives a consistent, richer timbre across the
+full pitch range.</p>
+<h3 id="combining-with-formant-body">Combining with Formant Body</h3>
+<pre><code>[Saxophone] → signalOut → [Formant Body] → signalOut → [Output]</code></pre>
+<p>The Formant Body processor can add vowel-like resonances. Low
+<code>f1</code>/<code>f2</code> values (300–700 Hz) reinforce the warm
+lower partials; higher values (800–2000 Hz) bring out the nasal quality
+common in real saxophone tones.</p>
+<h3 id="combining-with-reverb">Combining with Reverb</h3>
+<pre><code>[Saxophone] → signalOut → [IR Convolution] → signalOut → [Output]
+  wetDry: 0.25–0.45</code></pre>
+<p>A small room or concert hall IR places the dry physical model in a
+realistic acoustic context and softens the somewhat clinical quality of
+the pure waveguide output.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="no-sound-or-very-faint">No Sound or Very Faint</h3>
+<ol type="1">
+<li>Increase <code>breathPressure</code> — must be above ~0.55 to
+sustain oscillation with typical reed settings</li>
+<li>Check <code>reedAperture</code> is not too high (above 0.85 biases
+the reed fully open, reducing the valve action)</li>
+<li>Ensure <code>blowPosition</code> is not at 0 or 1 (degenerate
+boundary conditions)</li>
+</ol>
+<h3 id="tone-unstable-or-noisy">Tone Unstable or Noisy</h3>
+<ol type="1">
+<li>Reduce <code>nlAmount</code> — high values inside the feedback loop
+can cause instability at borderline operating points</li>
+<li>Reduce <code>breathPressure</code> slightly; values near 0.90 are
+prone to overblowing at many pitch/reed combinations</li>
+<li>Move <code>blowPosition</code> closer to 0.20; extreme values shorten
+one delay line significantly and can cause aliasing at high pitches</li>
+</ol>
+<h3 id="tone-too-clarinet-like">Tone Too Clarinet-Like</h3>
+<ol type="1">
+<li>Increase <code>blowPosition</code> toward 0.25–0.35</li>
+<li>Reduce <code>reedStiffness</code> slightly</li>
+<li>Add a small <code>nlAmount</code> (0.08–0.15, type 0) to introduce
+more even harmonics</li>
+</ol>
+<h3 id="tone-too-bright-harsh">Tone Too Bright / Harsh</h3>
+<ol type="1">
+<li>Reduce <code>reedStiffness</code> toward 0.3–0.4</li>
+<li>Increase <code>blowPosition</code> slightly</li>
+<li>Add a Rolloff Processor or LP/HP Filter after the Saxophone
+container to attenuate high frequencies</li>
+</ol>
+<h3 id="tone-too-dark-lacks-presence">Tone Too Dark / Lacks Presence</h3>
+<ol type="1">
+<li>Increase <code>reedStiffness</code> toward 0.6–0.7</li>
+<li>Reduce <code>blowPosition</code> slightly toward 0.12–0.18</li>
+<li>Add a small <code>nlAmount</code> (type 0) to enrich upper
+harmonics</li>
+</ol>
+<h3 id="nl-effect-too-abrupt-at-note-start">NL Effect Too Abrupt at
+Note Start</h3>
+<ol type="1">
+<li>Increase <code>nlAttack</code> — a value of 0.3–0.8 s gives the
+nonlinearity time to fade in smoothly</li>
+<li>Reduce <code>nlAmount</code> — even small amounts can be
+surprisingly audible in the attack phase at high reed stiffness</li>
+</ol>
+<h2 id="technical-notes">Technical Notes</h2>
+<h3 id="pitch-tracking">Pitch Tracking</h3>
+<p>The total bore delay is recalculated whenever the pitch changes:</p>
+<pre><code>totalDelay = sampleRate / pitch − 1.5</code></pre>
+<p>The 1.5 compensates for the combined phase delay of the OneZero filter
+(0.5 samples at DC) plus one sample of computational latency. The two
+segment lengths are updated simultaneously:</p>
+<pre><code>delay0 length = (1 − blowPosition) × totalDelay
+delay1 length =      blowPosition  × totalDelay</code></pre>
+<h3 id="reed-table">Reed Table</h3>
+<p>The ReedTable is a clamped linear function approximating Smith's 1986
+clarinet reed model:</p>
+<pre><code>offset     = 0.4 + 0.6 × reedAperture
+slope      = 0.1 + 0.4 × reedStiffness
+reedCoeff  = clamp(offset + slope × pressureDiff, −1, 1)</code></pre>
+<p>When <code>pressureDiff</code> is small (light blowing), the output is
+near <code>offset</code>; at high differential pressure the reed closes
+(coefficient approaches −1) or fully opens (coefficient approaches +1).
+The combination of <code>reedAperture</code> and <code>reedStiffness</code>
+shapes the entire pressure-to-flow transfer characteristic.</p>
+<h3 id="no-stk-dependency">No STK Dependency</h3>
+<p>The model is implemented entirely within Kala
+(<code>saxophonemodel.h</code> / <code>saxophonemodel.cpp</code>) with
+no dependency on the STK library. All DSP components — the delay lines,
+OneZero filter, ReedTable, LCG noise source, vibrato oscillator, and
+nonlinear allpass — are self-contained.</p>
+<hr />
+<p><em>Documentation accurate as of Kala v1.4. Source files:
+<code>saxophonemodel.h</code>, <code>saxophonemodel.cpp</code>. Core
+algorithm based on STK Saxofony by Perry R. Cook &amp; Gary P. Scavone,
+1995–2021. Nonlinear extension by Romain Michon.</em></p>
+</body>
+</html>

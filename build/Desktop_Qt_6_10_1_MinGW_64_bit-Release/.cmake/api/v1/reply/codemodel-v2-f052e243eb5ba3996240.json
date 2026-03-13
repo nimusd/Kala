@@ -1,0 +1,474 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Release-3267ae4da73f2427b435.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						18,
+						19,
+						20
+					]
+				},
+				{
+					"build" : "_deps/rtaudio-build",
+					"childIndexes" : 
+					[
+						2
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-_deps.rtaudio-build-Release-2ed56d908cd7d4ea3c54.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "build/Desktop_Qt_6_10_1_MinGW_64_bit-Release/_deps/rtaudio-src",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						21,
+						22,
+						23,
+						24,
+						25,
+						26,
+						27,
+						28,
+						29,
+						30,
+						37,
+						40
+					]
+				},
+				{
+					"build" : "_deps/rtaudio-build/tests",
+					"jsonFile" : "directory-_deps.rtaudio-build.tests-Release-d39721bc869b9efd731e.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 1,
+					"source" : "build/Desktop_Qt_6_10_1_MinGW_64_bit-Release/_deps/rtaudio-src/tests",
+					"targetIndexes" : 
+					[
+						31,
+						32,
+						33,
+						34,
+						35,
+						36,
+						38,
+						39
+					]
+				}
+			],
+			"name" : "Release",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "Kala",
+					"targetIndexes" : 
+					[
+						18,
+						19,
+						20
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1,
+						2
+					],
+					"name" : "RtAudio",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						21,
+						22,
+						23,
+						24,
+						25,
+						26,
+						27,
+						28,
+						29,
+						30,
+						31,
+						32,
+						33,
+						34,
+						35,
+						36,
+						37,
+						38,
+						39,
+						40
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "Continuous::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-Continuous-Release-d58657965acf34065517.json",
+					"name" : "Continuous",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousBuild::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousBuild-Release-67c8200b6051e8192610.json",
+					"name" : "ContinuousBuild",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousConfigure::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousConfigure-Release-2a3a26154161cc53dafc.json",
+					"name" : "ContinuousConfigure",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousCoverage::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousCoverage-Release-a8c0733106765fc4ae51.json",
+					"name" : "ContinuousCoverage",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousMemCheck::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousMemCheck-Release-41dbcd9d1d6a3959fdfa.json",
+					"name" : "ContinuousMemCheck",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousStart::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousStart-Release-f9edbb895bd8d638164a.json",
+					"name" : "ContinuousStart",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousSubmit::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousSubmit-Release-9cb0da321f12df51e288.json",
+					"name" : "ContinuousSubmit",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousTest::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousTest-Release-8e6066f4b80967c3fb3a.json",
+					"name" : "ContinuousTest",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ContinuousUpdate::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ContinuousUpdate-Release-70344c7332f3e8f98b97.json",
+					"name" : "ContinuousUpdate",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "Experimental::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-Experimental-Release-00a579c6e4afd33ff6f5.json",
+					"name" : "Experimental",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalBuild::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalBuild-Release-e2f98410fadcb1324e93.json",
+					"name" : "ExperimentalBuild",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalConfigure::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalConfigure-Release-1eb454a9cf51fcad5d66.json",
+					"name" : "ExperimentalConfigure",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalCoverage::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalCoverage-Release-eff912743b4462888517.json",
+					"name" : "ExperimentalCoverage",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalMemCheck::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalMemCheck-Release-0b9a2fc0b2fc4b4b654b.json",
+					"name" : "ExperimentalMemCheck",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalStart::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalStart-Release-12c2003c417892b9e1f0.json",
+					"name" : "ExperimentalStart",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalSubmit::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalSubmit-Release-9bba3df805b0a3db8049.json",
+					"name" : "ExperimentalSubmit",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalTest::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalTest-Release-ec4bc24a7917f1c0fb5b.json",
+					"name" : "ExperimentalTest",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "ExperimentalUpdate::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-ExperimentalUpdate-Release-464585cce22a97288b2a.json",
+					"name" : "ExperimentalUpdate",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "Kala::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-Kala-Release-8091d245d2fe05000d26.json",
+					"name" : "Kala",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "Kala_autogen::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-Kala_autogen-Release-c5bb5909febbda470d27.json",
+					"name" : "Kala_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "Kala_autogen_timestamp_deps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-Kala_autogen_timestamp_deps-Release-800f9270d8811e65b075.json",
+					"name" : "Kala_autogen_timestamp_deps",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "Nightly::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-Nightly-Release-0737d7e2db4704feb89e.json",
+					"name" : "Nightly",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyBuild::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyBuild-Release-fe91879fae87f4772471.json",
+					"name" : "NightlyBuild",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyConfigure::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyConfigure-Release-6122ccdf5206b75e256a.json",
+					"name" : "NightlyConfigure",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyCoverage::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyCoverage-Release-b165d8f42d2242c3dad7.json",
+					"name" : "NightlyCoverage",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyMemCheck::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyMemCheck-Release-4e522673ba8870bf02ca.json",
+					"name" : "NightlyMemCheck",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyMemoryCheck::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyMemoryCheck-Release-ccd05d6eae74e8629b12.json",
+					"name" : "NightlyMemoryCheck",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyStart::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyStart-Release-3fa1c2ca4b9b2b5595fa.json",
+					"name" : "NightlyStart",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlySubmit::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlySubmit-Release-1a6afd68dd37f061c354.json",
+					"name" : "NightlySubmit",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyTest::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyTest-Release-939d60eee1b8c34d1bdd.json",
+					"name" : "NightlyTest",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "NightlyUpdate::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-NightlyUpdate-Release-bf14c488dd9808d213ac.json",
+					"name" : "NightlyUpdate",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "apinames::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-apinames-Release-b24f7eb981684a5cc02f.json",
+					"name" : "apinames",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "audioprobe::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-audioprobe-Release-ad6bbb2678dd883a41f4.json",
+					"name" : "audioprobe",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "duplex::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-duplex-Release-5fc85b69e410061314d8.json",
+					"name" : "duplex",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "playraw::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-playraw-Release-41e2696612653ee97f4d.json",
+					"name" : "playraw",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "playsaw::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-playsaw-Release-895856e209ec9d03fc06.json",
+					"name" : "playsaw",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "record::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-record-Release-9a06bd708343f0f70fd0.json",
+					"name" : "record",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "rtaudio::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-rtaudio-Release-3dc64b579dd82c26dfb4.json",
+					"name" : "rtaudio",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "testall::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-testall-Release-c739000a4233358d56d8.json",
+					"name" : "testall",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "teststops::@34199d0bdcf90b8f836e",
+					"jsonFile" : "target-teststops-Release-3bee9271464b9741c9d1.json",
+					"name" : "teststops",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "uninstall::@70fcf3ece4cf6931f4f0",
+					"jsonFile" : "target-uninstall-Release-099733796e65e1d4d031.json",
+					"name" : "uninstall",
+					"projectIndex" : 1
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Release",
+		"source" : "C:/c++code/Kala"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Noise Color Filter</title>
+  </head>
+  <body>
+    <h1 id="noise-color-filter-documentation">Noise Color Filter
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Noise Color Filter is a <strong>noise generator and
+        shaper</strong> designed for breath and fricative effects. It can
+      generate colored noise internally (white, pink, or brown) and shapes it
+      through a configurable biquad filter to create different breath textures
+      - from dark, breathy rumbles to bright, hissy fricatives.</p>
+    <p>This container serves dual purposes: it can generate noise internally
+      or process external audio through its filter.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Shaping</strong> (Orange) - Transforms spectral character</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>noise = generateNoise(noiseType)  // White, Pink, or Brown
+output = biquadFilter(noise, color, filterQ, filterType)</code></pre>
+    <p>The filter cutoff (<code>color</code>) determines the spectral
+      character: - Low color (100 Hz) = dark, breathy rumble - Mid color (2000
+      Hz) = ‘SH’ territory - High color (8000 Hz) = ‘S’ territory, hissy</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>audioIn</code></td>
+          <td>Signal</td>
+          <td>-</td>
+          <td>External audio to filter (when not using internal noise)</td>
+        </tr>
+        <tr>
+          <td><code>color</code></td>
+          <td>Control</td>
+          <td>2000.0</td>
+          <td>Filter cutoff frequency (100-12000 Hz)</td>
+        </tr>
+        <tr>
+          <td><code>filterQ</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Filter resonance/sharpness (0.5-20.0)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note frequency used as the filter center when <code>followPitch</code>
+            is on. 1.0 = fundamental, 2.0 = octave above. Connect LFO or
+            Envelope Engine for dynamic pitch tracking.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>noiseOut</code></td>
+          <td>Signal</td>
+          <td>Filtered noise output</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>color</code></td>
+          <td>Float</td>
+          <td>2000.0</td>
+          <td>100.0-12000.0</td>
+          <td>Filter cutoff frequency in Hz. Ignored when <code>followPitch</code>
+            is on.</td>
+        </tr>
+        <tr>
+          <td><code>filterQ</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.5-20.0</td>
+          <td>Filter Q factor (resonance). Higher values narrow the band —
+            critical for pitched noise.</td>
+        </tr>
+        <tr>
+          <td><code>filterType</code></td>
+          <td>Enum</td>
+          <td>Highpass</td>
+          <td>Lowpass, Highpass, Bandpass</td>
+          <td>Filter mode. Use Bandpass with Follow Note Pitch for pitched noise
+            effects.</td>
+        </tr>
+        <tr>
+          <td><code>noiseType</code></td>
+          <td>Enum</td>
+          <td>White</td>
+          <td>White, Pink, Brown</td>
+          <td>Internal noise generator type</td>
+        </tr>
+        <tr>
+          <td><code>followPitch</code></td>
+          <td>Bool</td>
+          <td>false</td>
+          <td>on / off</td>
+          <td>When on, the filter center frequency tracks the current note's
+            fundamental frequency instead of using <code>color</code>. The <code>color</code>
+            port modulation is also bypassed.</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.5-8.0</td>
+          <td>Scales the note frequency before applying it to the filter. 1.0 =
+            fundamental, 2.0 = octave above, 0.5 = octave below. Only active
+            when <code>followPitch</code> is on.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="filter-types">Filter Types</h2>
+    <h3 id="highpass-default">Highpass (Default)</h3>
+    <p>Passes frequencies above the cutoff, attenuates below. Default for
+      vocal fricatives.</p>
+    <p><strong>Use case:</strong> ‘S’ and ‘SH’ sounds, breath with air
+      character.</p>
+    <h3 id="lowpass">Lowpass</h3>
+    <p>Passes frequencies below the cutoff, attenuates above.</p>
+    <p><strong>Use case:</strong> Dark breath, wind effects, muffled
+      rumble.</p>
+    <h3 id="bandpass">Bandpass</h3>
+    <p>Passes a band around the cutoff frequency, attenuates both above and
+      below.</p>
+    <p><strong>Use case:</strong> Focused breath textures, specific
+      frequency emphasis.</p>
+    <h2 id="noise-types">Noise Types</h2>
+    <h3 id="white">White</h3>
+    <p>Flat spectrum - equal energy per Hz. Bright, hissy character.</p>
+    <h3 id="pink">Pink</h3>
+    <p>Energy proportional to 1/f.&nbsp;More natural, balanced character. Uses
+      Paul Kellet’s algorithm.</p>
+    <h3 id="brown-brownian">Brown (Brownian)</h3>
+    <p>Energy proportional to 1/f². Very low frequency emphasis, rumbling
+      character. Generated via random walk.</p>
+    <h2 id="color-frequency-guide">Color Frequency Guide</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Color Value</th>
+          <th>Character</th>
+          <th>Vocal Equivalent</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>100-500 Hz</td>
+          <td>Dark rumble</td>
+          <td>Deep breath</td>
+        </tr>
+        <tr>
+          <td>500-1500 Hz</td>
+          <td>Warm breath</td>
+          <td>‘H’ sounds</td>
+        </tr>
+        <tr>
+          <td>1500-3000 Hz</td>
+          <td>Balanced</td>
+          <td>‘SH’ fricative</td>
+        </tr>
+        <tr>
+          <td>3000-6000 Hz</td>
+          <td>Bright</td>
+          <td>‘S’ fricative</td>
+        </tr>
+        <tr>
+          <td>6000-12000 Hz</td>
+          <td>Hissy</td>
+          <td>Sharp sibilance</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="q-factor-effects">Q Factor Effects</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Q Value</th>
+          <th>Bandwidth</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.5-1.0</td>
+          <td>Wide</td>
+          <td>Gentle, broad filtering</td>
+        </tr>
+        <tr>
+          <td>1.0-3.0</td>
+          <td>Moderate</td>
+          <td>Defined character</td>
+        </tr>
+        <tr>
+          <td>3.0-10.0</td>
+          <td>Narrow</td>
+          <td>Resonant, focused</td>
+        </tr>
+        <tr>
+          <td>10.0-20.0</td>
+          <td>Very narrow</td>
+          <td>Strong resonance peak</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-breath-noise">Basic Breath Noise</h3>
+    <p>Generate hissy breath for fricative consonants.</p>
+    <pre><code>Noise Color Filter ──→ noiseOut ──→ [Mixer/Output]
+     │
+     └── filterType: Highpass, color: 4000, noiseType: White</code></pre>
+    <h3 id="dark-breath">Dark Breath</h3>
+    <p>Low, breathy rumble for voiced breath.</p>
+    <pre><code>Noise Color Filter ──→ noiseOut ──→ [Mixer/Output]
+     │
+     └── filterType: Lowpass, color: 500, noiseType: Brown</code></pre>
+    <h3 id="animated-breath-color">Animated Breath Color</h3>
+    <p>Use LFO to sweep filter cutoff for evolving breath texture.</p>
+    <pre><code>LFO ──→ color
+          │
+Noise Color Filter ──→ noiseOut ──→ [Output]</code></pre>
+    <h3 id="pitched-noise-flute-breath">Pitched Noise (Flute / Edge-Tone Breath)</h3>
+    <p>In flutes, recorders, shakuhachi, and similar edge-tone instruments,
+      the turbulence at the embouchure is modulated by the bore's standing
+      wave. The resulting noise is not spectrally flat — it has energy
+      concentrated near the fundamental frequency and its harmonics. This
+      preset recreates that effect.</p>
+    <pre><code>Noise Color Filter ──→ noiseOut ──→ [Signal Mixer]
+     │
+     └── filterType: Bandpass
+         followPitch: on
+         pitchMultiplier: 1.0   (fundamental)
+         filterQ: 5–15          (controls "how pitched" vs "how breathy")</code></pre>
+    <p><strong>Q as a timbral control:</strong></p>
+    <ul>
+      <li>Low Q (1–3): broad, breathy whisper with a pitch hint</li>
+      <li>Mid Q (5–10): clearly pitched breath, flute-like</li>
+      <li>High Q (15–20): narrow resonant band, almost tonal</li>
+    </ul>
+    <p><strong>Pitch Multiplier for harmonic colouring:</strong> Real
+      instruments
+      have pitched noise across multiple harmonics. Use two instances — one at
+      <code>pitchMultiplier: 1.0</code> and one at <code>pitchMultiplier: 2.0</code>
+      — mixed
+      together for a richer, more acoustically accurate breath.</p>
+    <h3 id="external-audio-processing">External Audio Processing</h3>
+    <p>Process external audio instead of internal noise.</p>
+    <pre><code>[External Audio] ──→ audioIn ──→ Noise Color Filter ──→ noiseOut
+                                       │
+                                       └── useInternal: false</code></pre>
+    <h2 id="comparison-with-other-containers">Comparison with Other
+      Containers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 39%">
+        <col style="width: 28%">
+        <col style="width: 32%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Domain</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Noise Color Filter</strong></td>
+          <td>Signal</td>
+          <td>Generates and shapes noise for breath</td>
+        </tr>
+        <tr>
+          <td><strong>Rolloff Processor</strong></td>
+          <td>Spectrum</td>
+          <td>Power-law harmonic attenuation</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Signal</td>
+          <td>Resonant formant filtering</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Noise Color Filter generates its own noise source and shapes it for
+      breath/turbulence, while the other shapers process existing harmonic or
+      signal content.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="biquad-filter">Biquad Filter</h3>
+    <p>Uses standard biquad filter implementation (Direct Form I) with
+      coefficients from the Audio EQ Cookbook by Robert Bristow-Johnson.</p>
+    <div class="sourceCode" id="cb6">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a
+href="#cb6-1" aria-hidden="true" tabindex="-1"></a>output <span class="op">=</span> b0×input <span
+class="op">+</span> b1×x<span class="op">[</span>n<span class="op">-</span><span
+class="dv">1</span><span class="op">]</span> <span class="op">+</span> b2×x<span
+class="op">[</span>n<span class="op">-</span><span class="dv">2</span><span class="op">]</span> <span
+class="op">-</span> a1×y<span class="op">[</span>n<span class="op">-</span><span
+class="dv">1</span><span class="op">]</span> <span class="op">-</span> a2×y<span
+class="op">[</span>n<span class="op">-</span><span class="dv">2</span><span class="op">]</span></span></code></pre>
+    </div>
+    <h3 id="pink-noise-algorithm">Pink Noise Algorithm</h3>
+    <p>Implements Paul Kellet’s pink noise algorithm using a bank of
+      first-order filters to achieve approximately -3 dB/octave rolloff.</p>
+    <h3 id="brown-noise-algorithm">Brown Noise Algorithm</h3>
+    <p>Uses random walk with leaky integration:</p>
+    <div class="sourceCode" id="cb7">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a
+href="#cb7-1" aria-hidden="true" tabindex="-1"></a>brownLast <span class="op">=</span> <span
+class="op">(</span>brownLast <span class="op">+</span> <span class="fl">0.02</span> × white<span
+class="op">)</span> <span class="op">/</span> <span class="fl">1.02</span></span></code></pre>
+    </div>
+    <h3 id="phase-independence">Phase Independence</h3>
+    <p>The internal noise generator uses time-seeded random number
+      generation, so each instance produces different noise patterns.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>noisecolorfilter.h</code>,
+        <code>noisecolorfilter.cpp</code></em></p>
+  </body>
+</html>

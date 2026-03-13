@@ -1,0 +1,2 @@
+C:\Qt\Tools\mingw1310_64\bin\ar.exe qc librtaudiod.a CMakeFiles/rtaudio.dir/RtAudio.cpp.obj CMakeFiles/rtaudio.dir/rtaudio_c.cpp.obj
+C:\Qt\Tools\mingw1310_64\bin\ranlib.exe librtaudiod.a

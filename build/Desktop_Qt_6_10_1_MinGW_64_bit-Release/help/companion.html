@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Kala Companion</title>
+  </head>
+  <body>
+    <h1 id="kala-companion">Kala Companion</h1>
+    <p>Kala Companion is a built-in AI assistant that lives inside Kala. It has two roles:</p>
+    <ul>
+      <li><strong>Guide</strong> — explains Kala's concepts, containers, and workflow in plain language.</li>
+      <li><strong>Builder</strong> — constructs sounit graphs and writes music on your behalf,
+        step by step, inside the running application.</li>
+    </ul>
+    <p>When the Companion builds something, it uses the same operations you would use by hand —
+      every change lands in the undo stack, so you can always press <kbd>Ctrl+Z</kbd> to step back.</p>
+
+    <h2 id="opening-the-companion">Opening the Companion</h2>
+    <p>Press <kbd>Ctrl+Shift+A</kbd>, or go to <strong>View → AI Companion</strong>.
+      The panel docks on the right side of the main window. You can drag it to the bottom or
+      undock it entirely.</p>
+    <ul>
+      <li>Type your message and press <kbd>Enter</kbd> to send.</li>
+      <li>Press <kbd>Shift+Enter</kbd> to insert a newline without sending.</li>
+    </ul>
+
+    <h2 id="setting-up">Setting Up</h2>
+    <p>Go to <strong>Settings → AI Companion</strong>. Choose a provider and fill in the
+      required fields, then click <strong>Apply</strong>.</p>
+
+    <h3 id="provider-ollama">Ollama (local, recommended)</h3>
+    <p>Runs entirely on your machine — no internet required, no API key, no data leaves your computer.
+      Install <a href="https://ollama.com">Ollama</a>, pull a model, and point Kala at it.</p>
+    <pre>ollama pull qwen2.5-coder:14b</pre>
+    <p>Settings: Provider = <em>Ollama</em>, URL = <code>http://localhost:11434/v1</code>,
+      Model = <code>qwen2.5-coder:14b</code> (or whatever you pulled). API Key can be left as
+      <code>ollama</code>.</p>
+    <div class="tip">
+      <strong>Recommended models for Kala:</strong><br>
+      <code>qwen3-coder:30b</code> — very capable, needs ~20 GB VRAM<br>
+      <code>qwen2.5-coder:14b</code> — good balance, needs ~10 GB VRAM<br>
+      <code>qwen2.5-coder:7b</code> — lighter, needs ~6 GB VRAM
+    </div>
+
+    <h3 id="provider-cloud">Cloud Providers</h3>
+    <p>For more powerful responses, connect to a cloud API. You will need an API key from the
+      provider's website. Conversations are sent to their servers.</p>
+    <table>
+      <tr><th>Provider</th><th>Good for</th></tr>
+      <tr><td>Anthropic (Claude)</td><td>Best reasoning, complex multi-step builds</td></tr>
+      <tr><td>OpenAI</td><td>GPT-4o and o-series models</td></tr>
+      <tr><td>Groq</td><td>Very fast responses with open-source models</td></tr>
+      <tr><td>OpenRouter</td><td>Access to many models through one API key</td></tr>
+    </table>
+
+    <h2 id="what-it-can-do">What the Companion Can Do</h2>
+
+    <h3 id="answer-questions">Answer Questions</h3>
+    <p>Ask anything about Kala — containers, connections, the score canvas, tuning systems,
+      signal chain design. The Companion has the full synthesis model in its context.</p>
+    <blockquote>
+      "What's the difference between Rolloff Processor and 10-Band EQ?"<br>
+      "How do I make a note ring out after I release it?"<br>
+      "What does the modulate connection function do?"
+    </blockquote>
+
+    <h3 id="build-sounits">Build Sounit Graphs</h3>
+    <p>Describe the sound you want. The Companion creates the containers, connects them, and
+      sets the parameters — all in the currently open track.</p>
+    <blockquote>
+      "Build me a breathy flute with a slow brightness swell."<br>
+      "Make a bowed cello with a wood room reverb."<br>
+      "Create a plucked string with a long tail using Karplus Strong."<br>
+      "Load my bowed-lyric instrument and add a plate reverb to it."<br>
+      "Add an envelope that swells up to full brightness and fades back by the end of the note."<br>
+      "Use the Fibonacci spectrum as the harmonic content."<br>
+      "Remove the connection between the Envelope Engine and the Rolloff Processor."
+    </blockquote>
+    <p>The Companion will confirm what it built and offer to play a preview. You can refine
+      the result by asking follow-up questions.</p>
+
+    <h3 id="browse-the-library">Browse the Library</h3>
+    <p>The Companion knows your full instrument library. Ask it what's available:</p>
+    <blockquote>
+      "What bowed string instruments do I have?"<br>
+      "Show me all the drone sounds."<br>
+      "Load the String Expressive Cantabile into this track."
+    </blockquote>
+    <p>It also knows your impulse responses and envelope library, and can apply them
+      directly without you opening any inspector:</p>
+    <blockquote>
+      "What reverbs do I have? Apply the Nice Wood Room to this instrument."<br>
+      "Load the Swell envelope into this Envelope Engine."<br>
+      "Load the Fibonacci spectrum into Harmonic Generator 1."
+    </blockquote>
+
+    <h3 id="manage-variations">Manage Sound Variations</h3>
+    <p>The Companion can create, switch, rename and delete sounit variations on any track —
+      the same operations available in the Sound Engine panel, but driven by conversation.</p>
+    <blockquote>
+      "Save the current sound as a variation called 'Wood Room'."<br>
+      "Load the bowed-lyric instrument as a variation on this track named 'Lyric'."<br>
+      "Switch to the Plate variation so I can tweak its reverb."<br>
+      "Go back to the base sounit."<br>
+      "Rename variation 2 from 'Plate' to 'Long Plate'."<br>
+      "Delete the Wood Room variation."<br>
+      "Apply the Lyric variation to all the long notes."
+    </blockquote>
+    <p>A typical workflow: build the base sound, ask the Companion to save it as a variation,
+      then switch to it and ask for edits (add reverb, change EQ) without touching the
+      base. Every switch is undoable.</p>
+
+    <h3 id="write-music">Write Music</h3>
+    <p>The Companion can place notes on the score canvas, set the scale and tempo, and
+      organise notes across multiple tracks.</p>
+    <blockquote>
+      "Set the scale to Raga Yaman, base D4, tempo 72 BPM."<br>
+      "Write a simple descending C major melody on track 0 over 4 bars at 90 BPM."<br>
+      "Add a cello pizzicato bass line on track 1 under the melody on track 0."<br>
+      "Clear all notes on track 2 and start fresh."
+    </blockquote>
+    <div class="tip">
+      <strong>Tip:</strong> The Companion works with the track you currently have open in the
+      Sounit Builder. Switch to the right track before asking it to build or modify a sound.
+    </div>
+
+    <h3 id="edit-notes">Edit Notes</h3>
+    <p>The Companion can modify existing notes in many ways — pitch, duration, timing, and more.</p>
+    <blockquote>
+      "Transpose all the notes up an octave."<br>
+      "Move the melody up a perfect fifth."<br>
+      "Transpose the selected notes up 3 scale degrees."<br>
+      "Set the duration of the long notes to 2000 ms."<br>
+      "Stretch all the notes to be 1.5× longer without moving their start times."<br>
+      "Duplicate the first phrase and place it immediately after, an octave higher."<br>
+      "Set all notes on track 0 to exactly 440 Hz."
+    </blockquote>
+    <p>Pitch can be transposed by a ratio (2.0 = octave up, 1.5 = perfect fifth) or by
+      scale degrees (walks the current scale, including octave wrapping). All edits are undoable.</p>
+
+    <h3 id="select-notes">Select Notes by Pitch or Track</h3>
+    <p>The Companion can select notes on the canvas for you — by pitch range, by track,
+      or based on what you already have highlighted — and then immediately act on them.</p>
+    <blockquote>
+      "Select all notes above 400 Hz."<br>
+      "Select the notes below 200 Hz on track 1."<br>
+      "Work on the notes I have selected right now."<br>
+      "Select everything between 300 and 600 Hz and shift it 200 ms earlier."
+    </blockquote>
+    <p>Selected notes are visually highlighted on the canvas. The Companion chains
+      selection and editing in a single request — you don't need two separate steps.</p>
+
+    <h3 id="shift-notes">Shift Notes in Time</h3>
+    <p>Move notes forward or backward in time — the whole canvas, a pitch range,
+      or a specific selection.</p>
+    <blockquote>
+      "Move all the notes at around 300 Hz 300 ms earlier."<br>
+      "Shift the selected notes forward by half a bar."<br>
+      "Push everything on track 2 back by 500 ms."
+    </blockquote>
+    <p>The entire shift is one undo command — <kbd>Ctrl+Z</kbd> restores all moved notes
+      at once.</p>
+
+    <h3 id="dynamics-and-accents">Dynamics and Accentuation</h3>
+    <p>The Companion can set dynamics on individual notes and apply rhythmic accent
+      patterns across whole passages — including subtle humanization so no two beats
+      sound exactly the same.</p>
+    <blockquote>
+      "Apply a 5/4 accent pattern: beat 1 strong, beat 3 medium, beat 4 light,
+       the rest lighter."<br>
+      "Add some humanization to the dynamics — keep the beat pattern but vary each
+       note slightly."<br>
+      "Make the selected notes a bit softer, but not all exactly the same."<br>
+      "Draw a crescendo across the first 8 bars then fade back."
+    </blockquote>
+    <p>The accent pattern is time-signature-aware: if your piece has a meter change
+      mid-way, each note is evaluated against the time signature active at its own
+      position. All changes are undoable in one step.</p>
+
+    <h3 id="expressive-curves">Expressive Curves and Vibrato</h3>
+    <p>The Companion can read and write the per-note expressive curves (dynamics, brightness,
+      bow pressure, etc.) as well as vibrato settings.</p>
+    <blockquote>
+      "Show me the expressive curves on the first note."<br>
+      "Draw a bell-shaped brightness curve on the selected notes."<br>
+      "Set a slow vibrato on all the notes — rate 5 Hz, gentle pitch depth."<br>
+      "Apply a late-entry vibrato that starts halfway through each note."<br>
+      "Remove vibrato from the short notes."
+    </blockquote>
+    <p>Curve points use normalised time (0 = note start, 1 = note end) and normalised
+      value (0–1). The curve shapes the parameter over the lifetime of each note.
+      Vibrato supports pitch depth, amplitude depth, onset time, and an intensity
+      envelope for natural swell-in.</p>
+
+    <h3 id="shape-phrases">Shape Phrases (Score Canvas Operations)</h3>
+    <p>The Companion can apply all the right-click operations from the score canvas directly
+      to notes — no manual selection required.</p>
+    <blockquote>
+      "Link the first three notes as legato."<br>
+      "Apply SineInOut easing to even out the rhythm."<br>
+      "Scale the timing by 0.75 to speed it up."<br>
+      "Snap all notes to the current scale."<br>
+      "Make the sustained drone notes continuous."<br>
+      "Duplicate the phrase and put it right after, pitched a fifth higher."
+    </blockquote>
+    <p>All operations push to the undo stack, so <kbd>Ctrl+Z</kbd> always works.</p>
+
+    <h3 id="time-signatures">Tempo and Time Signature Changes</h3>
+    <p>The Companion can manage the full tempo map — the opening meter and any mid-piece changes.</p>
+    <blockquote>
+      "Set the opening tempo to 92 BPM in 6/8."<br>
+      "Add a ritardando: change to 72 BPM at bar 9."<br>
+      "Add a time signature change to 5/4 at bar 5."<br>
+      "Show me all the tempo changes in the piece."<br>
+      "Remove the tempo change at bar 9."
+    </blockquote>
+    <p>Mid-piece changes affect bar line display, beat dynamics, and playback timing.
+      Changes are undoable.</p>
+
+    <h3 id="transport">Playback and Transport</h3>
+    <p>The Companion can control playback directly — start, stop, seek to any position,
+      and set up a loop region.</p>
+    <blockquote>
+      "Play the score."<br>
+      "Stop."<br>
+      "Go to bar 5 and play from there."<br>
+      "Loop bars 3 to 7 so I can listen to that passage."<br>
+      "Play from 4 seconds in."<br>
+      "Clear the loop."
+    </blockquote>
+    <p>When a loop is set, playback cycles automatically between the start and end points
+      until you stop or clear the loop. Bar and beat positions are 1-based and respect
+      the tempo map.</p>
+
+    <h3 id="manage-tracks">Manage Tracks</h3>
+    <p>The Companion can add, rename, and delete instrument tracks.</p>
+    <blockquote>
+      "Add a new track called 'Cello 2'."<br>
+      "Rename track 0 to 'Violin I'."<br>
+      "Delete track 3."<br>
+      "What tracks do I have?"
+    </blockquote>
+    <p>After adding a track, ask the Companion to load an instrument into it immediately:</p>
+    <blockquote>
+      "Add a new track, call it 'Viola', and load the bowed-expressive sounit into it."
+    </blockquote>
+
+    <h3 id="projects">Open and Save Projects</h3>
+    <p>The Companion can open and save <code>.kala</code> project files.</p>
+    <blockquote>
+      "What projects do I have?"<br>
+      "Open the Souvenir de Florence project."<br>
+      "Save the project."<br>
+      "Save as D:/Music/kala/projects/my-piece.kala"
+    </blockquote>
+
+    <h3 id="engine-settings">Sound Engine Settings</h3>
+    <p>The Companion can read and update the Sound Engine Settings tab — the min/max slider
+      ranges for every container type, and project audio settings.</p>
+    <blockquote>
+      "Show me the current drift engine settings."<br>
+      "Widen the drift amount range so I can go higher than 0.1."<br>
+      "Change the project sample rate to 48000 Hz."<br>
+      "Set the PAD bandwidth ceiling to 40 cents."
+    </blockquote>
+    <p>Changes are saved immediately and take effect the next time you open an inspector panel.</p>
+
+    <h3 id="undo-redo">Undo and Redo</h3>
+    <p>The Companion can undo or redo its own actions programmatically — useful if it
+      makes a mistake mid-build.</p>
+    <blockquote>
+      "Undo that."<br>
+      "Undo the last three steps."<br>
+      "Redo."
+    </blockquote>
+
+    <h3 id="change-library-location">Change Your Library Location</h3>
+    <p>If your Kala files are not in the default <code>~/Music/kala</code> folder, just tell
+      the Companion:</p>
+    <blockquote>
+      "My kala files are at D:/Music/kala"
+    </blockquote>
+    <p>It will remember this permanently. All instrument, project, spectrum, and IR scans
+      will use the new location from then on.</p>
+
+    <h2 id="tips">Tips for Good Results</h2>
+    <ul>
+      <li><strong>Be specific about the sound.</strong> "A warm cello" is good.
+        "A warm cello with a slow attack and some room reverb" is better.</li>
+      <li><strong>Ask it to play a preview.</strong> Say "play it" or "preview" after a build
+        and the Companion will trigger playback in the Sounit Builder.</li>
+      <li><strong>Iterate.</strong> After a build, ask "make it brighter" or
+        "add more reverb" — it reads the current graph state before making changes.</li>
+      <li><strong>Multi-step builds work.</strong> The Companion can chain up to 12 tool calls
+        in a single response, so complex graphs (6–8 containers) are built in one go.</li>
+      <li><strong>Ask about what you have.</strong> "What instruments are in my alto folder?"
+        or "What spectra do I have?" are useful starting points.</li>
+      <li><strong>Use loops for auditioning.</strong> Ask the Companion to loop a passage
+        while you adjust parameters by hand — the loop stays active until you clear it.</li>
+      <li><strong>Chain requests.</strong> "Select the notes above 400 Hz, apply a brightness
+        swell, then loop bars 2 to 4 and play" all works in one message.</li>
+    </ul>
+
+    <h2 id="limitations">Limitations</h2>
+    <ul>
+      <li><strong>String parameters</strong> (digit string DNA on Harmonic Generator) cannot be
+        set programmatically. The Companion will guide you to the right inspector field.</li>
+      <li>The Companion only sees the <strong>current track's sounit graph</strong> at a time.
+        It does not see other tracks' graphs simultaneously.</li>
+      <li><strong>Inspector panels</strong> do not hot-reload slider ranges when engine settings
+        are changed via the Companion — close and reopen the inspector to see updated ranges.</li>
+    </ul>
+
+    <h2 id="privacy">Privacy</h2>
+    <p>When using a cloud provider (Anthropic, OpenAI, Groq, OpenRouter), your conversation
+      and the current graph state are sent to that provider's API servers. No data is
+      collected by Kala itself. When using Ollama locally, nothing leaves your machine.</p>
+    <p>API keys are stored in your system's application settings (QSettings) and are not
+      visible in plain text in the UI. They are sent only to the configured API endpoint.</p>
+  </body>
+</html>

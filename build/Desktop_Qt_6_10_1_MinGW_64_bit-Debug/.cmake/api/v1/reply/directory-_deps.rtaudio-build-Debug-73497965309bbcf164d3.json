@@ -1,0 +1,119 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-src/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 303,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 311,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 343,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 356,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 369,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"_deps/rtaudio-build/librtaudiod.a"
+			],
+			"targetId" : "rtaudio::@70fcf3ece4cf6931f4f0",
+			"targetIndex" : 37,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "include/rtaudio",
+			"paths" : 
+			[
+				"build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-src/RtAudio.h",
+				"build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-src/rtaudio_c.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "share/rtaudio",
+			"paths" : 
+			[
+				"build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/RtAudioConfig.cmake",
+				"build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/RtAudioConfig-version.cmake"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 4,
+			"component" : "Unspecified",
+			"destination" : "share/rtaudio",
+			"exportName" : "RtAudioTargets",
+			"exportTargets" : 
+			[
+				{
+					"id" : "rtaudio::@70fcf3ece4cf6931f4f0",
+					"index" : 37
+				}
+			],
+			"paths" : 
+			[
+				"_deps/rtaudio-build/CMakeFiles/Export/4543b84eac4cb2add714cfda6e3ec172/RtAudioTargets.cmake"
+			],
+			"type" : "export"
+		},
+		{
+			"backtrace" : 5,
+			"component" : "Unspecified",
+			"destination" : "lib/pkgconfig",
+			"paths" : 
+			[
+				"build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-build/rtaudio.pc"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/rtaudio-build",
+		"source" : "build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-src"
+	}
+}

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>LP/HP Filter</title>
+  </head>
+  <body>
+    <h1 id="lphp-filter-documentation">LP/HP Filter Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The LP/HP Filter is a <strong>biquad low-pass or high-pass
+        filter</strong> with modulatable cutoff and resonance. It is the
+      simplest and most direct brightness-shaping tool in the Filters
+      category: low-pass mode removes high-frequency content above the cutoff;
+      high-pass mode removes low-frequency content below it. The resonance
+      parameter adds a peak at the cutoff frequency for more pronounced
+      filtering character.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Filters</strong> (Purple) - Signal processing and spectral
+      shaping</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalIn</code></td>
+          <td>Signal</td>
+          <td>0.0</td>
+          <td>Input audio signal</td>
+        </tr>
+        <tr>
+          <td><code>cutoff</code></td>
+          <td>Control</td>
+          <td>1000.0</td>
+          <td>Filter cutoff frequency in Hz (20–20000 Hz)</td>
+        </tr>
+        <tr>
+          <td><code>resonance</code></td>
+          <td>Control</td>
+          <td>0.707</td>
+          <td>Filter Q / resonance (0.5–20.0)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> <code>mode</code> (Low-Pass/High-Pass) is set
+      via the inspector and is not modulatable.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>Filtered audio output</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>mode</code></td>
+          <td>Integer</td>
+          <td>0 (LowPass)</td>
+          <td>0–1</td>
+          <td>Filter type (inspector only, not modulatable)</td>
+        </tr>
+        <tr>
+          <td><code>cutoff</code></td>
+          <td>Float</td>
+          <td>1000.0</td>
+          <td>20–20000</td>
+          <td>Cutoff frequency in Hz</td>
+        </tr>
+        <tr>
+          <td><code>resonance</code></td>
+          <td>Float</td>
+          <td>0.707</td>
+          <td>0.5–20.0</td>
+          <td>Q factor — controls resonance peak height</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="filter-modes">Filter Modes</h2>
+    <h3 id="low-pass">0: Low-Pass</h3>
+    <p>Passes frequencies <strong>below</strong> the cutoff and attenuates
+      frequencies above it. The attenuation slope is −12 dB/octave
+      (second-order filter).</p>
+    <pre><code>Gain
+ 1  │────────╮
+    │         ╲
+    │          ╲
+ 0  │           ╲──────────
+    └──────────────────────→ frequency
+              cutoff</code></pre>
+    <p><strong>Use for:</strong> - Removing harshness and high-frequency
+      noise from a signal - Creating warm, dark, or muffled textures -
+      Smoothing the top end of a bright harmonic chain - Pitch-tracking filter
+      for brightness-by-pitch (via Frequency Mapper)</p>
+    <h3 id="high-pass">1: High-Pass</h3>
+    <p>Passes frequencies <strong>above</strong> the cutoff and attenuates
+      frequencies below it. Slope is −12 dB/octave.</p>
+    <pre><code>Gain
+ 1  │              ╭────────
+    │             ╱
+    │            ╱
+ 0  │───────────╱
+    └──────────────────────→ frequency
+              cutoff</code></pre>
+    <p><strong>Use for:</strong> - Removing low-frequency rumble or sub
+      content from a signal - Thinning a dense sound to sit in a mix -
+      Isolating mid-to-high frequency content - Creating focused, nasal, or
+      telephone-like tones</p>
+    <h2 id="resonance-q-factor">Resonance (Q Factor)</h2>
+    <p>The resonance parameter is the filter’s Q factor — higher values
+      create a sharper peak at the cutoff frequency.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Resonance</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.5</td>
+          <td>Overdamped — very gentle rolloff, no peak</td>
+        </tr>
+        <tr>
+          <td>0.707 (default)</td>
+          <td>Butterworth — maximally flat, no resonant peak</td>
+        </tr>
+        <tr>
+          <td>1.0–2.0</td>
+          <td>Mild resonance — slight emphasis at cutoff</td>
+        </tr>
+        <tr>
+          <td>3.0–5.0</td>
+          <td>Noticeable resonance peak — classic synth filter character</td>
+        </tr>
+        <tr>
+          <td>8.0–15.0</td>
+          <td>Strong resonance — pronounced whistle at cutoff</td>
+        </tr>
+        <tr>
+          <td>18.0–20.0</td>
+          <td>Near-self-oscillation — extreme ringing at cutoff</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>0.707 (Butterworth Q)</strong> is the default and provides
+      the flattest passband with no overshoot. For classic synthesizer filter
+      sweeps, increase resonance toward 2–5.</p>
+    <h2 id="cutoff-frequency-reference">Cutoff Frequency Reference</h2>
+    <table>
+      <colgroup>
+        <col style="width: 42%">
+        <col style="width: 57%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Cutoff</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>20–100 Hz</td>
+          <td>Only sub-bass passes (LowPass) / removes sub-bass (HighPass)</td>
+        </tr>
+        <tr>
+          <td>200–500 Hz</td>
+          <td>Removes most harmonic content; very dark/thin</td>
+        </tr>
+        <tr>
+          <td>500–2000 Hz</td>
+          <td>Clear tonal shaping zone</td>
+        </tr>
+        <tr>
+          <td>1000 Hz (default)</td>
+          <td>Balanced starting point</td>
+        </tr>
+        <tr>
+          <td>2000–5000 Hz</td>
+          <td>Bright shaping, removes presence peaks</td>
+        </tr>
+        <tr>
+          <td>8000–12000 Hz</td>
+          <td>Only removes extreme air/sheen</td>
+        </tr>
+        <tr>
+          <td>20000 Hz</td>
+          <td>Effectively inactive (above hearing)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-low-pass-brightness-control">Basic Low-Pass Brightness
+      Control</h3>
+    <pre><code>[Spectrum To Signal] → signalIn → [LP/HP Filter] → signalOut
+                                    mode: LowPass
+                                    cutoff: 2000 Hz
+                                    resonance: 0.707</code></pre>
+    <p>Rolls off the top end of a harmonic chain for a warmer character.</p>
+    <h3 id="envelope-controlled-filter-sweep">Envelope-Controlled Filter
+      Sweep</h3>
+    <p>Classic envelope-to-filter sweep:</p>
+    <pre><code>[Envelope Engine] → controlOut → cutoff → [LP/HP Filter] → signalOut
+                                            mode: LowPass
+                                            resonance: 2.5</code></pre>
+    <p>The envelope opens the filter from dark (low cutoff) to bright (high
+      cutoff) over the note’s duration. Wire the Envelope’s output via a
+      connection with <code>multiply</code> function and a high weight to
+      scale 0–1 up to 0–20000.</p>
+    <h3 id="frequency-mapper-pitch-tracking-filter">Frequency Mapper
+      Pitch-Tracking Filter</h3>
+    <p>Automatically adjust cutoff based on the note’s pitch:</p>
+    <pre><code>[Frequency Mapper] → controlOut → cutoff
+  outputMin: 500, outputMax: 8000
+  curveType: Logarithmic
+                         [LP/HP Filter] → signalOut
+                          mode: LowPass
+                          resonance: 1.5</code></pre>
+    <p>Low notes get a 500 Hz cutoff (dark); high notes get an 8 kHz cutoff
+      (bright).</p>
+    <h3 id="lfo-filter-wobble">LFO Filter Wobble</h3>
+    <pre><code>[LFO] → valueOut → cutoff
+                     [LP/HP Filter] → signalOut
+                      mode: LowPass
+                      cutoff: 1000 Hz (baseline)
+                      resonance: 3.0</code></pre>
+    <p>The LFO modulates the cutoff for a rhythmic filter wobble effect.</p>
+    <h3 id="high-pass-for-clarity-thinning">High-Pass for Clarity /
+      Thinning</h3>
+    <pre><code>[Signal Source] → signalIn → [LP/HP Filter] → signalOut
+                               mode: HighPass
+                               cutoff: 200 Hz
+                               resonance: 0.707</code></pre>
+    <p>Removes low-frequency mud without affecting the midrange. Useful when
+      layering multiple sounds.</p>
+    <h3 id="resonant-emphasis-at-a-frequency">Resonant Emphasis at a
+      Frequency</h3>
+    <p>Set cutoff to a specific frequency and increase resonance to add a
+      tonal emphasis:</p>
+    <pre><code>mode: LowPass
+cutoff: 800 Hz
+resonance: 6.0</code></pre>
+    <p>This creates a pronounced peak at 800 Hz while attenuating above it —
+      similar to a tuned bandpass for that region.</p>
+    <h3 id="serial-filtering-high-pass-then-low-pass">Serial Filtering
+      (High-Pass then Low-Pass)</h3>
+    <p>To create a bandpass effect, chain two LP/HP Filters in series:</p>
+    <pre><code>[Signal] → [HP Filter, cutoff: 300 Hz] → [LP Filter, cutoff: 3000 Hz] → [Output]</code></pre>
+    <p>This passes only the 300 Hz – 3 kHz band, eliminating both sub and
+      ultra-high content.</p>
+    <h2 id="modulation-behavior">Modulation Behavior</h2>
+    <p>When control sources are connected to <code>cutoff</code> or
+      <code>resonance</code>:</p>
+    <ul>
+      <li><strong>cutoff</strong>: Result is clamped to [20, 20000] Hz after
+        the connection function is applied</li>
+      <li><strong>resonance</strong>: Result is clamped to [0.5, 20.0] after
+        the connection function is applied</li>
+    </ul>
+    <p><code>mode</code> has no input port and must be set via the
+      inspector. Changing <code>mode</code> while notes are playing may
+      produce a click (due to filter state mismatch); prefer setting mode
+      before playback.</p>
+    <h2 id="comparison-with-other-filters">Comparison with Other
+      Filters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 27%">
+        <col style="width: 15%">
+        <col style="width: 32%">
+        <col style="width: 25%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Type</th>
+          <th>Selectivity</th>
+          <th>Best For</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>LP/HP Filter</strong></td>
+          <td>Biquad (2nd order)</td>
+          <td>Single cutoff</td>
+          <td>Smooth brightness control</td>
+        </tr>
+        <tr>
+          <td><strong>10-Band EQ</strong></td>
+          <td>Parallel bandpass</td>
+          <td>10 bands</td>
+          <td>Surgical shaping</td>
+        </tr>
+        <tr>
+          <td><strong>Comb Filter</strong></td>
+          <td>Comb (multi-notch/peak)</td>
+          <td>Delay-based</td>
+          <td>Flanging, metallic effects</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Resonant bandpass</td>
+          <td>Single resonance</td>
+          <td>Vocal body character</td>
+        </tr>
+        <tr>
+          <td><strong>Rolloff Processor</strong></td>
+          <td>Spectral taper</td>
+          <td>Continuous</td>
+          <td>Harmonic content shaping</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The LP/HP Filter differs from the Rolloff Processor in that it
+      operates in the <strong>signal domain</strong> (after Spectrum To
+      Signal) and can be placed anywhere in a signal chain, including after
+      Formant Body or Breath Turbulence.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-audible-effect">No Audible Effect</h3>
+    <ol type="1">
+      <li>Confirm <code>signalIn</code> is connected</li>
+      <li>Check that the cutoff is set to a frequency that actually affects
+        the signal’s content (cutting at 20 kHz on a signal with no
+        high-frequency content will have no audible effect)</li>
+      <li>Verify the filter mode matches the desired effect</li>
+    </ol>
+    <h3 id="harsh-resonance-peak">Harsh Resonance Peak</h3>
+    <ol type="1">
+      <li>Reduce resonance toward 0.707–1.0</li>
+      <li>If using high resonance with a modulatable cutoff, be aware that
+        sweeping through resonance at high Q values produces a pronounced
+        “whistle” — this is expected</li>
+    </ol>
+    <h3 id="clicks-when-mode-changes">Clicks When Mode Changes</h3>
+    <p>The filter’s internal state (biquad delay history) is built up for
+      one mode. Switching mode changes the coefficient calculation, causing a
+      brief discontinuity. Avoid mode changes during note playback; set mode
+      before starting audio.</p>
+    <h3 id="low-output-level">Low Output Level</h3>
+    <p>The LP/HP Filter at unity has approximately 0 dB passband gain.
+      However, strong resonance (Q &gt; 5) can cause high-gain peaks at the
+      cutoff that may cause downstream clipping. Reduce resonance or add a
+      gain stage after the filter.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="filter-design">Filter Design</h3>
+    <p>Uses <strong>Audio EQ Cookbook</strong> coefficients for biquad
+      lowpass and highpass. The implementation uses Direct Form I (transposed)
+      for numerical stability.</p>
+    <p>The transfer function (z-domain):</p>
+    <pre><code>H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (1 + a1·z⁻¹ + a2·z⁻²)</code></pre>
+    <p>Coefficients are recomputed whenever cutoff or resonance change.</p>
+    <h3 id="reset-behavior">Reset Behavior</h3>
+    <p>Filter state (x1, x2, y1, y2 delay values) is zeroed at note start
+      for non-legato notes. Preserved for legato transitions to prevent clicks
+      at note boundaries.</p>
+    <h3 id="cpu-cost">CPU Cost</h3>
+    <p>Single biquad — 5 multiply-accumulate operations per sample. One of
+      the cheapest filter implementations available. Multiple LP/HP filters in
+      a graph are effectively free compared to IR Convolution.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>lowhighpassfilter.h</code>,
+        <code>lowhighpassfilter.cpp</code></em></p>
+  </body>
+</html>

@@ -1,0 +1,3 @@
+C:/c++code/Kala/build/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate.dir
+C:/c++code/Kala/build/_deps/rtaudio-subbuild/CMakeFiles/edit_cache.dir
+C:/c++code/Kala/build/_deps/rtaudio-subbuild/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,3 @@
+C:\Qt\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\Kala.dir/objects.a
+C:\Qt\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\Kala.dir/objects.a @CMakeFiles\Kala.dir\objects1.rsp
+C:\Qt\Tools\mingw1310_64\bin\c++.exe -g -mwindows -Wl,--whole-archive CMakeFiles\Kala.dir/objects.a -Wl,--no-whole-archive -o Kala.exe -Wl,--out-implib,libKala.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\Kala.dir\linkLibs.rsp

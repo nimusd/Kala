@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Spectrum Blender</title>
+  </head>
+  <body>
+    <h1 id="spectrum-blender-documentation">Spectrum Blender
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Spectrum Blender is a <strong>spectral morphing tool</strong>
+      that performs per-harmonic linear interpolation between two input
+      spectra. It takes two spectrum inputs (A and B) and a position control,
+      producing a smooth blend at every harmonic.</p>
+    <p>This is the modular building block for timbral morphing - drive the
+      position with an Envelope Engine or LFO to morph between timbres over a
+      note’s lifetime.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Shaping</strong> (Orange) - Transforms spectral character</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>output[h] = spectrumA[h] × (1 - position) + spectrumB[h] × position</code></pre>
+    <p>Where <code>h</code> is the harmonic index and <code>position</code>
+      ranges from 0.0 (pure A) to 1.0 (pure B). Every harmonic is interpolated
+      independently, so the blend is smooth across the entire spectrum.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>spectrumA</code></td>
+          <td>Spectrum</td>
+          <td>(empty)</td>
+          <td>First spectrum source (position = 0.0)</td>
+        </tr>
+        <tr>
+          <td><code>spectrumB</code></td>
+          <td>Spectrum</td>
+          <td>(empty)</td>
+          <td>Second spectrum source (position = 1.0)</td>
+        </tr>
+        <tr>
+          <td><code>position</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Blend position between A and B</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>spectrumOut</code></td>
+          <td>Spectrum</td>
+          <td>Blended harmonic amplitudes</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>position</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0-1.0</td>
+          <td>Static blend position (overridden when modulated)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="position-values">Position Values</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Result</th>
+          <th>Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.0</td>
+          <td>Pure spectrum A</td>
+          <td>Full first timbre</td>
+        </tr>
+        <tr>
+          <td>0.25</td>
+          <td>75% A, 25% B</td>
+          <td>Subtle blend toward B</td>
+        </tr>
+        <tr>
+          <td>0.5</td>
+          <td>Equal mix</td>
+          <td>Halfway morph</td>
+        </tr>
+        <tr>
+          <td>0.75</td>
+          <td>25% A, 75% B</td>
+          <td>Mostly second timbre</td>
+        </tr>
+        <tr>
+          <td>1.0</td>
+          <td>Pure spectrum B</td>
+          <td>Full second timbre</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="mismatched-spectrum-sizes">Mismatched Spectrum Sizes</h2>
+    <p>When spectra A and B have different numbers of harmonics, the output
+      size equals the larger of the two. Harmonics beyond the range of the
+      smaller spectrum are treated as 0.0 amplitude:</p>
+    <pre><code>spectrumA: 32 harmonics    [a0, a1, ..., a31]
+spectrumB: 64 harmonics    [b0, b1, ..., b63]
+output:    64 harmonics
+
+For h = 0..31:  output[h] = a[h] × (1-pos) + b[h] × pos
+For h = 32..63: output[h] = 0.0  × (1-pos) + b[h] × pos = b[h] × pos</code></pre>
+    <p>This means blending toward a richer spectrum gradually fades in its
+      extra harmonics.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-timbre-blend">Basic Timbre Blend</h3>
+    <p>Static 50/50 mix of two timbres:</p>
+    <pre><code>Harmonic Generator 1 ──→ spectrumA ──┐
+                                      ├──→ Spectrum Blender ──→ Spectrum to Signal
+Harmonic Generator 2 ──→ spectrumB ──┘</code></pre>
+    <h3 id="envelope-driven-morph">Envelope-Driven Morph</h3>
+    <p>Morph between timbres over the note’s duration:</p>
+    <pre><code>Harmonic Generator 1 ──→ spectrumA ──┐
+                                      ├──→ Spectrum Blender ──→ Spectrum to Signal
+Harmonic Generator 2 ──→ spectrumB ──┘
+                                 ↑
+Envelope Engine ──→ position</code></pre>
+    <p>Set the envelope to ramp from 0.0 to 1.0 and the timbre evolves from
+      A to B across the note.</p>
+    <h3 id="lfo-driven-oscillation">LFO-Driven Oscillation</h3>
+    <p>Continuously sweep between two timbres:</p>
+    <pre><code>Harmonic Generator 1 ──→ spectrumA ──┐
+                                      ├──→ Spectrum Blender ──→ Spectrum to Signal
+Harmonic Generator 2 ──→ spectrumB ──┘
+                                 ↑
+LFO ──→ position</code></pre>
+    <p>A slow LFO (0.5-2 Hz) creates a pulsing timbral effect. The position
+      is clamped to 0.0-1.0 so bipolar LFO output is safe.</p>
+    <h3 id="multi-stage-morphing-a-b-c">Multi-Stage Morphing (A → B →
+      C)</h3>
+    <p>Chain two blenders for three-way morphing:</p>
+    <pre><code>HG 1 ──→ spectrumA ──┐
+                       ├──→ Blender 1 ──→ spectrumA ──┐
+HG 2 ──→ spectrumB ──┘                                 ├──→ Blender 2 ──→ Spectrum to Signal
+                                                        │
+HG 3 ────────────────────────────→ spectrumB ──────────┘</code></pre>
+    <p>Drive Blender 1’s position through the first half of the note, then
+      Blender 2’s position through the second half, for an A → B → C
+      evolution.</p>
+    <h3 id="with-rolloff-shaping">With Rolloff Shaping</h3>
+    <p>Shape the blended result before conversion:</p>
+    <pre><code>HG 1 ──→ spectrumA ──┐
+                       ├──→ Spectrum Blender ──→ Rolloff Processor ──→ Spectrum to Signal
+HG 2 ──→ spectrumB ──┘</code></pre>
+    <h3 id="shaped-inputs">Shaped Inputs</h3>
+    <p>Shape each source independently before blending:</p>
+    <pre><code>HG 1 ──→ Rolloff 1 ──→ spectrumA ──┐
+                                     ├──→ Spectrum Blender ──→ Spectrum to Signal
+HG 2 ──→ Rolloff 2 ──→ spectrumB ──┘</code></pre>
+    <p>This allows morphing between two fully-shaped timbres rather than raw
+      harmonic content.</p>
+    <h2 id="preset-suggestions">Preset Suggestions</h2>
+    <h3 id="timbral-transitions">Timbral Transitions</h3>
+    <table>
+      <colgroup>
+        <col style="width: 26%">
+        <col style="width: 26%">
+        <col style="width: 26%">
+        <col style="width: 21%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Source A</th>
+          <th>Source B</th>
+          <th>Envelope</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Vocal Bright</td>
+          <td>Reed</td>
+          <td>Attack ramp (0→1)</td>
+          <td>Voice transforms into reed</td>
+        </tr>
+        <tr>
+          <td>Flute</td>
+          <td>Brass</td>
+          <td>Slow sweep (0→1→0)</td>
+          <td>Breath evolves into brass and back</td>
+        </tr>
+        <tr>
+          <td>Organ</td>
+          <td>Strings</td>
+          <td>Sustain hold at 0.5</td>
+          <td>Hybrid organ-string timbre</td>
+        </tr>
+        <tr>
+          <td>Bell</td>
+          <td>Pad</td>
+          <td>Decay curve (1→0)</td>
+          <td>Bell attack softens into pad</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="creative-uses">Creative Uses</h3>
+    <table>
+      <colgroup>
+        <col style="width: 42%">
+        <col style="width: 26%">
+        <col style="width: 30%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Technique</th>
+          <th>Setup</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Timbral vibrato</td>
+          <td>LFO → position (0.1 amplitude)</td>
+          <td>Subtle shimmer between timbres</td>
+        </tr>
+        <tr>
+          <td>Attack morph</td>
+          <td>Fast envelope → position</td>
+          <td>Different timbre on note attack vs sustain</td>
+        </tr>
+        <tr>
+          <td>Dynamic morphing</td>
+          <td>Physics System → position</td>
+          <td>Physically-modeled timbral transitions</td>
+        </tr>
+        <tr>
+          <td>Drift morphing</td>
+          <td>Drift Engine → position</td>
+          <td>Slow organic timbral wandering</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="important-behaviors">Important Behaviors</h2>
+    <h3 id="linear-interpolation">Linear Interpolation</h3>
+    <p>The blend is strictly linear per harmonic. This means: - No harmonic
+      generation or cancellation beyond what the math produces - Predictable,
+      smooth transitions - CPU cost is minimal (one multiply-add per
+      harmonic)</p>
+    <h3 id="position-clamping">Position Clamping</h3>
+    <p>When modulated via connections, the position is clamped to 0.0-1.0
+      after the connection function is applied. Values outside this range are
+      safely bounded.</p>
+    <h3 id="no-state">No State</h3>
+    <p>The Spectrum Blender is stateless - it has no memory between samples.
+      The output depends only on the current inputs. This means: - No reset
+      needed at note boundaries - No artifacts from abrupt position changes -
+      Deterministic output for given inputs</p>
+    <h3 id="empty-spectrum-handling">Empty Spectrum Handling</h3>
+    <p>If a spectrum input has no connection, it defaults to an empty
+      spectrum (all zeros). Blending with an empty spectrum effectively fades
+      the other spectrum in or out based on position.</p>
+    <h2 id="comparison-with-other-shapers">Comparison with Other
+      Shapers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 40%">
+        <col style="width: 29%">
+        <col style="width: 29%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Domain</th>
+          <th>Effect</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Rolloff Processor</strong></td>
+          <td>Spectrum</td>
+          <td>Power-law harmonic attenuation</td>
+        </tr>
+        <tr>
+          <td><strong>Spectrum Blender</strong></td>
+          <td>Spectrum</td>
+          <td>Linear interpolation between two spectra</td>
+        </tr>
+        <tr>
+          <td><strong>Formant Body</strong></td>
+          <td>Signal</td>
+          <td>Resonant filtering at formant frequencies</td>
+        </tr>
+        <tr>
+          <td><strong>Noise Color Filter</strong></td>
+          <td>Signal</td>
+          <td>Frequency-dependent noise shaping</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Spectrum Blender works in the spectrum domain (before conversion
+      to audio), alongside the Rolloff Processor. While Rolloff shapes a
+      single spectrum’s brightness curve, the Blender interpolates between two
+      complete spectra.</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="interpolation-formula">Interpolation Formula</h3>
+    <p>For each harmonic h in the output:</p>
+    <pre><code>output[h] = A[h] × (1 - position) + B[h] × position</code></pre>
+    <p>This is equivalent to:</p>
+    <pre><code>output[h] = A[h] + position × (B[h] - A[h])</code></pre>
+    <p>Both forms produce identical results. The implementation uses the
+      first form for clarity.</p>
+    <h3 id="output-size">Output Size</h3>
+    <p>The output spectrum size is
+      <code>max(A.numHarmonics, B.numHarmonics)</code>. This ensures no
+      harmonic information is lost from either source.</p>
+    <h3 id="cpu-cost">CPU Cost</h3>
+    <p>Processing cost is proportional to the output spectrum size: - One
+      subtraction, two multiplications, and one addition per harmonic -
+      Typically 64 harmonics = 256 floating-point operations per sample -
+      Negligible compared to Spectrum to Signal’s sine calculations</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>spectrumblender.h</code>,
+        <code>spectrumblender.cpp</code></em></p>
+  </body>
+</html>

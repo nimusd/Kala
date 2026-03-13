@@ -1,0 +1,14 @@
+# Target labels
+ rtaudio-populate
+# Source files and their labels
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/CMakeFiles/rtaudio-populate-complete.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-build.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-configure.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-download.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-install.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-mkdir.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-patch.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-test.rule
+C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/_deps/rtaudio-subbuild/rtaudio-populate-prefix/src/rtaudio-populate-stamp/rtaudio-populate-update.rule

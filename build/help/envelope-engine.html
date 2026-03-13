@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Envelope Engine</title>
+  </head>
+  <body>
+    <h1 id="envelope-engine-documentation">Envelope Engine
+      Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Envelope Engine is a <strong>progress-based curve
+        evaluator</strong> that generates envelope values based on note progress
+      (0→1). Unlike traditional gate-triggered ADSRs, the Envelope Engine
+      doesn’t track time internally - it receives the current position in the
+      note from the audio engine and returns the appropriate envelope value
+      for that position.</p>
+    <p>This design integrates naturally with Kala’s note-based rendering:
+      the audio engine knows how far through the note we are (0.0 at start,
+      1.0 at end), and the Envelope Engine shapes what the control value
+      should be at each point.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) - Generates time-varying control
+      signals based on note progress</p>
+    <p><img src="data:image/png;base64,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"
+        alt=""></p>
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>envelopeValue = evaluateShape(noteProgress × timeScale) × valueScale + valueOffset</code></pre>
+    <p>The envelope shape is evaluated at the scaled progress position, then
+      the output is scaled and offset. Different envelope types (Linear,
+      AttackDecay, ADSR, Fade In/Out, Custom) provide different shapes.</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 15%">
+        <col style="width: 28%">
+        <col style="width: 23%">
+        <col style="width: 33%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>timeScale</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Stretch/compress the envelope (0.1-10.0)</td>
+        </tr>
+        <tr>
+          <td><code>valueScale</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Multiply output value (0.0-10.0)</td>
+        </tr>
+        <tr>
+          <td><code>valueOffset</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Add to output value (-10.0 to 10.0)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Note:</strong> There is no <code>gate</code> or
+      <code>trigger</code> input. The note progress is provided automatically
+      by the audio engine during rendering.</p>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 36%">
+        <col style="width: 43%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>envelopeValue</code></td>
+          <td>Control</td>
+          <td>Evaluated envelope value for the current note position</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <h3 id="main-parameters">Main Parameters</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>envelopeSelect</code></td>
+          <td>Integer</td>
+          <td>0</td>
+          <td>0-5</td>
+          <td>Envelope type (see below)</td>
+        </tr>
+        <tr>
+          <td><code>timeScale</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.1-10.0</td>
+          <td>Time stretch factor</td>
+        </tr>
+        <tr>
+          <td><code>valueScale</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.0-10.0</td>
+          <td>Output multiplier</td>
+        </tr>
+        <tr>
+          <td><code>valueOffset</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>-10.0 to 10.0</td>
+          <td>Output offset</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="envelope-shape-parameters">Envelope Shape Parameters</h3>
+    <p>These parameters control the shape of certain envelope types
+      (AttackDecay, SustainRelease):</p>
+    <table>
+      <colgroup>
+        <col style="width: 23%">
+        <col style="width: 13%">
+        <col style="width: 19%">
+        <col style="width: 15%">
+        <col style="width: 28%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>envAttack</code></td>
+          <td>Float</td>
+          <td>0.1</td>
+          <td>0.001-5.0</td>
+          <td>Attack portion (normalized, 0-1)</td>
+        </tr>
+        <tr>
+          <td><code>envDecay</code></td>
+          <td>Float</td>
+          <td>0.2</td>
+          <td>0.001-5.0</td>
+          <td>Decay portion (normalized)</td>
+        </tr>
+        <tr>
+          <td><code>envSustain</code></td>
+          <td>Float</td>
+          <td>0.7</td>
+          <td>0.0-1.0</td>
+          <td>Sustain level</td>
+        </tr>
+        <tr>
+          <td><code>envRelease</code></td>
+          <td>Float</td>
+          <td>0.2</td>
+          <td>0.001-5.0</td>
+          <td>Release portion (normalized)</td>
+        </tr>
+        <tr>
+          <td><code>envFadeTime</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0.0-1.0</td>
+          <td>Fade duration for Fade In/Out types</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="follow-curve">Follow Curve</h2>
+    <p>The Envelope Engine container has a small <strong><code>~</code></strong>
+      toggle button in its header. This is the <strong>Follow Curve</strong>
+      mode.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>State</th>
+          <th>Appearance</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Off</strong> (default)</td>
+          <td>Dark / transparent</td>
+          <td>Normal mode — output is determined by the selected envelope shape</td>
+        </tr>
+        <tr>
+          <td><strong>On</strong></td>
+          <td>Green</td>
+          <td>Curve mode — the output follows one of the note's named curves
+            instead of the envelope shape</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="what-it-does">What it does</h3>
+    <p>In Kala, every note can carry any number of named curves — continuous
+      envelopes that evolve over the note's duration (see <em>The Curve
+        System</em> in the Score Canvas documentation). When <em>Follow Curve</em>
+      is on, the Envelope Engine reads one of those curves sample-by-sample and
+      re-exposes it as a <strong>control signal</strong> that you can route to
+      any parameter in the sound graph.</p>
+    <p>A <strong>dropdown</strong> in the inspector lets you choose which named
+      curve this instance will follow. The dropdown lists all curve names that
+      appear on notes in the current track — for example <em>dynamics</em>,
+      <em>brightness</em>, or any custom name you gave a curve in the score.
+      Each Envelope Engine instance makes its own selection independently, so
+      several instances in the same graph can each follow a different curve
+      simultaneously.</p>
+    <p>The inspector also displays a <strong>live preview</strong> of the
+      selected curve, so you can see its shape without switching back to the
+      score canvas.</p>
+    <p>The envelope shape, loop mode, and timing parameters are all ignored
+      in this mode. The output formula becomes:</p>
+    <pre><code>output = curveValue × valueScale + valueOffset</code></pre>
+    <p><code>valueScale</code> and <code>valueOffset</code> still apply, so
+      you can rescale or shift the curve's range before routing it downstream.</p>
+    <h3 id="why-use-it">Why use it</h3>
+    <p>This is the bridge between the expressive curves you composed on the
+      score canvas and any synthesis parameter that can accept a control signal.
+      Instead of a fixed envelope shape, the curves you designed per note drive
+      whatever parameters you connect them to.</p>
+    <p>Because multiple Envelope Engine instances can each follow a different
+      named curve, a single note can simultaneously modulate several independent
+      parameters — dynamics driving amplitude, a <em>brightness</em> curve
+      opening a filter, a <em>body</em> curve swelling a resonance — each with
+      its own routing, scale, and offset.</p>
+    <p><strong>Example uses:</strong></p>
+    <ul>
+      <li>Dynamics curve → brighter timbre (route to Harmonic Generator
+        <code>purity</code> or Rolloff Processor <code>lowRolloff</code>)</li>
+      <li>A custom <em>breathiness</em> curve → more breath turbulence (route
+        to Breath Turbulence <code>amount</code>)</li>
+      <li>Curve-linked filter sweeps, reverb depth, vibrato depth, etc.</li>
+    </ul>
+    <h2 id="envelope-types">Envelope Types</h2>
+    <h3 id="linear">0: Linear</h3>
+    <p>Simple linear ramp from 0 to 1.</p>
+    <pre><code>Output: noteProgress (directly)</code></pre>
+    <p><strong>Use case:</strong> Basic automation, testing, linear
+      parameter sweeps.</p>
+    <h3 id="attackdecay">1: AttackDecay</h3>
+    <p>Triangle-like shape: rises to peak then falls to zero.</p>
+    <pre><code>        /\
+       /  \
+      /    \
+     /      \
+    /        \
+   0──────────1</code></pre>
+    <p>Uses <code>envAttack</code> and <code>envDecay</code> to control the
+      peak position. The attack and decay portions are relative to each
+      other.</p>
+    <p><strong>Use case:</strong> Percussive sounds, plucks, impacts.</p>
+    <h3 id="sustainrelease-adsr">2: SustainRelease (ADSR)</h3>
+    <p>Full ADSR envelope mapped to note progress.</p>
+    <pre><code>      /‾‾‾‾‾‾\
+     /        \
+    /          \
+   0────────────1
+   A  D   S   R</code></pre>
+    <p>Uses all timing parameters (<code>envAttack</code>,
+      <code>envDecay</code>, <code>envSustain</code>,
+      <code>envRelease</code>). The sustain duration is calculated as whatever
+      remains after attack, decay, and release portions.</p>
+    <p><strong>Use case:</strong> Sustained instruments, pads, evolving
+      sounds.</p>
+    <h3 id="exponentialrise-fade-in">3: ExponentialRise (Fade In)</h3>
+    <p>Stays at zero, then rises to 1.</p>
+    <pre><code>              /
+             /
+            /
+    _______/
+   0────────────1</code></pre>
+    <p>Uses <code>envFadeTime</code> to control when the fade begins (as a
+      portion from the end).</p>
+    <p><strong>Use case:</strong> Fade-in effects, delayed entry.</p>
+    <h3 id="exponentialfall-fade-out">4: ExponentialFall (Fade Out)</h3>
+    <p>Stays at 1, then falls to zero.</p>
+    <pre><code>   ‾‾‾‾‾‾‾\
+           \
+            \
+             \
+   0────────────1</code></pre>
+    <p>Uses <code>envFadeTime</code> to control when the fade begins (as a
+      portion from the end).</p>
+    <p><strong>Use case:</strong> Fade-out effects, natural endings.</p>
+    <h3 id="custom">5: Custom</h3>
+    <p>User-defined multi-point envelope with configurable curve types
+      between points.</p>
+    <p>Each point has: - <code>time</code>: Position (0-1) -
+      <code>value</code>: Output value - <code>curveType</code>: Interpolation
+      (0=Linear, 1=Smooth/Cosine, 2=Step)</p>
+    <h4 id="custom-editor-interactions">Editor interactions</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Click empty area</td>
+          <td>Add a new point (Linear by default)</td>
+        </tr>
+        <tr>
+          <td>Drag point</td>
+          <td>Move the point</td>
+        </tr>
+        <tr>
+          <td>Drag point off canvas</td>
+          <td>Delete the point</td>
+        </tr>
+        <tr>
+          <td>Right-click point</td>
+          <td>Delete the point</td>
+        </tr>
+        <tr>
+          <td>Shift+drag</td>
+          <td>Snap to grid</td>
+        </tr>
+        <tr>
+          <td><strong>Ctrl+click point</strong></td>
+          <td><strong>Cycle segment curve type: Linear → Smooth → Step → Linear</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Point color indicates the curve type of the segment starting at that
+      point:</p>
+    <ul>
+      <li><strong style="color:#64c8ff">Blue</strong> — Linear</li>
+      <li><strong style="color:#50dc96">Green</strong> — Smooth (cosine ease
+        in/out)</li>
+      <li><strong style="color:#ffa03c">Orange</strong> — Step (hold value until
+        next point)</li>
+    </ul>
+    <p><strong>Use case:</strong> Complex automation, precise control,
+      unique shapes.</p>
+    <h2 id="loop-modes">Loop Modes</h2>
+    <p>The Envelope Engine supports three loop modes for when
+      <code>timeScale</code> causes progress to exceed 1.0:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>None</strong></td>
+          <td>Clamp to final value (default)</td>
+        </tr>
+        <tr>
+          <td><strong>Loop</strong></td>
+          <td>Restart from beginning</td>
+        </tr>
+        <tr>
+          <td><strong>Pingpong</strong></td>
+          <td>Reverse direction, bounce back and forth</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="legato-behavior">Legato Behavior</h2>
+    <p>When processing legato notes (tied notes without re-attack), the
+      Envelope Engine can skip the attack phase and start at the post-attack
+      level. This is handled automatically by the audio engine passing
+      <code>isLegato=true</code>.</p>
+    <p>For each envelope type, the legato start position is: -
+      <strong>Linear</strong>: 0.3 (30% through) -
+      <strong>AttackDecay</strong>: Peak position (end of attack) -
+      <strong>SustainRelease</strong>: After attack+decay (sustain phase) -
+      <strong>ExponentialRise</strong>: At fadeTime -
+      <strong>ExponentialFall</strong>: 0.0 (starts at full level anyway) -
+      <strong>Custom</strong>: 0.1 (10% through, approximate)</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-amplitude-envelope">Basic Amplitude Envelope</h3>
+    <p>Shape note dynamics over the note lifetime.</p>
+    <pre><code>Envelope Engine (ADSR) ──→ envelopeValue ──→ [Amplitude control]
+     │
+     └── envelopeSelect: 2, envAttack: 0.1, envSustain: 0.7</code></pre>
+    <h3 id="filter-sweep">Filter Sweep</h3>
+    <p>Animate filter cutoff from note start to end.</p>
+    <pre><code>Envelope Engine (Linear) ──→ envelopeValue ──→ Rolloff Processor (lowRolloff)
+     │
+     └── valueScale: 1000, valueOffset: 200</code></pre>
+    <p>Result: Filter cutoff sweeps from 200 Hz to 1200 Hz over the note
+      duration.</p>
+    <h3 id="percussive-brightness">Percussive Brightness</h3>
+    <p>Fast attack, quick decay for brightness that fades.</p>
+    <pre><code>Envelope Engine (AttackDecay) ──→ envelopeValue ──→ Harmonic Generator (purity)
+     │
+     └── envAttack: 0.05, envDecay: 0.3</code></pre>
+    <h3 id="time-stretched-envelope">Time-Stretched Envelope</h3>
+    <p>Use timeScale to make the envelope faster or slower than the
+      note.</p>
+    <pre><code>Envelope Engine ──→ envelopeValue
+     │
+     └── timeScale: 2.0  (envelope completes in first half of note)</code></pre>
+    <p>With <code>timeScale: 2.0</code> and loop mode “None”, the envelope
+      reaches its end at 50% note progress and holds the final value.</p>
+    <h3 id="looping-envelope">Looping Envelope</h3>
+    <p>Create repeating patterns within a single note.</p>
+    <pre><code>Envelope Engine (AttackDecay) ──→ envelopeValue ──→ [Tremolo/Vibrato depth]
+     │
+     └── timeScale: 4.0, loopMode: Loop</code></pre>
+    <p>The attack-decay shape repeats 4 times during the note.</p>
+    <h3 id="curve-driven-brightness">Curve-Driven Brightness</h3>
+    <p>Route the note's dynamics curve to the harmonic generator so that
+      louder passages automatically produce a brighter sound.</p>
+    <pre><code>Envelope Engine (~) ──→ envelopeValue ──→ Harmonic Generator (purity)
+     │
+     └── Follow Curve ON, curve: "dynamics", valueScale: 1.0, valueOffset: 0.0</code></pre>
+    <p>The <code>~</code> button in the header must be active (green) and
+      the curve dropdown set to <em>dynamics</em>. The envelope shape selector
+      is irrelevant in this mode.</p>
+    <h3 id="curve-driven-filter">Curve-Driven Filter</h3>
+    <p>Scale and offset a curve's range to control a filter cutoff.</p>
+    <pre><code>Envelope Engine (~) ──→ envelopeValue ──→ Rolloff Processor (lowRolloff)
+     │
+     └── Follow Curve ON, curve: "dynamics", valueScale: 800, valueOffset: 200</code></pre>
+    <p>Result: soft passage → ~200 Hz cutoff, loud passage → ~1000 Hz
+      cutoff. Swap the curve dropdown to a custom <em>brightness</em> curve to
+      decouple the filter from amplitude entirely.</p>
+    <h2 id="comparison-with-other-containers">Comparison with Other
+      Containers</h2>
+    <table>
+      <colgroup>
+        <col style="width: 33%">
+        <col style="width: 21%">
+        <col style="width: 24%">
+        <col style="width: 21%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Input</th>
+          <th>Output</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Envelope Engine</strong></td>
+          <td>Note progress (implicit)</td>
+          <td>Envelope value</td>
+          <td>Stateless (evaluates curve)</td>
+        </tr>
+        <tr>
+          <td><strong>Easing Applicator</strong></td>
+          <td>progress, startValue, endValue</td>
+          <td>Interpolated value</td>
+          <td>Stateless</td>
+        </tr>
+        <tr>
+          <td><strong>Drift Engine</strong></td>
+          <td>amount, rate</td>
+          <td>Detuning multiplier</td>
+          <td>Stateful (phase)</td>
+        </tr>
+        <tr>
+          <td><strong>LFO</strong></td>
+          <td>frequency, amplitude</td>
+          <td>Oscillating value</td>
+          <td>Stateful (phase)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Envelope Engine and Easing Applicator are both stateless curve
+      evaluators. The difference is: - <strong>Easing Applicator</strong>:
+      Interpolates between two values with shaped motion - <strong>Envelope
+        Engine</strong>: Evaluates complex envelope shapes (ADSR, custom points,
+      etc.)</p>
+    <h2 id="technical-notes">Technical Notes</h2>
+    <h3 id="progress-based-design">Progress-Based Design</h3>
+    <p>Unlike traditional ADSRs that track elapsed time and gate state, the
+      Envelope Engine is purely functional:</p>
+    <div class="sourceCode" id="cb12">
+      <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a
+href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> envelopeValue <span
+class="op">=</span> process<span class="op">(</span>noteProgress<span class="op">,</span> isLegato<span
+class="op">);</span></span></code></pre>
+    </div>
+    <p>Given the same progress value, it always returns the same envelope
+      value. This makes it: - <strong>Deterministic</strong>: Perfect for
+      offline rendering - <strong>Scrubable</strong>: Can evaluate any
+      position instantly - <strong>Composable</strong>: Multiple envelopes
+      without timing conflicts</p>
+    <h3 id="custom-envelope-interpolation">Custom Envelope
+      Interpolation</h3>
+    <p>Custom envelopes support three interpolation modes between points:</p>
+    <ul>
+      <li><strong>Linear (0)</strong>: Straight line between points</li>
+      <li><strong>Smooth (1)</strong>: Cosine interpolation — eases in and out,
+        zero derivative at both endpoints. Used by the Swell and Bell Curve
+        presets.</li>
+      <li><strong>Step (2)</strong>: Hold previous value until next point</li>
+    </ul>
+    <p>The curve type is set per-point in the editor using <strong>Ctrl+click</strong>
+      to cycle through types. The curve type on a point governs the segment <em>from
+        that point to the next</em>.</p>
+    <h3 id="parameter-ranges">Parameter Ranges</h3>
+    <ul>
+      <li><code>timeScale</code>: Clamped to 0.1-10.0 (via setTimeScale)</li>
+      <li><code>valueScale</code>: Clamped to 0.0-10.0 (via
+        setValueScale)</li>
+      <li><code>valueOffset</code>: Clamped to -10.0 to 10.0 (via
+        setValueOffset)</li>
+      <li>Timing parameters (attack, decay, release): Clamped to
+        0.001-5.0</li>
+      <li><code>fadeTime</code>: Clamped to 0.0-1.0</li>
+    </ul>
+    <h3 id="output-range">Output Range</h3>
+    <p>The raw envelope output is typically 0.0-1.0, but after scaling and
+      offset:</p>
+    <pre><code>finalOutput = rawEnvelope × valueScale + valueOffset</code></pre>
+    <p>This can produce any range needed for the target parameter.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>envelopeengine.h</code>, <code>envelopeengine.cpp</code></em></p>
+  </body>
+</html>
