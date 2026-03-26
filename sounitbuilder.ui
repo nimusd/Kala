@@ -85,6 +85,8 @@
     <addaction name="actionRecorder"/>
     <addaction name="actionBowed"/>
     <addaction name="actionReed"/>
+    <addaction name="actionSaxophone"/>
+    <addaction name="actionPercussion"/>
     <addaction name="actionNote_Tail"/>
    </widget>
    <widget class="QMenu" name="menuShaping">
@@ -290,6 +292,14 @@
     <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
+  <action name="actionSaxophone">
+   <property name="text">
+    <string>Clarinet</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
   <action name="actionBandpass_EQ">
    <property name="text">
     <string>10-Band EQ</string>
@@ -317,6 +327,14 @@
   <action name="actionIR_Convolution">
    <property name="text">
     <string>IR Convolution</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionPercussion">
+   <property name="text">
+    <string>Percussion</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

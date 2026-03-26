@@ -435,12 +435,13 @@ y[n] = θ·(x[n] − y[n−1]) + x[n−1]</code></pre>
       most distinctive parameter of the model — it sets which part
       of the bore each delay line represents.</p>
     <ul>
-      <li><strong>0.05–0.15</strong>: Near the reed end — the shorter reed
-        segment dominates; bright, clarinet-like tone with strong odd harmonics</li>
-      <li><strong>0.20–0.30</strong>: Balanced split; fuller harmonic content
-        more reminiscent of soprano saxophone (default 0.20)</li>
-      <li><strong>0.40–0.60</strong>: Near-equal split; produces a rounder,
-        more oboe-like tone</li>
+      <li><strong>0.05–0.20</strong>: Near the mouthpiece end — the shorter
+        reed-end segment dominates; brighter, saxophone-like tone with all
+        harmonics present (default 0.20)</li>
+      <li><strong>0.20–0.35</strong>: Balanced split; full harmonic content,
+        typical soprano saxophone or oboe character</li>
+      <li><strong>0.40–0.55</strong>: Near-equal split; odd harmonics become
+        more prominent, producing a rounder, clarinet-like tone</li>
       <li><strong>Above 0.6</strong>: Increasingly unstable — the open-end
         segment becomes very short</li>
     </ul>
@@ -543,17 +544,18 @@ reedStiffness:  0.40
 reedAperture:   0.55
 blowPosition:   0.28
 noiseGain:      0.18</code></pre>
-    <p>A softer reed and higher blow position produce a rounder, darker tone
-      with an oboe-like quality.</p>
+    <p>A softer reed and higher blow position produce a rounder, darker tone.
+      For a true clarinet character, push blowPosition further to 0.40–0.50.</p>
     <h3 id="clarinet-like">Clarinet-Like Tone</h3>
-    <pre><code>breathPressure: 0.75
-reedStiffness:  0.65
-reedAperture:   0.40
-blowPosition:   0.08
-noiseGain:      0.10</code></pre>
-    <p>A very low blow position makes the reed-end segment dominant, which
-      strongly emphasises odd harmonics — giving the characteristic hollow,
-      clarinet-like tone where even harmonics are weak.</p>
+    <pre><code>breathPressure: 0.72
+reedStiffness:  0.28
+reedAperture:   0.55
+blowPosition:   0.45
+noiseGain:      0.06</code></pre>
+    <p>A blow position near 0.45–0.50 creates a near-equal split of the two
+      delay lines, which produces a rounder, hollow tone with stronger odd
+      harmonics — giving the characteristic clarinet-like quality. Note: lower
+      values (0.05–0.15) move toward saxophone character, not clarinet.</p>
     <h3 id="vibrato-expression">Vibrato Expression</h3>
     <pre><code>vibratoFreq:  5.2
 vibratoGain:  0.10</code></pre>
@@ -616,7 +618,7 @@ nlAttack: 0.10</code></pre>
     </ol>
     <h3 id="tone-too-clarinet-like">Tone Too Clarinet-Like</h3>
     <ol type="1">
-      <li>Increase <code>blowPosition</code> toward 0.25–0.35</li>
+      <li>Decrease <code>blowPosition</code> toward 0.15–0.25</li>
       <li>Reduce <code>reedStiffness</code> slightly</li>
       <li>Add a small <code>nlAmount</code> (0.08–0.15, type 0) to introduce
         more even harmonics</li>

@@ -12,6 +12,7 @@
 #include <QMap>
 #include <mutex>
 #include <atomic>
+#include <QFutureWatcher>
 #include "note.h"
 #include "canvas.h"
 #include "sounitgraph.h"
@@ -382,6 +383,13 @@ public:
     bool prerenderDirtyNotes(double sampleRate);
 
     /**
+     * Start a non-blocking background pre-render of dirty notes.
+     * Returns immediately; emits renderCompleted() when done.
+     * Safe to call at any time; ignored if already rendering.
+     */
+    bool startBackgroundRender(double sampleRate);
+
+    /**
      * Cancel an in-progress render
      * Sets atomic flag checked by prerenderDirtyNotes/prerenderNote loops.
      * Safe to call from any thread (e.g., during processEvents in key handler).
@@ -638,6 +646,8 @@ private slots:
      */
     void onCanvasGraphChanged();
 
+    void onRenderWatcherFinished();
+
     /**
      * Handle container parameter changes
      */
@@ -697,6 +707,15 @@ private:
     // Render cancellation
     std::atomic<bool> m_cancelRender{false};
     std::atomic<bool> m_rendering{false};
+
+    // Background (non-blocking) render
+    struct RenderTask {
+        int noteIndex;
+        NoteRender result;
+        bool success = false;
+    };
+    QVector<RenderTask> m_backgroundTasks;
+    QFutureWatcher<void> *m_renderWatcher = nullptr;
 
     // ========== Helper Methods ==========
 

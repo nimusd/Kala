@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Percussion</title>
+  </head>
+  <body>
+    <h1 id="percussion-documentation">Percussion Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Percussion container generates struck percussion sounds using
+      <strong>modal synthesis</strong> — a bank of damped sinusoidal
+      oscillators (modes), all excited simultaneously by a mallet or hand
+      strike at note onset. Each mode rings at its own frequency and decays
+      at its own rate; their combined output produces the characteristic sound
+      of a resonating body.</p>
+    <p>A single continuous parameter — <strong>Inharmonicity</strong> —
+      interpolates between three acoustically grounded mode sets, covering the
+      full range from a tuned drum skin to a metallic plate:</p>
+    <ul>
+      <li><strong>0.0</strong> — Harmonic series, near-integer overtones as
+        produced by a tabla skin with the <em>syahi</em> tuning paste</li>
+      <li><strong>0.5</strong> — Raw circular membrane, Bessel-function zero
+        spacing as on an unweighted drum head</li>
+      <li><strong>1.0</strong> — Inharmonic bell/gong spacing, metallic
+        character</li>
+    </ul>
+    <p>Because the note is treated as a <strong>trigger</strong> rather than
+      a sustained event, the drawn note length on the score has no effect on
+      the sound. The resonators ring naturally from the moment of the strike
+      and decay according to the physical parameters regardless of how long
+      the note is drawn.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) — Sound source, no signal input
+      required</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 18%">
+        <col style="width: 18%">
+        <col style="width: 14%">
+        <col style="width: 50%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>strikePosition</code></td>
+          <td>Control</td>
+          <td>0.5</td>
+          <td>Overrides / modulates the Strike Position parameter</td>
+        </tr>
+        <tr>
+          <td><code>strikeDuration</code></td>
+          <td>Control</td>
+          <td>5.0 ms</td>
+          <td>Overrides / modulates the Strike Duration parameter</td>
+        </tr>
+        <tr>
+          <td><code>inharmonicity</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>Overrides / modulates the Inharmonicity parameter</td>
+        </tr>
+        <tr>
+          <td><code>decayTime</code></td>
+          <td>Control</td>
+          <td>1.0 s</td>
+          <td>Overrides / modulates the Decay Time parameter</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Control</td>
+          <td>0.15</td>
+          <td>Overrides / modulates the Noise Gain parameter</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>1.0</td>
+          <td>Scales the note pitch. 1.0 = note pitch, 2.0 = octave up,
+            0.5 = octave down</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 20%">
+        <col style="width: 60%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>The combined output of all modal resonators plus onset noise</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <colgroup>
+        <col style="width: 22%">
+        <col style="width: 10%">
+        <col style="width: 12%">
+        <col style="width: 14%">
+        <col style="width: 42%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>strikePosition</code></td>
+          <td>Float</td>
+          <td>0.5</td>
+          <td>0 – 1</td>
+          <td>Where on the membrane the strike lands. 0 = centre, 1 = rim.
+            Centre emphasises low modes; rim excites all modes with more
+            equal energy, producing a brighter, more complex tone.</td>
+        </tr>
+        <tr>
+          <td><code>strikeDuration</code></td>
+          <td>Float</td>
+          <td>5.0 ms</td>
+          <td>0.5 – 50 ms</td>
+          <td>Duration of mallet or hand contact. Short values produce a sharp
+            click attack (hard stick, finger tip); longer values simulate a
+            padded mallet or palm slap, with smoother onset and less
+            high-frequency content.</td>
+        </tr>
+        <tr>
+          <td><code>inharmonicity</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0 – 1</td>
+          <td>Blends between three mode-frequency sets. 0 = harmonic (tabla),
+            0.5 = raw circular membrane (Bessel), 1.0 = bell/gong. Values
+            between anchors are continuously interpolated.</td>
+        </tr>
+        <tr>
+          <td><code>decayTime</code></td>
+          <td>Float</td>
+          <td>1.0 s</td>
+          <td>0.005 – 15 s</td>
+          <td>Decay time of the <em>fundamental</em> mode. Higher modes decay
+            faster, scaled by <code>highDecayRate</code>. At 0.005 s even the
+            fundamental is very short, giving a dry, damped transient.</td>
+        </tr>
+        <tr>
+          <td><code>highDecayRate</code></td>
+          <td>Float</td>
+          <td>1.5</td>
+          <td>0.1 – 5.0</td>
+          <td>Controls how much faster high modes decay relative to the
+            fundamental. Mode decay = <code>decayTime × (f₀/fᵢ)^highDecayRate</code>.
+            Low values (0.3–0.5) give a metallic, all-modes-ring-equally
+            character; high values (2–4) give a tabla-like tone where high
+            modes die off almost instantly.</td>
+        </tr>
+        <tr>
+          <td><code>numModes</code></td>
+          <td>Integer</td>
+          <td>12</td>
+          <td>2 – 16</td>
+          <td>Number of modal resonators computed per sample. More modes add
+            spectral richness and computational cost. 8–12 is sufficient for
+            most instruments; 16 is useful for dense metallic textures.</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Float</td>
+          <td>0.15</td>
+          <td>0 – 1</td>
+          <td>Amplitude of a short broadband noise burst at note onset,
+            modelling skin texture, stick click, or hand-surface contact. The
+            burst lasts 10 ms and decays exponentially. Set to 0 for a pure
+            modal tone.</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>0.25 – 4.0</td>
+          <td>Scales the fundamental frequency relative to the note pitch.
+            1.0 = note pitch as written, 2.0 = octave up, 0.5 = octave
+            down.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="how-it-works">How It Works</h2>
+    <h3 id="modal-synthesis">Modal Synthesis</h3>
+    <p>At the moment a note begins, each of the <code>numModes</code>
+      resonators is initialised with a frequency, an amplitude, and a
+      per-sample decay factor, then excited by a mallet impulse. Each
+      resonator is a second-order IIR filter of the form:</p>
+    <pre><code>y[n] = cosCoeff × y[n-1]  −  r² × y[n-2]  +  excitation × modeAmplitude
+
+where  cosCoeff = 2 · r · cos(ω)
+       r        = exp(−1 / (decayTime_i × sampleRate))
+       ω        = 2π × modeFrequency / sampleRate</code></pre>
+    <p>The output is the sum of all resonators. Because the modes are at
+      inharmonic (or near-harmonic) frequencies and at different phases, they
+      produce natural-sounding beating and decay, not a static tone.</p>
+    <h3 id="mode-frequency-tables">Mode Frequency Tables</h3>
+    <p>Three anchor sets are blended by the <code>inharmonicity</code>
+      parameter:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Harmonic (0.0)</th>
+          <th>Membrane (0.5)</th>
+          <th>Bell/Gong (1.0)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>1.000</td><td>1.000</td><td>1.000</td></tr>
+        <tr><td>2</td><td>2.000</td><td>1.593</td><td>1.505</td></tr>
+        <tr><td>3</td><td>3.000</td><td>2.136</td><td>2.000</td></tr>
+        <tr><td>4</td><td>4.000</td><td>2.296</td><td>2.390</td></tr>
+        <tr><td>5</td><td>5.000</td><td>2.653</td><td>2.876</td></tr>
+        <tr><td>6</td><td>6.000</td><td>2.917</td><td>3.100</td></tr>
+        <tr><td>7</td><td>7.000</td><td>3.156</td><td>3.596</td></tr>
+        <tr><td>8</td><td>8.000</td><td>3.500</td><td>4.015</td></tr>
+      </tbody>
+    </table>
+    <p>The membrane column uses the normalised zeros of the Bessel functions
+      J₀, J₁, J₂, J₃. The bell/gong column is an empirically derived set
+      that produces inharmonic metallic character while keeping all modes
+      within a musically useful range at typical pitches.</p>
+    <h3 id="mallet-excitation">Mallet Excitation</h3>
+    <p>The excitation envelope is a half-cosine that decays from 1 to 0 over
+      the <code>strikeDuration</code> window:</p>
+    <pre><code>progress   = 1 − (samplesRemaining / strikeTotalSamples)
+excitation = cos(progress × π/2)     // 1.0 → 0.0</code></pre>
+    <p>This models the brief contact phase of a mallet or hand, where the
+      energy transferred to the membrane decreases as the mallet rebounds.
+      Short durations produce a sharp, high-frequency-rich attack; long
+      durations smooth the onset and filter out the high modes, mimicking a
+      soft mallet.</p>
+    <h3 id="note-as-trigger">Notes Are Triggers</h3>
+    <p>Unlike pitched instruments, percussive sounds have no "sustain" phase
+      — the note length on the score has no effect on the sound. Internally,
+      the audio engine caps the note body to 50 ms regardless of the written
+      duration, then immediately enters tail mode. The modal resonators ring
+      down naturally from the moment of the strike. This means:</p>
+    <ul>
+      <li>A 1 ms note and a 1-bar note produce the exact same sound</li>
+      <li>Note length is used only to position the strike in time</li>
+      <li>Decay is controlled entirely by <code>decayTime</code> and
+        <code>highDecayRate</code></li>
+    </ul>
+    <h2 id="instrument-recipes">Instrument Recipes</h2>
+    <table>
+      <colgroup>
+        <col style="width: 16%">
+        <col style="width: 12%">
+        <col style="width: 12%">
+        <col style="width: 14%">
+        <col style="width: 12%">
+        <col style="width: 14%">
+        <col style="width: 10%">
+        <col style="width: 10%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>strikePos</th>
+          <th>strikeDur</th>
+          <th>inharmonicity</th>
+          <th>decayTime</th>
+          <th>highDecayRate</th>
+          <th>numModes</th>
+          <th>noiseGain</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Tabla / Dayan</td>
+          <td>0.4</td>
+          <td>4 ms</td>
+          <td>0.05</td>
+          <td>0.6 s</td>
+          <td>2.5</td>
+          <td>12</td>
+          <td>0.20</td>
+        </tr>
+        <tr>
+          <td>Bayan (bass tabla)</td>
+          <td>0.5</td>
+          <td>6 ms</td>
+          <td>0.05</td>
+          <td>1.0 s</td>
+          <td>1.5</td>
+          <td>12</td>
+          <td>0.25</td>
+        </tr>
+        <tr>
+          <td>Timpani</td>
+          <td>0.3</td>
+          <td>12 ms</td>
+          <td>0.30</td>
+          <td>4.0 s</td>
+          <td>1.5</td>
+          <td>12</td>
+          <td>0.12</td>
+        </tr>
+        <tr>
+          <td>Tar / frame drum</td>
+          <td>0.7</td>
+          <td>5 ms</td>
+          <td>0.15</td>
+          <td>0.4 s</td>
+          <td>3.5</td>
+          <td>10</td>
+          <td>0.35</td>
+        </tr>
+        <tr>
+          <td>Gong</td>
+          <td>0.5</td>
+          <td>30 ms</td>
+          <td>0.90</td>
+          <td>10.0 s</td>
+          <td>0.4</td>
+          <td>16</td>
+          <td>0.08</td>
+        </tr>
+        <tr>
+          <td>Bell / singing bowl</td>
+          <td>0.5</td>
+          <td>20 ms</td>
+          <td>0.80</td>
+          <td>6.0 s</td>
+          <td>0.6</td>
+          <td>14</td>
+          <td>0.05</td>
+        </tr>
+        <tr>
+          <td>Dry snare / slap</td>
+          <td>0.6</td>
+          <td>2 ms</td>
+          <td>0.20</td>
+          <td>0.03 s</td>
+          <td>4.0</td>
+          <td>8</td>
+          <td>0.60</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="basic-drum-hit">Basic Drum Hit</h3>
+    <p>Percussion needs no upstream connections — it is a self-contained
+      source:</p>
+    <pre><code>[Percussion] → signalOut  (final output)</code></pre>
+    <h3 id="with-ir-convolution">With IR Convolution (Recommended for Room)</h3>
+    <p>Because the resonators decay cleanly to silence and no pre-tail fade
+      is applied, the signal passed to the IR is unmodified and produces
+      natural room reflections:</p>
+    <pre><code>[Percussion] → signalOut → irIn → [IR Convolution] → signalOut</code></pre>
+    <p>The IR convolution will ring through its full impulse response after
+      the resonators have gone silent. This is the preferred chain for any
+      pitched or metallic percussion — gong in a concert hall, bell in a
+      cathedral, tabla in a wood room.</p>
+    <h3 id="layered-body-and-ring">Layered Body and Ring</h3>
+    <p>Two Percussion containers mixed with a Signal Mixer can layer a tight
+      body tone with a longer resonant ring — useful for instruments like the
+      dayan where the initial attack has a different character from the
+      sustaining overtone:</p>
+    <pre><code>[Percussion 1]  strikePos=0.6, decayTime=0.3, highDecayRate=3.0
+    → signalA →  [Signal Mixer] → signalOut
+[Percussion 2]  strikePos=0.3, decayTime=0.8, highDecayRate=1.2
+    → signalB →  [Signal Mixer]</code></pre>
+    <h3 id="envelope-modulation">Expressive Modulation</h3>
+    <p>Connecting an Envelope Engine to <code>inharmonicity</code> or
+      <code>strikePosition</code> produces evolving timbre over the note's
+      ring:</p>
+    <pre><code>[Envelope Engine]  customEnvelope: 0.0 → 0.8 over noteProgress 0→1
+    → envelopeValue → inharmonicity → [Percussion]
+      (add, weight=0.8)
+
+Result: strike begins as tabla, morphs toward gong character as it rings out</code></pre>
+    <h3 id="pitch-multiplier-harmonics">Pitched Harmonics</h3>
+    <p>Using two Percussion containers at different pitch ratios and mixing
+      them creates a rich layered texture useful for gamelan-like sounds:</p>
+    <pre><code>[Percussion 1]  pitchMultiplier=1.0  → signalA
+[Percussion 2]  pitchMultiplier=2.39 → signalB   (a minor 10th up)
+Both → [Signal Mixer]</code></pre>
+    <h2 id="design-notes">Design Notes</h2>
+    <h3 id="decay-vs-note-tail">Decay Time vs Note Tail</h3>
+    <p>Percussion does not need a Note Tail container. The resonators decay
+      naturally to silence, which the audio engine detects automatically
+      (silence below −60 dB for 100 ms stops tail rendering). Adding a
+      Note Tail would shorten the ring artificially rather than extend it.</p>
+    <p>For very short decays (under ~50 ms) at low pitches, the fundamental
+      mode may still be ringing when the silence threshold is reached. This is
+      normal and produces the characteristic "thud" of heavily damped drums.</p>
+    <h3 id="modes-and-cpu">Modes and CPU</h3>
+    <p>Kala pre-renders notes before playback, so CPU cost during playback
+      is zero regardless of <code>numModes</code>. The only cost is render
+      time, which is proportional to <code>numModes × decayTime</code>.
+      For a gong with 16 modes and 10-second decay, the render takes slightly
+      longer but plays back in real time.</p>
+    <h3 id="pitch-and-inharmonicity">Pitch and Inharmonicity</h3>
+    <p>The note pitch on the score sets the fundamental mode frequency
+      (mode 1). All other modes are multiples of this fundamental, scaled by
+      the mode ratios for the current inharmonicity value. This means
+      Percussion <em>is</em> a pitched instrument — playing it at different
+      pitches on the score produces correctly tuned membrane resonances, as on
+      a real tabla or timpani.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="sound-does-not-decay">Sound Does Not Decay — Rings Indefinitely</h3>
+    <p>Check that <code>decayTime</code> is not set extremely high (above
+      15 s) and that the silence threshold is being reached. The audio engine
+      stops the tail after 30 seconds at the latest regardless of parameter
+      values.</p>
+    <h3 id="no-pitch-variation">All Notes Sound the Same Pitch</h3>
+    <p>Percussion uses the note's fundamental pitch to set mode frequencies.
+      If all notes were drawn at the same pitch line on the score, they will
+      sound the same. Draw notes at different pitch positions for tuned
+      instrument behaviour (e.g., hand-tuned tabla playing).</p>
+    <h3 id="too-noisy-on-attack">Onset Too Noisy or Clicky</h3>
+    <p>Lower <code>noiseGain</code> to reduce the broadband burst. Increase
+      <code>strikeDuration</code> to soften the attack. If a sharp click
+      persists at very short strike durations, it is the initial resonator
+      excitation, which is physically accurate — raise <code>strikeDuration</code>
+      above 3 ms to smooth it.</p>
+    <h3 id="gong-sounds-like-drum">Gong / Bell Sounds Like a Drum</h3>
+    <p>Ensure <code>inharmonicity</code> is above 0.7, <code>highDecayRate</code>
+      is below 0.8 (so all modes ring for a long time), and
+      <code>decayTime</code> is set to several seconds. Also increase
+      <code>numModes</code> to 14–16 — the beating between closely-spaced
+      inharmonic modes is what creates the metallic shimmer.</p>
+    <h3 id="tabla-sounds-too-metallic">Tabla Sounds Too Metallic</h3>
+    <p>Lower <code>inharmonicity</code> toward 0.0 (the syahi-tuned harmonic
+      series), increase <code>highDecayRate</code> to 2.5–3.0 to damp the
+      high modes quickly, and reduce <code>numModes</code> to 8–10. The
+      characteristic tabla tone comes mostly from the first 4–5 harmonic
+      modes.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>percussionmodel.h</code>,
+        <code>percussionmodel.cpp</code></em></p>
+  </body>
+</html>

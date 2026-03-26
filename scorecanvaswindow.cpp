@@ -17,8 +17,10 @@
 #include <QMouseEvent>
 #include <QCursor>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QInputDialog>
 #include <cmath>
+#include <QCoreApplication>
 
 ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *parent)
     : QMainWindow{parent}
@@ -126,7 +128,6 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
     renderProgressBar->setTextVisible(true);
     renderProgressBar->setFormat("Render: %p%");
     renderProgressBar->setStyleSheet("QProgressBar { border: 2px solid grey; border-radius: 5px; text-align: center; } QProgressBar::chunk { background-color: #05B8CC; }");
-    renderProgressBar->setVisible(true);  // TESTING: Always visible to verify it exists
     ui->scoreCanvasBottomToolbar->addSeparator();
     ui->scoreCanvasBottomToolbar->addWidget(renderProgressBar);
     qDebug() << "ScoreCanvasWindow: Progress bar created and added to toolbar";
@@ -161,6 +162,13 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
     // Initialize playback timer
     playbackTimer = new QTimer(this);
     connect(playbackTimer, &QTimer::timeout, this, &ScoreCanvasWindow::onPlaybackTick);
+
+    // Background pre-render debounce timer (fires 400ms after last edit)
+    m_renderDebounceTimer = new QTimer(this);
+    m_renderDebounceTimer->setSingleShot(true);
+    m_renderDebounceTimer->setInterval(400);
+    connect(m_renderDebounceTimer, &QTimer::timeout,
+            this, &ScoreCanvasWindow::scheduleBackgroundRender);
 
     // Connect transport controls
     connect(ui->actionPlay, &QAction::triggered, this, &ScoreCanvasWindow::startPlayback);
@@ -601,6 +609,9 @@ void ScoreCanvasWindow::setupScoreCanvas()
     // Sync slide mode button with ScoreCanvas state (keyboard shortcut keeps button in sync)
     connect(scoreCanvas, &ScoreCanvas::slideModeChanged, this, &ScoreCanvasWindow::onSlideModeChanged);
 
+    // Keep toolbar spinboxes and status labels in sync when tempo/time sig changes externally
+    connect(scoreCanvas, &ScoreCanvas::tempoSettingsChanged, this, &ScoreCanvasWindow::refreshToolbar);
+
     // Connect track selector to score canvas for active track changes
     connect(trackSelector, &TrackSelector::trackSelected, scoreCanvas, &ScoreCanvas::setActiveTrack);
 
@@ -627,6 +638,11 @@ void ScoreCanvasWindow::setupScoreCanvas()
     connect(ui->actionSnapToScale, &QAction::triggered, this, [this]() {
         scoreCanvas->snapSelectedNotesToScale();
         qDebug() << "ScoreCanvasWindow: Snap to Scale action triggered";
+    });
+
+    // Restart background pre-render debounce on every committed score edit
+    connect(scoreCanvas->getUndoStack(), &QUndoStack::indexChanged, this, [this](int) {
+        if (m_renderDebounceTimer) m_renderDebounceTimer->start();
     });
 }
 
@@ -948,6 +964,31 @@ void ScoreCanvasWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    // Shift+Left / Shift+Right: scroll to first/last note
+    if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) && event->modifiers() == Qt::ShiftModifier) {
+        const QVector<Note> &notes = scoreCanvas->getPhrase().getNotes();
+        if (!notes.isEmpty()) {
+            double targetTimeMs;
+            if (event->key() == Qt::Key_Left) {
+                targetTimeMs = notes[0].getStartTime();
+                for (const Note &n : notes)
+                    targetTimeMs = qMin(targetTimeMs, n.getStartTime());
+            } else {
+                targetTimeMs = 0;
+                for (const Note &n : notes)
+                    targetTimeMs = qMax(targetTimeMs, n.getEndTime());
+            }
+            int targetPixel = scoreCanvas->timeToPixel(targetTimeMs);
+            int viewportWidth = scoreScrollArea->viewport()->width();
+            int scrollValue = targetPixel - (viewportWidth / 2);
+            scrollValue = qMax(scoreScrollArea->horizontalScrollBar()->minimum(), scrollValue);
+            scrollValue = qMin(scoreScrollArea->horizontalScrollBar()->maximum(), scrollValue);
+            scoreScrollArea->horizontalScrollBar()->setValue(scrollValue);
+        }
+        event->accept();
+        return;
+    }
+
     // Delete key clears loop (when loop end is selected)
     if (event->key() == Qt::Key_Delete && event->modifiers() == Qt::NoModifier) {
         if (timeline->hasLoop()) {
@@ -1237,6 +1278,23 @@ void ScoreCanvasWindow::startPlayback()
 {
     if (!audioEngine) return;
 
+    // Cancel debounce so no new background render starts after we begin
+    m_renderDebounceTimer->stop();
+
+    // If a background render is in progress, wait for it before proceeding
+    // (the progress bar is already visible — signal handlers manage it)
+    if (m_backgroundRenderCount > 0) {
+        QElapsedTimer waitTimer;
+        waitTimer.start();
+        while (m_backgroundRenderCount > 0 && waitTimer.elapsed() < 30000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        }
+        if (m_backgroundRenderCount > 0) {
+            qWarning() << "ScoreCanvas: background render timed out — resetting counter";
+            m_backgroundRenderCount = 0;
+        }
+    }
+
     // Get all notes from the canvas phrase
     const QVector<Note>& notes = scoreCanvas->getPhrase().getNotes();
 
@@ -1511,6 +1569,7 @@ void ScoreCanvasWindow::onTempoChanged(int bpm)
 
     // Update internal state
     currentTempo = bpm;
+    statusTempoLabel->setText(QString("%1 BPM").arg(currentTempo));
 
     // Update timeline
     timeline->setTempo(currentTempo);
@@ -1552,6 +1611,7 @@ void ScoreCanvasWindow::onTimeSignatureChanged()
     // Update internal state
     currentTimeSigTop = newNum;
     currentTimeSigBottom = newDenom;
+    statusTimeSigLabel->setText(QString("%1/%2").arg(currentTimeSigTop).arg(currentTimeSigBottom));
 
     // Update timeline
     timeline->setTimeSignature(currentTimeSigTop, currentTimeSigBottom);
@@ -1588,6 +1648,13 @@ void ScoreCanvasWindow::onNowMarkerChanged(double timeMs)
     currentTempo = static_cast<int>(tts.bpm);
     currentTimeSigTop = tts.timeSigNumerator;
     currentTimeSigBottom = tts.timeSigDenominator;
+}
+
+void ScoreCanvasWindow::refreshToolbar()
+{
+    onNowMarkerChanged(timeline->getNowMarker());
+    statusTempoLabel->setText(QString("%1 BPM").arg(currentTempo));
+    statusTimeSigLabel->setText(QString("%1/%2").arg(currentTimeSigTop).arg(currentTimeSigBottom));
 }
 
 void ScoreCanvasWindow::scaleNoteTimes(double scaleFactor)
@@ -1771,6 +1838,10 @@ void ScoreCanvasWindow::updateFromSettings(const CompositionSettings &settings)
     compositionName = settings.compositionName;
     compositionSettings = settings;
 
+    // Apply pre-render debounce delay
+    if (m_renderDebounceTimer)
+        m_renderDebounceTimer->setInterval(settings.preRenderDelayMs);
+
     // Update timeline and scoreCanvas directly (don't call onTimeModeToggled - it's a toggle!)
     timeline->setTimeMode(currentTimeMode == MusicalTime ? Timeline::Musical : Timeline::Absolute);
     timeline->setTempo(currentTempo);
@@ -1850,6 +1921,34 @@ void ScoreCanvasWindow::onTrackSelected(int trackIndex)
     // This avoids unnecessary rendering and potential crashes when switching tracks
 }
 
+void ScoreCanvasWindow::scheduleBackgroundRender()
+{
+    if (!audioEngine || !trackManager || m_backgroundRenderCount > 0) return;
+
+    const QVector<Note>& notes = scoreCanvas->getPhrase().getNotes();
+    if (notes.isEmpty()) return;
+
+    // Distribute notes to their respective tracks
+    QMap<int, QList<Note>> notesByTrack;
+    for (const Note &note : notes) {
+        notesByTrack[note.getTrackIndex()].append(note);
+    }
+
+    for (int trackIdx = 0; trackIdx < trackManager->getTrackCount(); ++trackIdx) {
+        Track *track = trackManager->getTrack(trackIdx);
+        if (!track) continue;
+
+        const QList<Note> &trackNotes = notesByTrack.value(trackIdx);
+        track->syncNotes(trackNotes);
+
+        if (!trackNotes.isEmpty()) {
+            ++m_backgroundRenderCount;  // pre-increment before signal fires in startBackgroundRender
+            bool started = track->startBackgroundRender(audioEngine->getSampleRate());
+            if (!started) --m_backgroundRenderCount;  // undo if nothing was started
+        }
+    }
+}
+
 void ScoreCanvasWindow::prerenderNotes()
 {
     if (!audioEngine) return;
@@ -1916,19 +2015,17 @@ QColor ScoreCanvasWindow::getNextTrackColor()
 
 void ScoreCanvasWindow::onRenderStarted()
 {
-    qDebug() << "ScoreCanvas: onRenderStarted() called!";
     m_isRendering = true;
     renderProgressBar->setFormat("Rendering...");
     renderProgressBar->setMinimum(0);
     renderProgressBar->setMaximum(0);  // Indeterminate mode (animated busy bar)
     renderProgressBar->setVisible(true);
     renderProgressBar->show();
-    qDebug() << "ScoreCanvas: Progress bar visible:" << renderProgressBar->isVisible();
+    qDebug() << "ScoreCanvas: onRenderStarted() called, backgroundCount=" << m_backgroundRenderCount;
 }
 
 void ScoreCanvasWindow::onRenderProgressChanged(int percentage)
 {
-    //qDebug() << "ScoreCanvas: Render progress:" << percentage << "%";
     if (percentage <= 0) return;  // Stay in indeterminate "Rendering..." mode until real progress
     if (renderProgressBar->maximum() == 0) {
         // Switch from indeterminate to determinate mode
@@ -1942,20 +2039,27 @@ void ScoreCanvasWindow::onRenderProgressChanged(int percentage)
 void ScoreCanvasWindow::onRenderCompleted()
 {
     m_isRendering = false;
+    if (m_backgroundRenderCount > 0) {
+        --m_backgroundRenderCount;
+        if (m_backgroundRenderCount > 0) return;  // More background renders still in progress
+    }
+    // All renders done — show 100% then hide
     renderProgressBar->setMaximum(100);
     renderProgressBar->setFormat("Render: %p%");
     renderProgressBar->setValue(100);
-    qDebug() << "ScoreCanvas: Render completed at 100%, will hide in 3 seconds";
-    // Keep progress bar visible for 3 seconds so user can see it
+    qDebug() << "ScoreCanvas: All renders completed, will hide in 3 seconds";
     QTimer::singleShot(3000, this, [this]() {
         renderProgressBar->setVisible(false);
-        qDebug() << "ScoreCanvas: Progress bar now hidden";
     });
 }
 
 void ScoreCanvasWindow::onRenderCancelled()
 {
     m_isRendering = false;
+    if (m_backgroundRenderCount > 0) {
+        --m_backgroundRenderCount;
+        if (m_backgroundRenderCount > 0) return;  // More background renders still in progress
+    }
     renderProgressBar->setMaximum(100);
     renderProgressBar->setValue(0);
     renderProgressBar->setFormat("Render cancelled");
@@ -2054,6 +2158,7 @@ void ScoreCanvasWindow::updateFrequencyLabels()
         fl.color = cl.color;
         fl.noteName = cl.noteName;
         fl.isThicker = cl.isThicker;
+        fl.isAccidental = cl.isAccidental;
         labelLines.append(fl);
     }
     frequencyLabels->setScaleLines(labelLines);

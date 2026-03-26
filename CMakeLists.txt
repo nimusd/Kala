@@ -38,6 +38,7 @@ qt_add_executable(Kala
     scorecanvas.h scorecanvas.cpp
     scorecanvascommands.h scorecanvascommands.cpp
     sounitbuildercommands.h sounitbuildercommands.cpp
+    trackcommands.h trackcommands.cpp
     timeline.h timeline.cpp
     frequencylabels.h frequencylabels.cpp
     note.h note.cpp
@@ -82,6 +83,8 @@ qt_add_executable(Kala
     recordermodel.h recordermodel.cpp
     bowedmodel.h bowedmodel.cpp
     saxophonemodel.h saxophonemodel.cpp
+    saxophonemodel2.h saxophonemodel2.cpp
+    percussionmodel.h percussionmodel.cpp
     tailprocessor.h tailprocessor.cpp
     sounitgraph.h sounitgraph.cpp
     sounitvariation.h sounitvariation.cpp

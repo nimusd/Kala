@@ -100,4 +100,29 @@ private:
     Canvas *m_canvas;
 };
 
+// ============================================================================
+// Set Parameter Command
+// Used by the container inspector sliders/spinboxes.
+// Merges consecutive changes to the same parameter so drag-to-value
+// produces a single undo step.
+// ============================================================================
+class SetParameterCommand : public QUndoCommand
+{
+public:
+    SetParameterCommand(Container *container, const QString &paramName,
+                        double oldVal, double newVal,
+                        QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+    int id() const override { return 1002; }
+    bool mergeWith(const QUndoCommand *other) override;
+
+private:
+    Container *m_container;
+    QString m_paramName;
+    double m_oldVal;
+    double m_newVal;
+};
+
 #endif // SOUNITBUILDERCOMMANDS_H

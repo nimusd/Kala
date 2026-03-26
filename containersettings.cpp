@@ -260,6 +260,24 @@ void ContainerSettings::saveSettings()
     settings.setValue("nlAttackMax",       reed.nlAttackMax);
     settings.endGroup();
 
+    // Percussion
+    settings.beginGroup("Percussion");
+    settings.setValue("strikePositionMin",  percussion.strikePositionMin);
+    settings.setValue("strikePositionMax",  percussion.strikePositionMax);
+    settings.setValue("strikeDurationMin",  percussion.strikeDurationMin);
+    settings.setValue("strikeDurationMax",  percussion.strikeDurationMax);
+    settings.setValue("inharmonicityMin",   percussion.inharmonicityMin);
+    settings.setValue("inharmonicityMax",   percussion.inharmonicityMax);
+    settings.setValue("decayTimeMin",       percussion.decayTimeMin);
+    settings.setValue("decayTimeMax",       percussion.decayTimeMax);
+    settings.setValue("highDecayRateMin",   percussion.highDecayRateMin);
+    settings.setValue("highDecayRateMax",   percussion.highDecayRateMax);
+    settings.setValue("numModesMin",        percussion.numModesMin);
+    settings.setValue("numModesMax",        percussion.numModesMax);
+    settings.setValue("noiseGainMin",       percussion.noiseGainMin);
+    settings.setValue("noiseGainMax",       percussion.noiseGainMax);
+    settings.endGroup();
+
     // Easing
     settings.beginGroup("Easing");
     settings.setValue("overshootDefault", easing.overshootDefault);
@@ -528,6 +546,24 @@ void ContainerSettings::loadSettings()
     reed.nlFreqModMax      = settings.value("nlFreqModMax",     200.0).toDouble();
     reed.nlAttackMin       = settings.value("nlAttackMin",      0.001).toDouble();
     reed.nlAttackMax       = settings.value("nlAttackMax",        2.0).toDouble();
+    settings.endGroup();
+
+    // Percussion
+    settings.beginGroup("Percussion");
+    percussion.strikePositionMin  = settings.value("strikePositionMin",  0.0).toDouble();
+    percussion.strikePositionMax  = settings.value("strikePositionMax",  1.0).toDouble();
+    percussion.strikeDurationMin  = settings.value("strikeDurationMin",  0.5).toDouble();
+    percussion.strikeDurationMax  = settings.value("strikeDurationMax", 50.0).toDouble();
+    percussion.inharmonicityMin   = settings.value("inharmonicityMin",   0.0).toDouble();
+    percussion.inharmonicityMax   = settings.value("inharmonicityMax",   1.0).toDouble();
+    percussion.decayTimeMin       = settings.value("decayTimeMin",     0.005).toDouble();
+    percussion.decayTimeMax       = settings.value("decayTimeMax",      15.0).toDouble();
+    percussion.highDecayRateMin   = settings.value("highDecayRateMin",   0.1).toDouble();
+    percussion.highDecayRateMax   = settings.value("highDecayRateMax",   5.0).toDouble();
+    percussion.numModesMin        = settings.value("numModesMin",          2).toInt();
+    percussion.numModesMax        = settings.value("numModesMax",         16).toInt();
+    percussion.noiseGainMin       = settings.value("noiseGainMin",       0.0).toDouble();
+    percussion.noiseGainMax       = settings.value("noiseGainMax",       1.0).toDouble();
     settings.endGroup();
 
     // Easing

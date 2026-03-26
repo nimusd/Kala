@@ -84,8 +84,10 @@ SounitGraph* SounitGraph::clone() const
         if (src.irConvolution)        dst.irConvolution = new IRConvolution(*src.irConvolution);
         if (src.recorderModel)        dst.recorderModel   = new RecorderModel(*src.recorderModel);
         if (src.bowedModel)           dst.bowedModel      = new BowedModel(*src.bowedModel);
-        if (src.reedModel)       dst.reedModel  = new SaxophoneModel(*src.reedModel);
-        if (src.tailProc)             dst.tailProc        = new TailProcessor(*src.tailProc);
+        if (src.reedModel)       dst.reedModel      = new SaxophoneModel(*src.reedModel);
+        if (src.saxophoneModel)  dst.saxophoneModel = new SaxophoneModel2(*src.saxophoneModel);
+        if (src.tailProc)             dst.tailProc          = new TailProcessor(*src.tailProc);
+        if (src.percussionModel)      dst.percussionModel   = new PercussionModel(*src.percussionModel);
 
         // Copy output values
         dst.spectrumOut = src.spectrumOut;
@@ -712,9 +714,54 @@ void SounitGraph::createProcessors()
             data.reedModel->setNLFreqMod(container->getParameter("nlFreqMod", 10.0));
             data.reedModel->setNLAttack(container->getParameter("nlAttack", 0.1));
 
+        } else if (container->getName() == "Clarinet") {
+            // Migrate new parameters onto containers loaded from old sounit files.
+            // blockSignals() prevents setParameter() from emitting parameterChanged,
+            // which would otherwise trigger a synchronous rebuildGraph() → processors.clear()
+            // mid-iteration, invalidating the iterator and leaving saxophoneModel = nullptr.
+            container->blockSignals(true);
+            if (container->getParameter("attackChiffGain",    -1.0) < 0.0) container->setParameter("attackChiffGain",    5.0);
+            if (container->getParameter("attackOverpressure", -1.0) < 0.0) container->setParameter("attackOverpressure", 0.4);
+            if (container->getParameter("reedSaturation",     -1.0) < 0.0) container->setParameter("reedSaturation",     0.6);
+            container->blockSignals(false);
+
+            data.saxophoneModel = new SaxophoneModel2(sampleRate);
+            data.saxophoneModel->setBreathPressure(container->getParameter("breathPressure", 0.72));
+            data.saxophoneModel->setReedStiffness(container->getParameter("reedStiffness",   0.45));
+            data.saxophoneModel->setReedAperture(container->getParameter("reedAperture",     0.52));
+            data.saxophoneModel->setBlowPosition(container->getParameter("blowPosition",     0.22));
+            data.saxophoneModel->setNoiseGain(container->getParameter("noiseGain",           0.12));
+            data.saxophoneModel->setVibratoFreq(container->getParameter("vibratoFreq",       5.5));
+            data.saxophoneModel->setVibratoGain(container->getParameter("vibratoGain",       0.04));
+            data.saxophoneModel->setNLType(static_cast<int>(container->getParameter("nlType", 0.0)));
+            data.saxophoneModel->setNLAmount(container->getParameter("nlAmount",             0.22));
+            data.saxophoneModel->setNLFreqMod(container->getParameter("nlFreqMod",           10.0));
+            data.saxophoneModel->setNLAttack(container->getParameter("nlAttack",             0.12));
+            data.saxophoneModel->setVocalTractFreq(container->getParameter("vocalTractFreq", 700.0));
+            data.saxophoneModel->setVocalTractQ(container->getParameter("vocalTractQ",       2.5));
+            data.saxophoneModel->setVocalTractGain(container->getParameter("vocalTractGain", 0.35));
+            data.saxophoneModel->setJawVibratoBlend(container->getParameter("jawVibratoBlend", 0.7));
+            data.saxophoneModel->setGrowlFreq(container->getParameter("growlFreq",                   85.0));
+            data.saxophoneModel->setGrowlDepth(container->getParameter("growlDepth",                 0.0));
+            data.saxophoneModel->setBellReflection(container->getParameter("bellReflection",         0.85));
+            data.saxophoneModel->setAttackChiffGain(container->getParameter("attackChiffGain",       5.0));
+            data.saxophoneModel->setAttackOverpressure(container->getParameter("attackOverpressure", 0.4));
+            data.saxophoneModel->setReedSaturation(container->getParameter("reedSaturation",         0.6));
+
         } else if (container->getName() == "Note Tail") {
             data.tailProc = new TailProcessor(sampleRate);
             data.tailProc->setTailLength(container->getParameter("tailLength", 200.0));
+
+        } else if (container->getName() == "Percussion") {
+            data.percussionModel = new PercussionModel(sampleRate);
+            data.percussionModel->setStrikePosition(container->getParameter("strikePosition", 0.5));
+            data.percussionModel->setStrikeDuration(container->getParameter("strikeDuration", 5.0));
+            data.percussionModel->setInharmonicity(container->getParameter("inharmonicity", 0.0));
+            data.percussionModel->setDecayTime(container->getParameter("decayTime", 1.0));
+            data.percussionModel->setHighDecayRate(container->getParameter("highDecayRate", 1.5));
+            data.percussionModel->setNumModes(static_cast<int>(container->getParameter("numModes", 12.0)));
+            data.percussionModel->setNoiseGain(container->getParameter("noiseGain", 0.15));
+            data.percussionModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
         }
     }
 
@@ -807,6 +854,12 @@ void SounitGraph::reset(bool isLegato)
         if (data.reedModel) {
             data.reedModel->reset(isLegato);
         }
+        if (data.saxophoneModel) {
+            data.saxophoneModel->reset(isLegato);
+        }
+        if (data.percussionModel) {
+            data.percussionModel->reset();
+        }
         if (data.tailProc) {
             data.tailProc->reset();
         }
@@ -825,6 +878,20 @@ void SounitGraph::reset(bool isLegato)
     }
 }
 
+bool SounitGraph::hasSaxophoneModel() const
+{
+    for (auto it = processors.constBegin(); it != processors.constEnd(); ++it)
+        if (it.value().saxophoneModel) return true;
+    return false;
+}
+
+bool SounitGraph::hasPercussion() const
+{
+    for (auto it = processors.constBegin(); it != processors.constEnd(); ++it)
+        if (it.value().percussionModel) return true;
+    return false;
+}
+
 bool SounitGraph::hasTail() const
 {
     for (auto it = processors.constBegin(); it != processors.constEnd(); ++it) {
@@ -835,6 +902,8 @@ bool SounitGraph::hasTail() const
         if (data.recorderModel) return true;
         if (data.bowedModel) return true;
         if (data.reedModel) return true;
+        if (data.saxophoneModel) return true;
+        if (data.percussionModel) return true;
         if (data.tailProc) return true;
     }
     return false;
@@ -970,6 +1039,26 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.reedModel->tick(pitch * pitchMult, 1.0,
                                                        m_currentIsLegato, true);
+            return;
+        }
+        // Percussion: let modes ring down naturally in tail mode
+        if (name == "Percussion" && proc.percussionModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.percussionModel->setPitchMultiplier(pitchMult);
+            proc.signalOut = proc.percussionModel->tick(pitch, true);
+            return;
+        }
+        // Clarinet: let bore drain in tail mode
+        if (name == "Clarinet" && proc.saxophoneModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.saxophoneModel->tick(pitch * pitchMult, 1.0,
+                                                        m_currentIsLegato, true);
             return;
         }
         // IR Convolution in tail mode:
@@ -2113,6 +2202,161 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             proc.reedModel->setNLAttack(effectiveNLAttack);
 
             proc.signalOut = proc.reedModel->tick(pitch * pitchMult, noteProgress, m_currentIsLegato, false);
+        }
+
+    } else if (container->getName() == "Clarinet") {
+        if (proc.saxophoneModel) {
+            double effectiveBreathPressure = container->getParameter("breathPressure", 0.72);
+            double effectiveReedStiffness  = container->getParameter("reedStiffness",   0.45);
+            double effectiveReedAperture   = container->getParameter("reedAperture",     0.52);
+            double effectiveBlowPosition   = container->getParameter("blowPosition",     0.22);
+            double effectiveNoiseGain      = container->getParameter("noiseGain",         0.12);
+            double effectiveVibratoFreq    = container->getParameter("vibratoFreq",       5.5);
+            double effectiveVibratoGain    = container->getParameter("vibratoGain",       0.04);
+            int    effectiveNLType         = static_cast<int>(container->getParameter("nlType", 0.0));
+            double effectiveNLAmount       = container->getParameter("nlAmount",           0.22);
+            double effectiveNLFreqMod      = container->getParameter("nlFreqMod",         10.0);
+            double effectiveNLAttack       = container->getParameter("nlAttack",           0.12);
+            double effectiveVocalTractFreq = container->getParameter("vocalTractFreq",   700.0);
+            double effectiveVocalTractQ    = container->getParameter("vocalTractQ",        2.5);
+            double effectiveVocalTractGain = container->getParameter("vocalTractGain",    0.35);
+            double effectiveJawVibratoBlend= container->getParameter("jawVibratoBlend",    0.7);
+            double effectiveGrowlFreq      = container->getParameter("growlFreq",          85.0);
+            double effectiveGrowlDepth     = container->getParameter("growlDepth",          0.0);
+            double effectiveBellReflection     = container->getParameter("bellReflection",     0.85);
+            double effectiveAttackChiffGain    = container->getParameter("attackChiffGain",    5.0);
+            double effectiveAttackOverpressure = container->getParameter("attackOverpressure", 0.4);
+            double effectiveReedSaturation     = container->getParameter("reedSaturation",     0.6);
+            double pitchMult               = container->getParameter("pitchMultiplier",    1.0);
+
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                double sourceVal = getOutputValue(processors[conn.fromContainer], conn.fromPort);
+                if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = sourceVal;
+                } else if (conn.toPort == "breathPressure") {
+                    effectiveBreathPressure = applyConnectionFunction(
+                        effectiveBreathPressure, sourceVal, conn.function, conn.weight);
+                    effectiveBreathPressure = qBound(0.0, effectiveBreathPressure, 1.0);
+                } else if (conn.toPort == "reedStiffness") {
+                    effectiveReedStiffness = applyConnectionFunction(
+                        effectiveReedStiffness, sourceVal, conn.function, conn.weight);
+                    effectiveReedStiffness = qBound(0.0, effectiveReedStiffness, 1.0);
+                } else if (conn.toPort == "reedAperture") {
+                    effectiveReedAperture = applyConnectionFunction(
+                        effectiveReedAperture, sourceVal, conn.function, conn.weight);
+                    effectiveReedAperture = qBound(0.0, effectiveReedAperture, 1.0);
+                } else if (conn.toPort == "blowPosition") {
+                    effectiveBlowPosition = applyConnectionFunction(
+                        effectiveBlowPosition, sourceVal, conn.function, conn.weight);
+                    effectiveBlowPosition = qBound(0.001, effectiveBlowPosition, 0.999);
+                } else if (conn.toPort == "noiseGain") {
+                    effectiveNoiseGain = applyConnectionFunction(
+                        effectiveNoiseGain, sourceVal, conn.function, conn.weight);
+                    effectiveNoiseGain = qBound(0.0, effectiveNoiseGain, 0.4);
+                } else if (conn.toPort == "vibratoFreq") {
+                    effectiveVibratoFreq = applyConnectionFunction(
+                        effectiveVibratoFreq, sourceVal, conn.function, conn.weight);
+                    effectiveVibratoFreq = qBound(0.0, effectiveVibratoFreq, 12.0);
+                } else if (conn.toPort == "vibratoGain") {
+                    effectiveVibratoGain = applyConnectionFunction(
+                        effectiveVibratoGain, sourceVal, conn.function, conn.weight);
+                    effectiveVibratoGain = qBound(0.0, effectiveVibratoGain, 0.5);
+                } else if (conn.toPort == "nlAmount") {
+                    effectiveNLAmount = applyConnectionFunction(
+                        effectiveNLAmount, sourceVal, conn.function, conn.weight);
+                    effectiveNLAmount = qBound(0.0, effectiveNLAmount, 1.0);
+                } else if (conn.toPort == "nlFreqMod") {
+                    effectiveNLFreqMod = applyConnectionFunction(
+                        effectiveNLFreqMod, sourceVal, conn.function, conn.weight);
+                    effectiveNLFreqMod = qBound(0.0, effectiveNLFreqMod, 200.0);
+                } else if (conn.toPort == "nlAttack") {
+                    effectiveNLAttack = applyConnectionFunction(
+                        effectiveNLAttack, sourceVal, conn.function, conn.weight);
+                    effectiveNLAttack = qBound(0.001, effectiveNLAttack, 2.0);
+                } else if (conn.toPort == "vocalTractFreq") {
+                    effectiveVocalTractFreq = applyConnectionFunction(
+                        effectiveVocalTractFreq, sourceVal, conn.function, conn.weight);
+                    effectiveVocalTractFreq = qBound(200.0, effectiveVocalTractFreq, 3000.0);
+                } else if (conn.toPort == "vocalTractGain") {
+                    effectiveVocalTractGain = applyConnectionFunction(
+                        effectiveVocalTractGain, sourceVal, conn.function, conn.weight);
+                    effectiveVocalTractGain = qBound(0.0, effectiveVocalTractGain, 1.0);
+                } else if (conn.toPort == "jawVibratoBlend") {
+                    effectiveJawVibratoBlend = applyConnectionFunction(
+                        effectiveJawVibratoBlend, sourceVal, conn.function, conn.weight);
+                    effectiveJawVibratoBlend = qBound(0.0, effectiveJawVibratoBlend, 1.0);
+                } else if (conn.toPort == "growlFreq") {
+                    effectiveGrowlFreq = applyConnectionFunction(
+                        effectiveGrowlFreq, sourceVal, conn.function, conn.weight);
+                    effectiveGrowlFreq = qBound(20.0, effectiveGrowlFreq, 200.0);
+                } else if (conn.toPort == "growlDepth") {
+                    effectiveGrowlDepth = applyConnectionFunction(
+                        effectiveGrowlDepth, sourceVal, conn.function, conn.weight);
+                    effectiveGrowlDepth = qBound(0.0, effectiveGrowlDepth, 0.5);
+                }
+                // nlType, vocalTractQ, bellReflection are static — not modulated via connection
+            }
+
+            proc.saxophoneModel->setBreathPressure(effectiveBreathPressure);
+            proc.saxophoneModel->setReedStiffness(effectiveReedStiffness);
+            proc.saxophoneModel->setReedAperture(effectiveReedAperture);
+            proc.saxophoneModel->setBlowPosition(effectiveBlowPosition);
+            proc.saxophoneModel->setNoiseGain(effectiveNoiseGain);
+            proc.saxophoneModel->setVibratoFreq(effectiveVibratoFreq);
+            proc.saxophoneModel->setVibratoGain(effectiveVibratoGain);
+            proc.saxophoneModel->setNLType(effectiveNLType);
+            proc.saxophoneModel->setNLAmount(effectiveNLAmount);
+            proc.saxophoneModel->setNLFreqMod(effectiveNLFreqMod);
+            proc.saxophoneModel->setNLAttack(effectiveNLAttack);
+            proc.saxophoneModel->setVocalTractFreq(effectiveVocalTractFreq);
+            proc.saxophoneModel->setVocalTractQ(effectiveVocalTractQ);
+            proc.saxophoneModel->setVocalTractGain(effectiveVocalTractGain);
+            proc.saxophoneModel->setJawVibratoBlend(effectiveJawVibratoBlend);
+            proc.saxophoneModel->setGrowlFreq(effectiveGrowlFreq);
+            proc.saxophoneModel->setGrowlDepth(effectiveGrowlDepth);
+            proc.saxophoneModel->setBellReflection(effectiveBellReflection);
+            proc.saxophoneModel->setAttackChiffGain(effectiveAttackChiffGain);
+            proc.saxophoneModel->setAttackOverpressure(effectiveAttackOverpressure);
+            proc.saxophoneModel->setReedSaturation(effectiveReedSaturation);
+
+            proc.signalOut = proc.saxophoneModel->tick(pitch * pitchMult, noteProgress, m_currentIsLegato, false);
+        }
+
+    } else if (container->getName() == "Percussion") {
+        if (proc.percussionModel) {
+            // Collect modulatable inputs
+            double effectiveStrikePosition  = container->getParameter("strikePosition",  0.5);
+            double effectiveStrikeDuration  = container->getParameter("strikeDuration",  5.0);
+            double effectiveInharmonicity   = container->getParameter("inharmonicity",   0.0);
+            double effectiveDecayTime       = container->getParameter("decayTime",       1.0);
+            double effectiveHighDecayRate   = container->getParameter("highDecayRate",   1.5);
+            double effectiveNumModes        = container->getParameter("numModes",       12.0);
+            double effectiveNoiseGain       = container->getParameter("noiseGain",       0.15);
+            double effectivePitchMult       = container->getParameter("pitchMultiplier", 1.0);
+
+            for (const Canvas::Connection &c : cachedConnections) {
+                if (c.toContainer != container) continue;
+                if (!processors.contains(c.fromContainer)) continue;
+                double srcVal = processors[c.fromContainer].controlOut;
+                if (c.toPort == "strikePosition")  effectiveStrikePosition = applyConnectionFunction(effectiveStrikePosition, srcVal, c.function, c.weight);
+                else if (c.toPort == "strikeDuration")  effectiveStrikeDuration = applyConnectionFunction(effectiveStrikeDuration, srcVal, c.function, c.weight);
+                else if (c.toPort == "inharmonicity")   effectiveInharmonicity  = applyConnectionFunction(effectiveInharmonicity,  srcVal, c.function, c.weight);
+                else if (c.toPort == "decayTime")        effectiveDecayTime      = applyConnectionFunction(effectiveDecayTime,       srcVal, c.function, c.weight);
+                else if (c.toPort == "noiseGain")        effectiveNoiseGain      = applyConnectionFunction(effectiveNoiseGain,       srcVal, c.function, c.weight);
+                else if (c.toPort == "pitchMultiplier")  effectivePitchMult      = applyConnectionFunction(effectivePitchMult,       srcVal, c.function, c.weight);
+            }
+
+            proc.percussionModel->setStrikePosition(effectiveStrikePosition);
+            proc.percussionModel->setStrikeDuration(effectiveStrikeDuration);
+            proc.percussionModel->setInharmonicity(effectiveInharmonicity);
+            proc.percussionModel->setDecayTime(effectiveDecayTime);
+            proc.percussionModel->setHighDecayRate(effectiveHighDecayRate);
+            proc.percussionModel->setNumModes(static_cast<int>(effectiveNumModes));
+            proc.percussionModel->setNoiseGain(effectiveNoiseGain);
+            proc.percussionModel->setPitchMultiplier(effectivePitchMult);
+
+            proc.signalOut = proc.percussionModel->tick(pitch, false);
         }
 
     } else if (container->getName() == "LFO") {

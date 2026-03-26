@@ -859,6 +859,31 @@ void AudioEngine::renderNotes(const QVector<Note>& notes, int maxNotes)
         }
 
         double amplitude = 0.0;
+        bool graphHasTailProc  = noteHasGraph && trackGraphs[noteTrackIndex]->hasTailProcessor();
+        bool graphHasSaxophone = noteHasGraph && trackGraphs[noteTrackIndex]->hasSaxophoneModel();
+        bool graphIsPercussion = noteHasGraph && trackGraphs[noteTrackIndex]->hasPercussion();
+
+        // Percussion notes are triggers: the note's drawn duration is irrelevant to the sound.
+        // Cap the note body to 50 ms (the maximum strikeDuration) so tail mode — where the
+        // modal resonators ring down naturally — begins immediately after the strike completes,
+        // regardless of how long the note is drawn on the score.
+        if (graphIsPercussion) {
+            const size_t percussionBodySamples = static_cast<size_t>(0.050 * sampleRate);
+            noteSamples = std::min(noteSamples, percussionBodySamples);
+        }
+
+        // Apply pre-tail fade to saxophone graphs (with or without Note Tail) and to any graph
+        // that has a dedicated TailProcessor.  Bowed/Reed/Recorder keep amplitude=1.0 in tail
+        // so their natural ring-down is audible.  Percussion never gets pre-tail fade.
+        bool applyPreTailFade  = graphHasTailProc || graphHasSaxophone;
+
+        // Pre-tail cosine fade: last 10 ms of note → amplitude 1→0, so the bore is already
+        // quiet when tail mode begins.  Prevents the end-of-note burst regardless of dynamics.
+        // Clamped to noteProgress 0.80 minimum so very short notes aren't cut short.
+        const double preTailFadeMs = 10.0;
+        double preTailFadeThreshold = applyPreTailFade
+            ? std::max(0.80, 1.0 - preTailFadeMs / note.getDuration())
+            : 1.0;
 
         // Calculate segment size in samples (for direct sample-based addressing)
         size_t segmentSizeSamples = static_cast<size_t>((segmentDurationMs / 1000.0) * sampleRate);
@@ -936,7 +961,14 @@ void AudioEngine::renderNotes(const QVector<Note>& notes, int maxNotes)
 
             // Update amplitude envelope (ADSR) - MUST do this for ALL samples to maintain continuity
             if (inTail) {
-                amplitude = 1.0;  // Let the natural decay handle fading
+                if (!applyPreTailFade) amplitude = 1.0;  // Let natural decay handle fading
+                // Saxophone / TailProcessor: amplitude stays at ~0 from the pre-tail fade so
+                // the bore ring-down in tail mode is inaudible.
+            } else if (applyPreTailFade && noteProgress >= preTailFadeThreshold) {
+                // Pre-tail cosine fade: brings bore output to near-zero before tail mode begins.
+                // This prevents the end-of-note burst regardless of what the dynamics curve does.
+                double localProgress = (noteProgress - preTailFadeThreshold) / (1.0 - preTailFadeThreshold);
+                amplitude = 0.5 * (1.0 + std::cos(M_PI * localProgress));
             } else if (noteProgress < 0.05) {
                 amplitude += (1.0 - amplitude) * attackRate;
             } else if (noteProgress < 0.90) {

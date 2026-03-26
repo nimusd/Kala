@@ -2580,6 +2580,77 @@ void ApplyExpressiveCurveShapeCommand::redo()
 }
 
 // ============================================================================
+// Scale Dynamics Command
+// ============================================================================
+
+ScaleDynamicsCommand::ScaleDynamicsCommand(Phrase *phrase,
+                                           const QVector<int> &noteIndices,
+                                           double factor,
+                                           ScoreCanvas *canvas,
+                                           QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_noteIndices(noteIndices)
+    , m_factor(factor)
+    , m_firstTime(true)
+    , m_canvas(canvas)
+{
+    setText("Scale Dynamics");
+}
+
+void ScaleDynamicsCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (int i = 0; i < m_noteIndices.size() && i < m_oldCurves.size(); ++i) {
+        int idx = m_noteIndices[i];
+        if (idx >= 0 && idx < notes.size())
+            notes[idx].setDynamicsCurve(m_oldCurves[i]);
+    }
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+}
+
+void ScaleDynamicsCommand::redo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    if (m_firstTime) {
+        m_oldCurves.clear();
+        for (int idx : m_noteIndices)
+            m_oldCurves.append((idx >= 0 && idx < notes.size())
+                               ? notes[idx].getDynamicsCurve()
+                               : Curve{});
+        m_firstTime = false;
+    }
+
+    for (int i = 0; i < m_noteIndices.size(); ++i) {
+        int idx = m_noteIndices[i];
+        if (idx < 0 || idx >= notes.size()) continue;
+        Note &note = notes[idx];
+
+        const Curve &old = m_oldCurves[i];
+        if (old.isEmpty()) {
+            // No existing curve — treat as flat 0.5, scale it
+            Curve newCurve;
+            double v = qBound(0.0, 0.5 * m_factor, 1.0);
+            newCurve.addPoint(0.0, v, 1.0);
+            newCurve.addPoint(1.0, v, 1.0);
+            note.setDynamicsCurve(newCurve);
+        } else {
+            Curve newCurve;
+            for (const Curve::Point &p : old.getPoints())
+                newCurve.addPoint(p.time, qBound(0.0, p.value * m_factor, 1.0), p.pressure);
+            note.setDynamicsCurve(newCurve);
+        }
+        note.setRenderDirty(true);
+    }
+
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "ScaleDynamicsCommand: scaled" << m_noteIndices.size()
+             << "notes by factor" << m_factor;
+}
+
+// ============================================================================
 // Set Beat Dynamics Command
 // ============================================================================
 
@@ -2623,8 +2694,17 @@ void SetBeatDynamicsCommand::redo()
     }
     for (int i = 0; i < m_noteIndices.size(); ++i) {
         int idx = m_noteIndices[i];
-        if (idx >= 0 && idx < notes.size())
-            notes[idx].setDynamics(m_newDynamics[i]);
+        if (idx < 0 || idx >= notes.size()) continue;
+        const double factor = m_newDynamics[i];
+        const Curve &old = m_oldCurves[i];
+        if (old.isEmpty()) {
+            notes[idx].setDynamics(factor);
+        } else {
+            Curve scaled;
+            for (const Curve::Point &p : old.getPoints())
+                scaled.addPoint(p.time, qBound(0.0, p.value * factor, 1.0), p.pressure);
+            notes[idx].setDynamicsCurve(scaled);
+        }
     }
     m_canvas->update();
     emit m_canvas->notesChanged();
@@ -2682,6 +2762,96 @@ void SetVibratoCommand::redo()
     }
     m_canvas->update();
     emit m_canvas->notesChanged();
+}
+
+// ============================================================================
+// Set Default Tempo Command
+// ============================================================================
+
+SetDefaultTempoCommand::SetDefaultTempoCommand(ScoreCanvas *canvas,
+                                               double oldTempo, int oldTimeSigNum, int oldTimeSigDenom,
+                                               double newTempo, int newTimeSigNum, int newTimeSigDenom,
+                                               QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_canvas(canvas)
+    , m_oldTempo(oldTempo), m_newTempo(newTempo)
+    , m_oldTimeSigNum(oldTimeSigNum), m_oldTimeSigDenom(oldTimeSigDenom)
+    , m_newTimeSigNum(newTimeSigNum), m_newTimeSigDenom(newTimeSigDenom)
+    , m_firstTime(true)
+{
+    setText("Set Default Tempo");
+
+    // Capture current (old) note states
+    const QVector<Note> &notes = canvas->getPhrase().getNotes();
+    for (int i = 0; i < notes.size(); ++i)
+        m_oldNoteStates.append({i, notes[i].getStartTime(), notes[i].getDuration()});
+
+    // Capture current scale-change and tempo-change markers
+    m_oldScaleChanges = canvas->getScaleChanges();
+    m_oldTempoChanges = canvas->getTempoChanges();
+
+    // Pre-compute new states (scaled by oldTempo/newTempo if tempo actually changed)
+    double factor = (newTempo > 0.0 && oldTempo > 0.0 && newTempo != oldTempo)
+                    ? oldTempo / newTempo : 1.0;
+
+    for (const NoteState &s : m_oldNoteStates)
+        m_newNoteStates.append({s.index, s.startTime * factor, s.duration * factor});
+
+    for (auto it = m_oldScaleChanges.constBegin(); it != m_oldScaleChanges.constEnd(); ++it)
+        m_newScaleChanges[it.key() * factor] = it.value();
+
+    for (auto it = m_oldTempoChanges.constBegin(); it != m_oldTempoChanges.constEnd(); ++it)
+        m_newTempoChanges[it.key() * factor] = it.value();
+}
+
+void SetDefaultTempoCommand::applyState(bool useNew)
+{
+    const QVector<NoteState> &noteStates = useNew ? m_newNoteStates : m_oldNoteStates;
+    const QMap<double, QPair<Scale, double>> &scaleChanges = useNew ? m_newScaleChanges : m_oldScaleChanges;
+    const QMap<double, TempoTimeSignature> &tempoChanges = useNew ? m_newTempoChanges : m_oldTempoChanges;
+    double tempo    = useNew ? m_newTempo    : m_oldTempo;
+    int timeSigNum  = useNew ? m_newTimeSigNum  : m_oldTimeSigNum;
+    int timeSigDenom= useNew ? m_newTimeSigDenom : m_oldTimeSigDenom;
+
+    // Apply default tempo / timesig
+    m_canvas->setDefaultTempo(tempo);
+    m_canvas->setDefaultTimeSignature(timeSigNum, timeSigDenom);
+
+    // Apply note states
+    QVector<Note> &notes = m_canvas->getPhrase().getNotes();
+    for (const NoteState &s : noteStates) {
+        if (s.index >= 0 && s.index < notes.size()) {
+            notes[s.index].setStartTime(s.startTime);
+            notes[s.index].setDuration(s.duration);
+            notes[s.index].setRenderDirty(true);
+        }
+    }
+
+    // Apply scale-change markers
+    m_canvas->clearScaleChanges();
+    for (auto it = scaleChanges.constBegin(); it != scaleChanges.constEnd(); ++it)
+        m_canvas->addScaleChange(it.key(), it.value().first, it.value().second);
+
+    // Apply tempo-change markers
+    m_canvas->clearTempoChanges();
+    for (auto it = tempoChanges.constBegin(); it != tempoChanges.constEnd(); ++it)
+        m_canvas->addTempoChange(it.key(), it.value());
+
+    m_canvas->getPhrase().markDirty();
+    m_canvas->update();
+}
+
+void SetDefaultTempoCommand::undo()
+{
+    applyState(false);
+    qDebug() << "Undo: Default tempo restored to" << m_oldTempo;
+}
+
+void SetDefaultTempoCommand::redo()
+{
+    applyState(true);
+    m_firstTime = false;
+    qDebug() << "Redo: Default tempo set to" << m_newTempo;
 }
 
 // ============================================================================
@@ -2749,4 +2919,203 @@ void RemoveTempoChangeCommand::undo()
 void RemoveTempoChangeCommand::redo()
 {
     m_canvas->removeTempoChange(m_timeMs);
+}
+
+// ============================================================================
+// FadeOutNotesCommand
+// ============================================================================
+
+FadeOutNotesCommand::FadeOutNotesCommand(Phrase *phrase,
+                                         const QVector<int> &noteIndices,
+                                         double startTime,
+                                         double endValue,
+                                         ScoreCanvas *canvas,
+                                         QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_noteIndices(noteIndices)
+    , m_startTime(qBound(0.0, startTime, 1.0))
+    , m_endValue(qBound(0.0, endValue, 1.0))
+    , m_canvas(canvas)
+{
+    setText("Fade Out Notes");
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (int idx : m_noteIndices) {
+        if (idx >= 0 && idx < notes.size())
+            m_oldCurves.append(notes[idx].getDynamicsCurve());
+        else
+            m_oldCurves.append(Curve{});
+    }
+}
+
+void FadeOutNotesCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (int i = 0; i < m_noteIndices.size() && i < m_oldCurves.size(); ++i) {
+        int idx = m_noteIndices[i];
+        if (idx >= 0 && idx < notes.size()) {
+            notes[idx].setDynamicsCurve(m_oldCurves[i]);
+            notes[idx].setRenderDirty(true);
+        }
+    }
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+}
+
+void FadeOutNotesCommand::redo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (int idx : m_noteIndices) {
+        if (idx < 0 || idx >= notes.size()) continue;
+        Note &note = notes[idx];
+        const Curve &old = note.getDynamicsCurve();
+
+        Curve newCurve;
+        // Copy all existing points strictly before startTime
+        for (const Curve::Point &pt : old.getPoints()) {
+            if (pt.time < m_startTime)
+                newCurve.addPoint(pt.time, pt.value, 1.0);
+        }
+        // Splice point at startTime using the existing curve's value there
+        double valueAtStart = old.isEmpty() ? 1.0 : old.valueAt(m_startTime);
+        newCurve.addPoint(m_startTime, qBound(0.0, valueAtStart, 1.0), 1.0);
+        // Final fade-out point
+        newCurve.addPoint(1.0, m_endValue, 1.0);
+
+        note.setDynamicsCurve(newCurve);
+        note.setRenderDirty(true);
+    }
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+}
+
+// ============================================================================
+// Snap To Scale Command
+// ============================================================================
+
+SnapToScaleCommand::SnapToScaleCommand(Phrase *phrase,
+                                       const QVector<int> &noteIndices,
+                                       ScoreCanvas *canvas,
+                                       QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_canvas(canvas)
+    , m_firstTime(true)
+{
+    setText("Snap to Scale");
+
+    const QVector<Note> &notes = m_phrase->getNotes();
+    for (int idx : noteIndices) {
+        if (idx < 0 || idx >= notes.size()) continue;
+        const Note &note = notes[idx];
+        if (!note.hasPitchCurve()) continue;  // Only continuous notes
+
+        NoteState state;
+        state.index         = idx;
+        state.oldPitchCurve = note.getPitchCurve();
+        state.wasQuantized  = note.isQuantized();
+        state.oldSegments   = note.getSegments();
+        state.newPitchCurve = canvas->quantizePitchCurveToScale(note.getPitchCurve(), note);
+        m_noteStates.append(state);
+    }
+}
+
+void SnapToScaleCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (const NoteState &state : m_noteStates) {
+        if (state.index < 0 || state.index >= notes.size()) continue;
+        Note &note = notes[state.index];
+        note.setPitchCurve(state.oldPitchCurve);
+        note.setQuantized(state.wasQuantized);
+        note.getSegments() = state.oldSegments;
+        note.setRenderDirty(true);
+    }
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+}
+
+void SnapToScaleCommand::redo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (const NoteState &state : m_noteStates) {
+        if (state.index < 0 || state.index >= notes.size()) continue;
+        Note &note = notes[state.index];
+        note.setPitchCurve(state.newPitchCurve);
+        note.setQuantized(true);
+        note.detectSegments();
+        note.setRenderDirty(true);
+    }
+    m_canvas->update();
+    if (!m_firstTime)
+        emit m_canvas->notesChanged();
+    m_firstTime = false;
+}
+
+// ============================================================================
+// Edit Note Property Command
+// ============================================================================
+
+EditNotePropertyCommand::EditNotePropertyCommand(Phrase *phrase,
+                                                  const QVector<NoteChange> &changes,
+                                                  Property property,
+                                                  ScoreCanvas *canvas,
+                                                  QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_changes(changes)
+    , m_property(property)
+    , m_canvas(canvas)
+{
+    static const char* names[] = { "Start", "Duration", "Pitch", "Variation" };
+    setText(QString("Edit Note %1").arg(names[property]));
+}
+
+void EditNotePropertyCommand::applyValues(bool useNew)
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (const NoteChange &c : m_changes) {
+        if (c.index < 0 || c.index >= notes.size()) continue;
+        double v = useNew ? c.newValue : c.oldValue;
+        switch (m_property) {
+        case StartTime:     notes[c.index].setStartTime(v);  break;
+        case Duration:      notes[c.index].setDuration(v);   break;
+        case Pitch:         notes[c.index].setPitchHz(v);    break;
+        case VariationIndex: notes[c.index].setVariationIndex(static_cast<int>(v)); break;
+        }
+        notes[c.index].setRenderDirty(true);
+    }
+    m_canvas->update();
+}
+
+void EditNotePropertyCommand::undo()
+{
+    applyValues(false);
+    qDebug() << "Undo: EditNoteProperty" << id();
+}
+
+void EditNotePropertyCommand::redo()
+{
+    applyValues(true);
+    qDebug() << "Redo: EditNoteProperty" << id();
+}
+
+bool EditNotePropertyCommand::mergeWith(const QUndoCommand *other)
+{
+    if (other->id() != id())
+        return false;
+    const EditNotePropertyCommand *cmd = static_cast<const EditNotePropertyCommand*>(other);
+    if (cmd->m_property != m_property)
+        return false;
+    // Adopt new values from the incoming command; preserve old values from this one.
+    // Build a map from note index to old value.
+    QMap<int, double> oldValMap;
+    for (const NoteChange &c : m_changes)
+        oldValMap[c.index] = c.oldValue;
+    m_changes = cmd->m_changes;
+    for (NoteChange &c : m_changes) {
+        if (oldValMap.contains(c.index))
+            c.oldValue = oldValMap[c.index];
+    }
+    return true;
 }

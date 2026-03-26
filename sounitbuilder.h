@@ -124,6 +124,7 @@ public slots:
     void onCreateVariation();
     void rebuildGraph(int trackIndex = 0, bool rebuildTrackGraph = true);  // Rebuild audio graph from canvas for specific track
     void setCurrentEditingTrack(int trackIndex);  // Set which track is being edited
+    void setSuppressInvalidGraphWarning(bool suppress) { m_suppressInvalidGraphWarning = suppress; }
 
 private:
     void startPlayback();
@@ -132,6 +133,7 @@ signals:
     void playbackStarted();
     void variationsChanged();  // Emitted when a variation is created
     void noteModeChanged(bool active);
+    void undoRedoPerformed();  // Forwarded from the active Canvas after Ctrl+Z/Y
 
 private:
     // Clipboard state (stores "containers" array + "connections" array between selected containers)
@@ -153,6 +155,8 @@ private:
     ScoreCanvasWindow *m_scoreCanvasWindow = nullptr;
     QList<Note> m_noteModePlaybackSavedNotes;  // Notes saved during single-note playback
     bool m_noteModePlaying = false;            // True while note-mode single-note playback is active
+
+    bool m_suppressInvalidGraphWarning = false;
 
     // Note mode methods
     void enterNoteMode();

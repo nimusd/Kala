@@ -121,10 +121,27 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     inputRow->addWidget(m_clearBtn, 0, Qt::AlignBottom);
     inputRow->addWidget(m_sendBtn, 0, Qt::AlignBottom);
 
+    m_historyLabel = new QLabel(this);
+    m_historyLabel->setStyleSheet(
+        "QLabel { color: #45475a; font-size: 8pt; padding: 2px 4px; }"
+    );
+    m_historyLabel->setVisible(false);
+
+    m_modeLabel = new QLabel(this);
+    m_modeLabel->setStyleSheet(
+        "QLabel { color: #89dceb; font-size: 8pt; padding: 2px 4px; }"
+    );
+    m_modeLabel->setToolTip("Current tool mode. Click to cycle: Sounit \342\206\222 Score \342\206\222 Full");
+    m_modeLabel->setCursor(Qt::PointingHandCursor);
+    m_modeLabel->setVisible(false);
+    m_modeLabel->installEventFilter(this);
+
     auto *statusRow = new QHBoxLayout;
     statusRow->setContentsMargins(0, 0, 0, 0);
     statusRow->setSpacing(6);
     statusRow->addWidget(m_statusLabel, 1);
+    statusRow->addWidget(m_historyLabel, 0, Qt::AlignVCenter);
+    statusRow->addWidget(m_modeLabel, 0, Qt::AlignVCenter);
     statusRow->addWidget(m_stopBtn, 0, Qt::AlignVCenter);
 
     // ── Root layout ───────────────────────────────────────────────────────────
@@ -301,6 +318,26 @@ void CompanionPanel::clearLog()
     m_log->clear();
 }
 
+void CompanionPanel::setMessageCount(int count)
+{
+    if (count <= 0) {
+        m_historyLabel->setVisible(false);
+    } else {
+        m_historyLabel->setText(QString("%1 msgs").arg(count));
+        m_historyLabel->setVisible(true);
+    }
+}
+
+void CompanionPanel::setToolModeLabel(const QString &label)
+{
+    if (label.isEmpty()) {
+        m_modeLabel->setVisible(false);
+    } else {
+        m_modeLabel->setText(label);
+        m_modeLabel->setVisible(true);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Private slots
 // ─────────────────────────────────────────────────────────────────────────────
@@ -333,6 +370,10 @@ bool CompanionPanel::eventFilter(QObject *watched, QEvent *event)
             }
             return true;  // Event consumed
         }
+    }
+    if (watched == m_modeLabel && event->type() == QEvent::MouseButtonPress) {
+        emit toolModeToggleRequested();
+        return true;
     }
     return QWidget::eventFilter(watched, event);
 }

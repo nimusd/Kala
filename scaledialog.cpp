@@ -1,5 +1,9 @@
 #include "scaledialog.h"
 #include "ui_scaledialog.h"
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QPushButton>
 
 // Returns an HTML description for the given scale ID.
 static QString getScaleDescription(int scaleId)
@@ -23,11 +27,12 @@ static QString getScaleDescription(int scaleId)
                "<b>Ratios:</b> 1/1 &middot; 9/8 &middot; 81/64 &middot; 4/3 &middot; 3/2 &middot; 27/16 &middot; 243/128";
 
     case 2:
-        return "<b>Equal Temperament</b> &mdash; 7 notes &mdash; Western<br><br>"
-               "Modern standard tuning. Each semitone = 2^(1/12). Perfectly even spacing; "
+        return "<b>Equal Temperament</b> &mdash; 12 notes &mdash; Western<br><br>"
+               "Modern standard tuning. Each semitone = 2\u207f where n = 1/12. Perfectly even spacing; "
                "compromise tuning allowing all keys to sound equally acceptable.<br><br>"
-               "<b>Notes:</b> C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B<br>"
-               "<b>Steps:</b> 0 &middot; 2 &middot; 4 &middot; 5 &middot; 7 &middot; 9 &middot; 11 semitones";
+               "<b>Diatonic notes</b> (coloured): C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B<br>"
+               "<b>Accidentals</b> (light grey): C&#9839; &middot; D&#9839; &middot; F&#9839; &middot; G&#9839; &middot; A&#9839;<br>"
+               "Use the <b>Key</b> buttons above to set concert pitch (A\u202f=\u202f440\u202fHz).";
 
     case 3:
         return "<b>Quarter-Comma Meantone</b> &mdash; 7 notes &mdash; Western<br><br>"
@@ -301,6 +306,43 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     // Configure delete button
     ui->btnDelete->setEnabled(!isAtTimeZero);
     connect(ui->btnDelete, &QPushButton::clicked, this, &ScaleDialog::onDeleteClicked);
+
+    // --- Key selector (concert pitch A = 440 Hz) ---
+    // Base frequencies for C1..B1 in standard ET tuning (A1=55 Hz → A4=440 Hz)
+    static const char *NOTE_NAMES[12] = {
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+    };
+    static const bool NOTE_IS_ACC[12] = {
+        false, true, false, true, false, false, true, false, true, false, true, false
+    };
+    // C1 = 32.703 Hz (A4 = 440 Hz standard tuning)
+    static const double KEY_FREQS[12] = {
+        32.703, 34.648, 36.708, 38.891, 41.203, 43.654,
+        46.249, 48.999, 51.913, 55.000, 58.270, 61.735
+    };
+
+    QGroupBox *keyGroup = new QGroupBox("Key  (A\u202f=\u202f440\u202fHz)", this);
+    QHBoxLayout *keyLayout = new QHBoxLayout(keyGroup);
+    keyLayout->setSpacing(2);
+    keyLayout->setContentsMargins(6, 4, 6, 6);
+    for (int i = 0; i < 12; ++i) {
+        QPushButton *btn = new QPushButton(NOTE_NAMES[i], keyGroup);
+        btn->setFixedWidth(38);
+        btn->setToolTip(QString("%1 = %2 Hz").arg(NOTE_NAMES[i]).arg(KEY_FREQS[i], 0, 'f', 3));
+        if (NOTE_IS_ACC[i])
+            btn->setStyleSheet("background-color:#555;color:white;font-size:9px;");
+        else
+            btn->setStyleSheet("font-size:9px;");
+        double freq = KEY_FREQS[i];
+        connect(btn, &QPushButton::clicked, this, [this, freq]() {
+            ui->spinBaseFreq->setValue(freq);
+        });
+        keyLayout->addWidget(btn);
+    }
+
+    // Insert between the scale group box and the description label
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(layout());
+    mainLayout->insertWidget(1, keyGroup);
 
     // Wire description panel
     connect(ui->comboScale, QOverload<int>::of(&QComboBox::currentIndexChanged),

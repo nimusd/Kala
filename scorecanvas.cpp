@@ -8,6 +8,12 @@
 #include "expressivecurveapplydialog.h"
 #include "tempochangedialog.h"
 #include <QPainter>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QSlider>
 #include <QPainterPath>
 #include <QFont>
 #include <QMouseEvent>
@@ -268,9 +274,16 @@ void ScoreCanvas::generateScaleLines()
                 ScaleLine line;
                 line.frequencyHz = freq;
                 line.scaleDegree = degree + 1;  // 1-based
-                line.color = getScaleDegreeColor(degree + 1);
+                line.isAccidental = activeScale.getIsAccidental(degree);
+                // Color by diatonic rank so C=Red, D=Orange... regardless of chromatic position
+                int diatonicRank = 0;
+                for (int d = 0; d < degree; ++d)
+                    if (!activeScale.getIsAccidental(d)) diatonicRank++;
+                line.color = line.isAccidental ? QColor(210, 210, 210) : getScaleDegreeColor(diatonicRank + 1);
                 line.noteName = activeScale.getNoteName(degree) + QString::number(octave);
-                line.isThicker = (degree == 0 || (degreeCount >= 5 && degree == 4));  // Tonic and Fifth (if scale has 5+ notes)
+                // Tonic always thick; Fifth = degree 4 in 7-note scales, degree 7 in 12-note (semitone 7 = G)
+                bool isFifth = (degreeCount == 12) ? (degree == 7) : (degreeCount >= 5 && degree == 4);
+                line.isThicker = (degree == 0 || isFifth);
 
                 scaleLines.append(line);
             }
@@ -431,9 +444,16 @@ QVector<ScoreCanvas::ScaleLine> ScoreCanvas::generateScaleLinesForScale(const Sc
                 ScaleLine line;
                 line.frequencyHz = freq;
                 line.scaleDegree = degree + 1;  // 1-based
-                line.color = getScaleDegreeColor(degree + 1);
+                line.isAccidental = scale.getIsAccidental(degree);
+                // Color by diatonic rank so C=Red, D=Orange... regardless of chromatic position
+                int diatonicRank = 0;
+                for (int d = 0; d < degree; ++d)
+                    if (!scale.getIsAccidental(d)) diatonicRank++;
+                line.color = line.isAccidental ? QColor(210, 210, 210) : getScaleDegreeColor(diatonicRank + 1);
                 line.noteName = scale.getNoteName(degree) + QString::number(octave);
-                line.isThicker = (degree == 0 || (degreeCount >= 5 && degree == 4));  // Tonic and Fifth (if scale has 5+ notes)
+                // Tonic always thick; Fifth = degree 4 in 7-note scales, degree 7 in 12-note (semitone 7 = G)
+                bool isFifth = (degreeCount == 12) ? (degree == 7) : (degreeCount >= 5 && degree == 4);
+                line.isThicker = (degree == 0 || isFifth);
 
                 lines.append(line);
             }
@@ -720,40 +740,19 @@ void ScoreCanvas::applyNotePitchChanges(const QVector<NotePitchChange> &changes,
 
 void ScoreCanvas::snapSelectedNotesToScale()
 {
-    // Quantize all selected continuous notes to scale degrees
     if (selectedNoteIndices.isEmpty()) {
         qDebug() << "ScoreCanvas::snapSelectedNotesToScale - No notes selected";
         return;
     }
 
-    QVector<Note> &notes = phrase.getNotes();
-    int quantizedCount = 0;
-
-    for (int index : selectedNoteIndices) {
-        if (index >= 0 && index < notes.size()) {
-            Note &note = notes[index];
-
-            // Only quantize notes that have pitch curves (continuous notes)
-            if (note.hasPitchCurve()) {
-                Curve quantizedCurve = quantizePitchCurveToScale(note.getPitchCurve(), note);
-                note.setPitchCurve(quantizedCurve);
-                note.setQuantized(true);  // Mark as quantized so it snaps when dragged
-                note.detectSegments();    // Detect segments for segment editing mode
-                quantizedCount++;
-                qDebug() << "Quantized note" << index << "- original points:"
-                         << note.getPitchCurve().getPointCount()
-                         << "quantized points:" << quantizedCurve.getPointCount()
-                         << "segments:" << note.getSegmentCount();
-            }
-        }
-    }
-
-    if (quantizedCount > 0) {
-        update();
-        qDebug() << "ScoreCanvas::snapSelectedNotesToScale - Quantized" << quantizedCount << "notes";
-    } else {
+    auto *cmd = new SnapToScaleCommand(&phrase, selectedNoteIndices, this);
+    if (cmd->isNoop()) {
+        delete cmd;
         qDebug() << "ScoreCanvas::snapSelectedNotesToScale - No continuous notes in selection";
+        return;
     }
+    undoStack->push(cmd);
+    qDebug() << "ScoreCanvas::snapSelectedNotesToScale - pushed SnapToScaleCommand";
 }
 
 void ScoreCanvas::makeSelectedNotesContinuous()
@@ -1502,9 +1501,13 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
                     }
                 }
 
-                // Then select the note (Ctrl adds to selection)
-                bool addToSelection = (event->modifiers() & Qt::ControlModifier);
-                selectNote(clickedNoteIndex, addToSelection);
+                // Then select the note (Shift = range, Ctrl = add)
+                if (event->modifiers() & Qt::ShiftModifier) {
+                    selectNoteRange(clickedNoteIndex);
+                } else {
+                    bool addToSelection = (event->modifiers() & Qt::ControlModifier);
+                    selectNote(clickedNoteIndex, addToSelection);
+                }
 
                 update();
             } else {
@@ -2450,8 +2453,34 @@ void ScoreCanvas::selectNote(int index, bool addToSelection)
         if (!selectedNoteIndices.contains(index)) {
             selectedNoteIndices.append(index);
         }
+        m_selectionAnchorIndex = index;
         emit noteSelectionChanged();
     }
+}
+
+void ScoreCanvas::selectNoteRange(int toIndex)
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (toIndex < 0 || toIndex >= notes.size())
+        return;
+
+    int anchor = (m_selectionAnchorIndex >= 0 && m_selectionAnchorIndex < notes.size())
+                 ? m_selectionAnchorIndex : toIndex;
+
+    // Determine range by start time order
+    double anchorTime = notes[anchor].getStartTime();
+    double toTime     = notes[toIndex].getStartTime();
+    double tMin = qMin(anchorTime, toTime);
+    double tMax = qMax(anchorTime, toTime);
+
+    selectedNoteIndices.clear();
+    for (int i = 0; i < notes.size(); ++i) {
+        double t = notes[i].getStartTime();
+        if (t >= tMin - 1e-9 && t <= tMax + 1e-9)
+            selectedNoteIndices.append(i);
+    }
+    // Keep anchor unchanged so repeated Shift+Clicks extend from the same anchor
+    emit noteSelectionChanged();
 }
 
 void ScoreCanvas::selectNotes(const QVector<int> &indices)
@@ -2889,8 +2918,12 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
 
             // THIRD: Selecting a different note or empty space
             if (clickedNoteIndex >= 0) {
-                bool addToSelection = (event->modifiers() & Qt::ControlModifier);
-                selectNote(clickedNoteIndex, addToSelection);
+                if (event->modifiers() & Qt::ShiftModifier) {
+                    selectNoteRange(clickedNoteIndex);
+                } else {
+                    bool addToSelection = (event->modifiers() & Qt::ControlModifier);
+                    selectNote(clickedNoteIndex, addToSelection);
+                }
                 update();
             } else {
                 // Tapped empty space - start lasso selection
@@ -3676,6 +3709,7 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
     // Ctrl+Z for undo
     if (event->matches(QKeySequence::Undo)) {
         undoStack->undo();
+        emit undoRedoPerformed();
         event->accept();
         return;
     }
@@ -3683,6 +3717,7 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
     // Ctrl+Y or Ctrl+Shift+Z for redo
     if (event->matches(QKeySequence::Redo)) {
         undoStack->redo();
+        emit undoRedoPerformed();
         event->accept();
         return;
     }
@@ -3913,6 +3948,11 @@ void ScoreCanvas::showNoteContextMenu(const QPoint &globalPos)
     dynamicsAction->setEnabled(selectedNoteIndices.size() >= 1);
     connect(dynamicsAction, &QAction::triggered, this, &ScoreCanvas::showDynamicsCurveDialog);
 
+    // Scale Dynamics action (enabled with 1+ notes)
+    QAction *scaleDynamicsAction = menu.addAction("Scale Dynamics...");
+    scaleDynamicsAction->setEnabled(selectedNoteIndices.size() >= 1);
+    connect(scaleDynamicsAction, &QAction::triggered, this, &ScoreCanvas::showScaleDynamicsDialog);
+
     // Expressive Curve Shape action — enabled only when selection has named curves
     {
         bool hasExpressiveCurves = false;
@@ -4059,6 +4099,65 @@ void ScoreCanvas::showDynamicsCurveDialog()
         qDebug() << "ScoreCanvas: Applied dynamics curve to"
                  << selectedNoteIndices.size() << "notes";
     }
+}
+
+void ScoreCanvas::showScaleDynamicsDialog()
+{
+    if (selectedNoteIndices.isEmpty()) return;
+
+    // Build a minimal dialog: a single slider (10%–200%, default 100%)
+    QDialog dialog(this);
+    dialog.setWindowTitle("Scale Dynamics");
+    dialog.setFixedWidth(320);
+
+    QVBoxLayout *vbox = new QVBoxLayout(&dialog);
+    vbox->setContentsMargins(16, 16, 16, 16);
+    vbox->setSpacing(10);
+
+    QLabel *titleLabel = new QLabel(
+        QString("Scale dynamics of %1 note%2:")
+            .arg(selectedNoteIndices.size())
+            .arg(selectedNoteIndices.size() == 1 ? "" : "s"),
+        &dialog);
+    vbox->addWidget(titleLabel);
+
+    QHBoxLayout *sliderRow = new QHBoxLayout();
+    QSlider *slider = new QSlider(Qt::Horizontal, &dialog);
+    slider->setRange(10, 200);   // 10% to 200%
+    slider->setValue(100);
+    slider->setTickPosition(QSlider::TicksBelow);
+    slider->setTickInterval(10);
+
+    QLabel *valueLabel = new QLabel("100%", &dialog);
+    valueLabel->setMinimumWidth(42);
+    valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+    sliderRow->addWidget(slider);
+    sliderRow->addWidget(valueLabel);
+    vbox->addLayout(sliderRow);
+
+    QLabel *hintLabel = new QLabel("< 100%: quieter   |   > 100%: louder (capped at max)", &dialog);
+    hintLabel->setStyleSheet("color: #666; font-size: 10px;");
+    hintLabel->setAlignment(Qt::AlignCenter);
+    vbox->addWidget(hintLabel);
+
+    QObject::connect(slider, &QSlider::valueChanged, [valueLabel](int v) {
+        valueLabel->setText(QString::number(v) + "%");
+    });
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    vbox->addWidget(buttons);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    double factor = slider->value() / 100.0;
+    undoStack->push(new ScaleDynamicsCommand(&phrase, selectedNoteIndices, factor, this));
+
+    qDebug() << "ScoreCanvas: Scaled dynamics of" << selectedNoteIndices.size()
+             << "notes by" << factor;
 }
 
 void ScoreCanvas::showExpressiveCurveApplyDialog()

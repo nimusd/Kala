@@ -73,6 +73,7 @@ void FrequencyLabels::generateScaleLines()
                 line.scaleDegree = degree + 1;
                 line.noteName = noteNames[degree] + QString::number(octave);
                 line.isThicker = (degree == 0 || degree == 4);
+                line.isAccidental = false;
 
                 scaleLines.append(line);
             }
@@ -113,6 +114,9 @@ void FrequencyLabels::paintEvent(QPaintEvent *event)
     painter.setFont(font);
 
     for (const ScaleLine &line : scaleLines) {
+        // Skip Hz labels for accidental degrees (sharps/flats) — too many to be readable
+        if (line.isAccidental) continue;
+
         int y = frequencyToPixel(line.frequencyHz);
 
         // Only draw if visible

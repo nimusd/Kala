@@ -48,6 +48,17 @@ Track::Track(int trackId, const QString &name, const QColor &color, QObject *par
     // Connect canvas signals
     connectCanvasSignals();
 
+    // Set up watcher for non-blocking background renders
+    m_renderWatcher = new QFutureWatcher<void>(this);
+    connect(m_renderWatcher, &QFutureWatcher<void>::finished,
+            this, &Track::onRenderWatcherFinished);
+    connect(m_renderWatcher, &QFutureWatcher<void>::progressValueChanged,
+            this, [this](int value) {
+        if (m_backgroundTasks.isEmpty()) return;
+        int pct = static_cast<int>((double)value / m_backgroundTasks.size() * 100.0);
+        emit renderProgressChanged(pct);
+    });
+
     qDebug() << "Track created: ID" << m_trackId << "Name:" << m_name;
 }
 
@@ -1110,13 +1121,21 @@ bool Track::fromJson(const QJsonObject &json)
     setColor(QColor(colorName));
 
     // Read sounit reference
-    m_sounitName = json["sounitName"].toString();
+    QString savedSounitName = json["sounitName"].toString();
     QString sounitPath = json["sounitFilePath"].toString();
     if (!sounitPath.isEmpty()) {
         if (!loadSounit(sounitPath)) {
             qWarning() << "Track" << m_trackId << "failed to load referenced sounit:" << sounitPath;
             // Continue anyway - track can exist without sounit
         }
+        // loadSounit() overwrites m_sounitName with the name from the .sounit file.
+        // Restore the user-saved name (may have been renamed after the sounit was loaded).
+        if (!savedSounitName.isEmpty() && m_sounitName != savedSounitName) {
+            m_sounitName = savedSounitName;
+            m_canvas->setSounitName(savedSounitName);
+        }
+    } else {
+        m_sounitName = savedSounitName;
     }
 
     // Read playback state
@@ -1523,17 +1542,7 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         return true;
     }
 
-    emit renderStarted();
-    m_cancelRender.store(false);
-    m_rendering.store(true);
-
     // Collect dirty notes into render tasks
-    struct RenderTask {
-        int noteIndex;
-        NoteRender result;
-        bool success = false;
-    };
-
     QVector<RenderTask> tasks;
     for (int i = 0; i < m_notes.size(); ++i) {
         const Note &note = m_notes[i];
@@ -1558,6 +1567,17 @@ bool Track::prerenderDirtyNotes(double sampleRate)
     }
 
     qDebug() << "Track" << m_trackId << tasks.size() << "of" << m_notes.size() << "notes need rendering";
+
+    if (tasks.isEmpty()) {
+        emit renderStarted();
+        emit renderProgressChanged(100);
+        emit renderCompleted();
+        return true;
+    }
+
+    m_cancelRender.store(false);
+    m_rendering.store(true);
+    emit renderStarted();
 
     // Render in parallel using thread pool — each thread gets its own cloned graph
     std::atomic<int> completedCount{0};
@@ -1647,6 +1667,112 @@ void Track::invalidateNoteRender(const QString &noteId)
             break;
         }
     }
+}
+
+bool Track::startBackgroundRender(double sampleRate)
+{
+    if (m_rendering.load()) return false;  // Already rendering
+
+    m_sampleRate = sampleRate;
+
+    if (!hasValidGraph()) {
+        if (!rebuildGraph(sampleRate)) return false;
+    }
+
+    if (m_notes.isEmpty()) {
+        m_noteRenders.clear();
+        return false;  // No render started — don't increment caller's counter
+    }
+
+    // Collect dirty notes
+    m_backgroundTasks.clear();
+    for (int i = 0; i < m_notes.size(); ++i) {
+        const Note &note = m_notes[i];
+        QString noteId = note.getId();
+        uint64_t noteHash = note.computeHash();
+
+        bool needsRender = false;
+        if (!m_noteRenders.contains(noteId)) {
+            needsRender = true;
+        } else {
+            const NoteRender &existing = m_noteRenders[noteId];
+            if (!existing.valid || existing.graphHash != m_graphHash ||
+                existing.noteHash != noteHash) {
+                needsRender = true;
+            }
+        }
+
+        if (needsRender) {
+            m_backgroundTasks.append({i, NoteRender(), false});
+        }
+    }
+
+    if (m_backgroundTasks.isEmpty()) {
+        return false;  // Nothing dirty — no render started, don't increment caller's counter
+    }
+
+    m_cancelRender.store(false);
+    m_rendering.store(true);
+    emit renderStarted();
+
+    QFuture<void> future = QtConcurrent::map(m_backgroundTasks, [this](RenderTask &task) {
+        if (m_cancelRender.load()) return;
+
+        const Note &note = m_notes[task.noteIndex];
+        SounitGraph *srcGraph = getGraphForVariation(note.getVariationIndex());
+        if (!srcGraph || !srcGraph->isValid()) return;
+
+        SounitGraph *graph = srcGraph->clone();
+        task.success = renderNoteImpl(note, graph, task.result);
+        delete graph;
+    });
+
+    m_renderWatcher->setFuture(future);  // Returns immediately
+    return true;
+}
+
+void Track::onRenderWatcherFinished()
+{
+    if (m_cancelRender.load()) {
+        m_rendering.store(false);
+        m_backgroundTasks.clear();
+        emit renderCancelled();
+        return;
+    }
+
+    // Store results under mutex
+    int renderedCount = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        for (RenderTask &task : m_backgroundTasks) {
+            if (task.success) {
+                m_noteRenders[m_notes[task.noteIndex].getId()] = std::move(task.result);
+                renderedCount++;
+            }
+        }
+    }
+
+    // Clean up renders for deleted notes
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        QList<QString> renderIds = m_noteRenders.keys();
+        QSet<QString> currentNoteIds;
+        for (const Note &note : m_notes) {
+            currentNoteIds.insert(note.getId());
+        }
+        for (const QString &renderId : renderIds) {
+            if (!currentNoteIds.contains(renderId)) {
+                m_noteRenders.remove(renderId);
+            }
+        }
+    }
+
+    qDebug() << "Track" << m_trackId << "(background) rendered" << renderedCount
+             << "notes," << m_noteRenders.size() << "total renders cached";
+
+    m_backgroundTasks.clear();
+    m_rendering.store(false);
+    emit renderCompleted();
 }
 
 void Track::invalidateAllNoteRenders()

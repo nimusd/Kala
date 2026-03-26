@@ -12,6 +12,8 @@ class Track;
 class Container;
 class KalaMain;
 
+enum class ToolMode { Sounit, Composition, Full };
+
 // KalaTools: bridges between LLM tool calls and Kala's C++ operations.
 //
 // Two responsibilities:
@@ -36,7 +38,10 @@ public:
 
     // Tool schemas in OpenAI function-calling format.
     // Include the returned array in every API request under "tools".
-    static QJsonArray getToolSchemas();
+    QJsonArray getToolSchemas() const;
+
+    void setToolMode(ToolMode mode) { m_toolMode = mode; }
+    ToolMode toolMode() const { return m_toolMode; }
 
     // Route a tool call from the agent loop.
     // Returns { "result": ... } on success or { "error": "..." } on failure.
@@ -55,6 +60,7 @@ private:
     QJsonObject toolClearGraph();
     QJsonObject toolAddContainer   (const QJsonObject &args);
     QJsonObject toolSetParameter   (const QJsonObject &args);
+    QJsonObject toolSetParameters  (const QJsonObject &args);  // batch version
     QJsonObject toolConnectContainers(const QJsonObject &args);
     QJsonObject toolRemoveContainer(const QJsonObject &args);
     QJsonObject toolLoadSounit     (const QJsonObject &args);
@@ -88,8 +94,10 @@ private:
     QJsonObject toolCreateVariationFromSounit(const QJsonObject &args);
     QJsonObject toolDeleteVariation    (const QJsonObject &args);
     QJsonObject toolRenameVariation    (const QJsonObject &args);
-    QJsonObject toolSwitchVariation    (const QJsonObject &args);
+    QJsonObject toolSwitchVariation         (const QJsonObject &args);
+    QJsonObject toolCopyVariationToBase     (const QJsonObject &args);
     QJsonObject toolApplyDynamicsCurve (const QJsonObject &args);
+    QJsonObject toolScaleDynamics      (const QJsonObject &args);
     QJsonObject toolScaleTiming        (const QJsonObject &args);
     QJsonObject toolApplyRhythmEasing  (const QJsonObject &args);
     QJsonObject toolLinkLegato         (const QJsonObject &args);
@@ -113,6 +121,7 @@ private:
     // ── Expressive curves ────────────────────────────────────────────────────
     QJsonObject toolGetNoteCurves      (const QJsonObject &args);
     QJsonObject toolSetNoteCurve       (const QJsonObject &args);
+    QJsonObject toolFadeOutNotes       (const QJsonObject &args);
 
     // ── Vibrato ──────────────────────────────────────────────────────────────
     QJsonObject toolGetNoteVibrato     (const QJsonObject &args);
@@ -171,6 +180,13 @@ private:
     ScoreCanvasWindow *m_scoreCanvasWindow;
     KalaMain          *m_kalaMain          = nullptr;
     int                m_currentTrackIndex = 0;
+    ToolMode           m_toolMode          = ToolMode::Sounit;
+
+    // Anti-loop guard: set when graph state was just provided (via switch_variation
+    // or get_graph_state). Cleared by any mutating tool call. If get_graph_state is
+    // called while true, return a short "already provided" nudge instead of the full dump.
+    bool               m_graphStateJustProvided    = false;
+    bool               m_selectedNotesJustProvided = false;
 
     // Returns the user's kala library root — from QSettings or ~/Music/kala as default
     static QString libraryRoot();

@@ -100,6 +100,7 @@ signals:
     void selectionCleared();
     void containersSelected(const QVector<Container*> &containers);
     void graphChanged();  // Emitted when containers/connections change
+    void undoRedoPerformed();  // Emitted after undo/redo via keyboard
     void sounitNameChanged(const QString &name);
     void sounitCommentChanged(const QString &comment);
     void selectionModeChanged(bool active);

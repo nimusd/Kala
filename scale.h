@@ -17,6 +17,7 @@ public:
     double getRatio(int degree) const;  // degree is 0 to (degreeCount-1)
     int getDegreeCount() const { return ratios.size(); }
     QString getNoteName(int degree) const;  // Get note name for this degree
+    bool getIsAccidental(int degree) const; // True for chromatic degrees not in the diatonic core
 
     // Static factory methods for predefined scales
     static Scale justIntonation();
@@ -54,6 +55,24 @@ public:
     static Scale wholeTone();
     static Scale halfDiminished();
 
+    // Diatonic modes (Equal Temperament)
+    static Scale modeIonian();
+    static Scale modeDorian();
+    static Scale modePhrygian();
+    static Scale modeLydian();
+    static Scale modeMixolydian();
+    static Scale modeAeolian();
+    static Scale modeLocrian();
+
+    // Melodic minor and its modes (jazz)
+    static Scale melodicMinor();
+    static Scale modeDorianB2();
+    static Scale modeLydianAugmented();
+    static Scale modeLydianDominant();
+    static Scale modeMixolydianB6();
+    static Scale modeLocrianSharp2();
+    static Scale modeAltered();
+
     // Additional Ragas
     static Scale ragaKafi();
     static Scale ragaAsavari();
@@ -85,11 +104,13 @@ public:
 private:
     QString name;
     int scaleId;  // Unique identifier
-    QVector<double> ratios;  // Ratios for scale degrees (variable count)
+    QVector<double> ratios;      // Ratios for scale degrees (variable count)
     QVector<QString> noteNames;  // Note names for each degree
+    QVector<bool> accidentals;   // True for degrees that are chromatic/accidental (drawn dark grey)
 
     // Private constructor for setting custom ratios and names
-    Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames);
+    Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames,
+          const QVector<bool> &accidentals = {});
 };
 
 #endif // SCALE_H

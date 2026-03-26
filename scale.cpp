@@ -12,8 +12,9 @@ Scale::Scale(const QString &name, int scaleId)
 }
 
 // Private constructor with custom ratios and names
-Scale::Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames)
-    : name(name), scaleId(scaleId), ratios(ratios), noteNames(noteNames)
+Scale::Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames,
+             const QVector<bool> &accidentals)
+    : name(name), scaleId(scaleId), ratios(ratios), noteNames(noteNames), accidentals(accidentals)
 {
 }
 
@@ -31,6 +32,14 @@ QString Scale::getNoteName(int degree) const
         return noteNames[degree];
     }
     return "?";
+}
+
+bool Scale::getIsAccidental(int degree) const
+{
+    if (degree >= 0 && degree < accidentals.size()) {
+        return accidentals[degree];
+    }
+    return false;
 }
 
 // ============================================================================
@@ -69,18 +78,25 @@ Scale Scale::pythagorean()
 
 Scale Scale::equalTemperament()
 {
-    // 12-tone equal temperament: each semitone is 2^(1/12)
+    // Full 12-tone equal temperament chromatic scale: each semitone is 2^(1/12)
+    // Accidentals (sharps) are flagged so the canvas draws them dark grey
     QVector<double> ratios = {
-        1.0,                    // C - 0 semitones
-        std::pow(2.0, 2.0/12),  // D - 2 semitones
-        std::pow(2.0, 4.0/12),  // E - 4 semitones
-        std::pow(2.0, 5.0/12),  // F - 5 semitones
-        std::pow(2.0, 7.0/12),  // G - 7 semitones
-        std::pow(2.0, 9.0/12),  // A - 9 semitones
-        std::pow(2.0, 11.0/12)  // B - 11 semitones
+        1.0,                     // C  - 0 semitones  (diatonic)
+        std::pow(2.0, 1.0/12),   // C# - 1 semitone   (accidental)
+        std::pow(2.0, 2.0/12),   // D  - 2 semitones  (diatonic)
+        std::pow(2.0, 3.0/12),   // D# - 3 semitones  (accidental)
+        std::pow(2.0, 4.0/12),   // E  - 4 semitones  (diatonic)
+        std::pow(2.0, 5.0/12),   // F  - 5 semitones  (diatonic)
+        std::pow(2.0, 6.0/12),   // F# - 6 semitones  (accidental)
+        std::pow(2.0, 7.0/12),   // G  - 7 semitones  (diatonic)
+        std::pow(2.0, 8.0/12),   // G# - 8 semitones  (accidental)
+        std::pow(2.0, 9.0/12),   // A  - 9 semitones  (diatonic)
+        std::pow(2.0, 10.0/12),  // A# - 10 semitones (accidental)
+        std::pow(2.0, 11.0/12)   // B  - 11 semitones (diatonic)
     };
-    QVector<QString> names = {"C", "D", "E", "F", "G", "A", "B"};
-    return Scale("Equal Temperament", 2, ratios, names);
+    QVector<QString> names = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    QVector<bool> acc      = { false, true, false, true, false, false, true, false, true, false, true, false };
+    return Scale("Equal Temperament", 2, ratios, names, acc);
 }
 
 Scale Scale::quarterCommaMeantone()
@@ -658,6 +674,267 @@ Scale Scale::persianHomayun()
 }
 
 // ============================================================================
+// DIATONIC MODES (Equal Temperament)
+// ============================================================================
+
+Scale Scale::modeIonian()
+{
+    // Ionian — the major scale: W W H W W W H
+    // C D E F G A B  (0 2 4 5 7 9 11 semitones)
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 4.0/12),   // E
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A
+        std::pow(2.0, 11.0/12)   // B
+    };
+    QVector<QString> names = {"C", "D", "E", "F", "G", "A", "B"};
+    return Scale("Ionian (Major)", 35, ratios, names);
+}
+
+Scale Scale::modeDorian()
+{
+    // Dorian — W H W W W H W
+    // C D Eb F G A Bb  (0 2 3 5 7 9 10)
+    // The quintessential jazz minor mode ("So What", "Impressions")
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A  (major 6th — defines Dorian)
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "D", "Eb", "F", "G", "A", "Bb"};
+    return Scale("Dorian", 36, ratios, names);
+}
+
+Scale Scale::modePhrygian()
+{
+    // Phrygian — H W W W H W W
+    // C Db Eb F G Ab Bb  (0 1 3 5 7 8 10)
+    // Spanish / flamenco character; used in jazz over altered chords
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 1.0/12),   // Db (minor 2nd — defines Phrygian)
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 8.0/12),   // Ab
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "Bb"};
+    return Scale("Phrygian", 37, ratios, names);
+}
+
+Scale Scale::modeLydian()
+{
+    // Lydian — W W W H W W H
+    // C D E F# G A B  (0 2 4 6 7 9 11)
+    // Bright major sound; raised 4th is the signature
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 4.0/12),   // E
+        std::pow(2.0, 6.0/12),   // F# (raised 4th — defines Lydian)
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A
+        std::pow(2.0, 11.0/12)   // B
+    };
+    QVector<QString> names = {"C", "D", "E", "F#", "G", "A", "B"};
+    return Scale("Lydian", 38, ratios, names);
+}
+
+Scale Scale::modeMixolydian()
+{
+    // Mixolydian — W W H W W H W
+    // C D E F G A Bb  (0 2 4 5 7 9 10)
+    // Dominant blues-jazz scale; major with flat 7th
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 4.0/12),   // E
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A
+        std::pow(2.0, 10.0/12)   // Bb (flat 7th — defines Mixolydian)
+    };
+    QVector<QString> names = {"C", "D", "E", "F", "G", "A", "Bb"};
+    return Scale("Mixolydian", 39, ratios, names);
+}
+
+Scale Scale::modeAeolian()
+{
+    // Aeolian — W H W W H W W
+    // C D Eb F G Ab Bb  (0 2 3 5 7 8 10)
+    // Natural minor; foundation of Western minor tonality
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 8.0/12),   // Ab (flat 6th — differs from Dorian)
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "D", "Eb", "F", "G", "Ab", "Bb"};
+    return Scale("Aeolian (Natural Minor)", 40, ratios, names);
+}
+
+Scale Scale::modeLocrian()
+{
+    // Locrian — H W W H W W W
+    // C Db Eb F Gb Ab Bb  (0 1 3 5 6 8 10)
+    // Diminished 5th on tonic; rarely used as a tonal centre
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 1.0/12),   // Db
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 6.0/12),   // Gb (diminished 5th — defines Locrian)
+        std::pow(2.0, 8.0/12),   // Ab
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "Db", "Eb", "F", "Gb", "Ab", "Bb"};
+    return Scale("Locrian", 41, ratios, names);
+}
+
+// ============================================================================
+// MELODIC MINOR AND ITS MODES (Jazz)
+// ============================================================================
+
+Scale Scale::melodicMinor()
+{
+    // Melodic Minor (ascending / jazz form): W H W W W W H
+    // C D Eb F G A B  (0 2 3 5 7 9 11)
+    // Minor with raised 6th and 7th; the root of all melodic minor modes
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A  (raised 6th vs Aeolian)
+        std::pow(2.0, 11.0/12)   // B  (raised 7th vs Aeolian)
+    };
+    QVector<QString> names = {"C", "D", "Eb", "F", "G", "A", "B"};
+    return Scale("Melodic Minor", 42, ratios, names);
+}
+
+Scale Scale::modeDorianB2()
+{
+    // Dorian b2 — 2nd mode of melodic minor
+    // C Db Eb F G A Bb  (0 1 3 5 7 9 10)
+    // Like Dorian but with Phrygian's minor 2nd; used over sus b9 chords
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 1.0/12),   // Db (flat 2nd)
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A  (major 6th)
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "Db", "Eb", "F", "G", "A", "Bb"};
+    return Scale("Dorian b2", 43, ratios, names);
+}
+
+Scale Scale::modeLydianAugmented()
+{
+    // Lydian Augmented — 3rd mode of melodic minor
+    // C D E F# G# A B  (0 2 4 6 8 9 11)
+    // Lydian with raised 5th; used over maj7#5 chords
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 4.0/12),   // E
+        std::pow(2.0, 6.0/12),   // F# (raised 4th)
+        std::pow(2.0, 8.0/12),   // G# (raised 5th — defines Lydian Aug)
+        std::pow(2.0, 9.0/12),   // A
+        std::pow(2.0, 11.0/12)   // B
+    };
+    QVector<QString> names = {"C", "D", "E", "F#", "G#", "A", "B"};
+    return Scale("Lydian Augmented", 44, ratios, names);
+}
+
+Scale Scale::modeLydianDominant()
+{
+    // Lydian Dominant — 4th mode of melodic minor
+    // C D E F# G A Bb  (0 2 4 6 7 9 10)
+    // The iconic jazz dominant scale: raised 4th + flat 7th
+    // Used over dom7#11 chords, tritone substitutions
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 4.0/12),   // E
+        std::pow(2.0, 6.0/12),   // F# (raised 4th / #11)
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 9.0/12),   // A
+        std::pow(2.0, 10.0/12)   // Bb (flat 7th)
+    };
+    QVector<QString> names = {"C", "D", "E", "F#", "G", "A", "Bb"};
+    return Scale("Lydian Dominant", 45, ratios, names);
+}
+
+Scale Scale::modeMixolydianB6()
+{
+    // Mixolydian b6 (Hindu) — 5th mode of melodic minor
+    // C D E F G Ab Bb  (0 2 4 5 7 8 10)
+    // Major with flat 6th and flat 7th; over dom7b13 chords
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D
+        std::pow(2.0, 4.0/12),   // E
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 7.0/12),   // G
+        std::pow(2.0, 8.0/12),   // Ab (flat 6th — defines this mode)
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "D", "E", "F", "G", "Ab", "Bb"};
+    return Scale("Mixolydian b6", 46, ratios, names);
+}
+
+Scale Scale::modeLocrianSharp2()
+{
+    // Locrian #2 (Half-Diminished) — 6th mode of melodic minor
+    // C D Eb F Gb Ab Bb  (0 2 3 5 6 8 10)
+    // Like Locrian but with natural 2nd; over m7b5 chords in jazz
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 2.0/12),   // D  (major 2nd — #2 vs Locrian)
+        std::pow(2.0, 3.0/12),   // Eb
+        std::pow(2.0, 5.0/12),   // F
+        std::pow(2.0, 6.0/12),   // Gb (diminished 5th)
+        std::pow(2.0, 8.0/12),   // Ab
+        std::pow(2.0, 10.0/12)   // Bb
+    };
+    QVector<QString> names = {"C", "D", "Eb", "F", "Gb", "Ab", "Bb"};
+    return Scale("Locrian #2", 47, ratios, names);
+}
+
+Scale Scale::modeAltered()
+{
+    // Altered (Super Locrian) — 7th mode of melodic minor
+    // C Db Eb E Gb Ab Bb  (0 1 3 4 6 8 10)
+    // Every note above the 5th is altered (b9 #9 b5 b13); over alt dominant chords
+    // The most dissonant and tension-rich scale in common jazz practice
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 1.0/12),   // Db (b9)
+        std::pow(2.0, 3.0/12),   // Eb (#9)
+        std::pow(2.0, 4.0/12),   // E  (major 3rd)
+        std::pow(2.0, 6.0/12),   // Gb (b5 / #11)
+        std::pow(2.0, 8.0/12),   // Ab (b13)
+        std::pow(2.0, 10.0/12)   // Bb (b7)
+    };
+    QVector<QString> names = {"C", "Db", "Eb", "E", "Gb", "Ab", "Bb"};
+    return Scale("Altered (Super Locrian)", 48, ratios, names);
+}
+
+// ============================================================================
 // SCALE MANAGEMENT
 // ============================================================================
 
@@ -720,6 +997,24 @@ QVector<Scale> Scale::getAllScales()
     scales.append(persianChahargah());
     scales.append(persianHomayun());
 
+    // Diatonic modes (ET)
+    scales.append(modeIonian());
+    scales.append(modeDorian());
+    scales.append(modePhrygian());
+    scales.append(modeLydian());
+    scales.append(modeMixolydian());
+    scales.append(modeAeolian());
+    scales.append(modeLocrian());
+
+    // Melodic minor modes (Jazz)
+    scales.append(melodicMinor());
+    scales.append(modeDorianB2());
+    scales.append(modeLydianAugmented());
+    scales.append(modeLydianDominant());
+    scales.append(modeMixolydianB6());
+    scales.append(modeLocrianSharp2());
+    scales.append(modeAltered());
+
     return scales;
 }
 
@@ -780,6 +1075,24 @@ Scale Scale::getScaleById(int id)
         case 32: return persianSegah();
         case 33: return persianChahargah();
         case 34: return persianHomayun();
+
+        // Diatonic modes (ET)
+        case 35: return modeIonian();
+        case 36: return modeDorian();
+        case 37: return modePhrygian();
+        case 38: return modeLydian();
+        case 39: return modeMixolydian();
+        case 40: return modeAeolian();
+        case 41: return modeLocrian();
+
+        // Melodic minor modes (Jazz)
+        case 42: return melodicMinor();
+        case 43: return modeDorianB2();
+        case 44: return modeLydianAugmented();
+        case 45: return modeLydianDominant();
+        case 46: return modeMixolydianB6();
+        case 47: return modeLocrianSharp2();
+        case 48: return modeAltered();
 
         default:
             return justIntonation();  // Default fallback

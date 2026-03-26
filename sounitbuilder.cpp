@@ -235,6 +235,23 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
                         "nlType", "nlAmount", "nlFreqMod", "nlAttack", "pitchMultiplier"},
                        {"signalOut"});
     });
+    connect(ui->actionSaxophone, &QAction::triggered, this, [this]() {
+        onAddContainer("Clarinet", QColor("#3498db"),
+                       {"breathPressure", "reedStiffness", "reedAperture",
+                        "blowPosition", "noiseGain", "vibratoFreq", "vibratoGain",
+                        "nlType", "nlAmount", "nlFreqMod", "nlAttack",
+                        "vocalTractFreq", "vocalTractGain", "jawVibratoBlend",
+                        "growlFreq", "growlDepth",
+                        "attackChiffGain", "attackOverpressure", "reedSaturation",
+                        "pitchMultiplier"},
+                       {"signalOut"});
+    });
+    connect(ui->actionPercussion, &QAction::triggered, this, [this]() {
+        onAddContainer("Percussion", QColor("#3498db"),
+                       {"strikePosition", "strikeDuration", "inharmonicity",
+                        "decayTime", "noiseGain", "pitchMultiplier"},
+                       {"signalOut"});
+    });
 
     // Filters - Purple
     connect(ui->actionBandpass_EQ, &QAction::triggered, this, [this]() {
@@ -283,12 +300,12 @@ void SounitBuilder::rebuildGraph(int trackIndex, bool rebuildTrackGraph)
         // Check if the preview graph is valid
         QList<Container*> containerList = canvas->findChildren<Container*>();
         bool isValid = audioEngine->hasGraph(trackIndex);
-        if (!isValid && !containerList.isEmpty()) {
+        if (!isValid && !containerList.isEmpty() && !m_suppressInvalidGraphWarning) {
             QMessageBox::warning(this, "Invalid Graph Connection",
                                "The connection you made creates an invalid graph.\n\n"
                                "The audio engine has reverted to direct mode.\n\n"
                                "Please check that:\n"
-                               "• The graph has exactly one Spectrum to Signal container\n"
+                               "• The graph has a signal output (Spectrum to Signal, Bowed, Reed, Recorder, Karplus Strong, Wavetable Synth, or Attack)\n"
                                "• All containers are properly connected\n"
                                "• There are no circular dependencies");
         }
@@ -394,6 +411,9 @@ void SounitBuilder::setTrackCanvas(Track *track)
             qDebug() << "Skipping graph rebuild during canvas load";
         }
     });
+
+    // Forward canvas undo/redo signal so KalaMain can refresh the inspector
+    connect(canvas, &Canvas::undoRedoPerformed, this, &SounitBuilder::undoRedoPerformed);
 
     // Keep select mode button in sync with canvas state
     if (m_selectModeButton) {
@@ -603,6 +623,38 @@ void SounitBuilder::onAddContainer(const QString &name, const QColor &color,
         newContainer->setParameter("nlAmount",       0.0);
         newContainer->setParameter("nlFreqMod",      10.0);
         newContainer->setParameter("nlAttack",       0.1);
+        newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "Clarinet") {
+        newContainer->setParameter("breathPressure",  0.72);
+        newContainer->setParameter("reedStiffness",   0.45);
+        newContainer->setParameter("reedAperture",    0.52);
+        newContainer->setParameter("blowPosition",    0.22);
+        newContainer->setParameter("noiseGain",       0.12);
+        newContainer->setParameter("vibratoFreq",     5.5);
+        newContainer->setParameter("vibratoGain",     0.04);
+        newContainer->setParameter("nlType",          0.0);
+        newContainer->setParameter("nlAmount",        0.22);
+        newContainer->setParameter("nlFreqMod",       10.0);
+        newContainer->setParameter("nlAttack",        0.12);
+        newContainer->setParameter("vocalTractFreq",  700.0);
+        newContainer->setParameter("vocalTractQ",     2.5);
+        newContainer->setParameter("vocalTractGain",  0.35);
+        newContainer->setParameter("jawVibratoBlend", 0.7);
+        newContainer->setParameter("growlFreq",           85.0);
+        newContainer->setParameter("growlDepth",          0.0);
+        newContainer->setParameter("bellReflection",      0.85);
+        newContainer->setParameter("attackChiffGain",     5.0);
+        newContainer->setParameter("attackOverpressure",  0.4);
+        newContainer->setParameter("reedSaturation",      0.6);
+        newContainer->setParameter("pitchMultiplier",     1.0);
+    } else if (name == "Percussion") {
+        newContainer->setParameter("strikePosition",  0.5);
+        newContainer->setParameter("strikeDuration",  5.0);
+        newContainer->setParameter("inharmonicity",   0.0);
+        newContainer->setParameter("decayTime",       1.0);
+        newContainer->setParameter("highDecayRate",   1.5);
+        newContainer->setParameter("numModes",       12.0);
+        newContainer->setParameter("noiseGain",       0.15);
         newContainer->setParameter("pitchMultiplier", 1.0);
     }
 

@@ -37,6 +37,12 @@ public slots:
     // Clear the entire chat history from the display.
     void clearLog();
 
+    // Update the message count indicator (0 = hide).
+    void setMessageCount(int count);
+
+    // Update the tool mode label. Empty string hides the label.
+    void setToolModeLabel(const QString &label);
+
 signals:
     // Emitted when the user presses Enter (or clicks Send) with non-empty input.
     void userMessageSubmitted(const QString &text);
@@ -46,6 +52,9 @@ signals:
 
     // Emitted when the user clicks Clear — KalaMain clears agent history.
     void clearRequested();
+
+    // Emitted when the user clicks the mode label to cycle tool modes.
+    void toolModeToggleRequested();
 
 private slots:
     void onSendClicked();
@@ -60,4 +69,6 @@ private:
     QPushButton   *m_stopBtn;
     QPushButton   *m_clearBtn;
     QLabel        *m_statusLabel;
+    QLabel        *m_historyLabel;
+    QLabel        *m_modeLabel;
 };

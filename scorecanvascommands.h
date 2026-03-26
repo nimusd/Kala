@@ -699,8 +699,35 @@ private:
 };
 
 // ============================================================================
+// Scale Dynamics Command
+// Multiplies every point value in each note's dynamics curve by a factor,
+// clamped to [0, 1].  factor > 1.0 boosts, factor < 1.0 reduces.
+// ============================================================================
+class ScaleDynamicsCommand : public QUndoCommand
+{
+public:
+    ScaleDynamicsCommand(Phrase *phrase,
+                         const QVector<int> &noteIndices,
+                         double factor,
+                         ScoreCanvas *canvas,
+                         QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    Phrase         *m_phrase;
+    QVector<int>    m_noteIndices;
+    double          m_factor;
+    QVector<Curve>  m_oldCurves;   // Saved on first redo for undo
+    bool            m_firstTime;
+    ScoreCanvas    *m_canvas;
+};
+
+// ============================================================================
 // Set Beat Dynamics Command
-// Sets constant dynamics on a per-note basis (used by apply_beat_dynamics tool).
+// Scales dynamics curves on a per-note basis (used by apply_beat_dynamics tool).
+// Each note's existing curve is multiplied by the corresponding factor.
 // Stores old dynamics curves for undo.
 // ============================================================================
 class SetBeatDynamicsCommand : public QUndoCommand
@@ -750,6 +777,41 @@ private:
 };
 
 // ============================================================================
+// Set Default Tempo Command
+// Handles editing the tempo/time-signature at time 0 (the global default).
+// Also rescales all note times, scale-change markers, and tempo-change markers
+// so musical positions are preserved — mirroring ScoreCanvasWindow::scaleNoteTimes().
+// ============================================================================
+class SetDefaultTempoCommand : public QUndoCommand
+{
+public:
+    SetDefaultTempoCommand(ScoreCanvas *canvas,
+                           double oldTempo, int oldTimeSigNum, int oldTimeSigDenom,
+                           double newTempo, int newTimeSigNum, int newTimeSigDenom,
+                           QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    ScoreCanvas *m_canvas;
+    double m_oldTempo, m_newTempo;
+    int m_oldTimeSigNum, m_oldTimeSigDenom;
+    int m_newTimeSigNum, m_newTimeSigDenom;
+
+    struct NoteState { int index; double startTime; double duration; };
+    QVector<NoteState> m_oldNoteStates;
+    QVector<NoteState> m_newNoteStates;
+    QMap<double, QPair<Scale, double>> m_oldScaleChanges;
+    QMap<double, QPair<Scale, double>> m_newScaleChanges;
+    QMap<double, TempoTimeSignature> m_oldTempoChanges;
+    QMap<double, TempoTimeSignature> m_newTempoChanges;
+
+    bool m_firstTime;
+    void applyState(bool useNew);
+};
+
+// ============================================================================
 // Add / Edit Tempo+TimeSig Change Command
 // Adds (or replaces) a TempoTimeSignature marker at a given time position.
 // Undo restores the previous marker (or removes it if none existed).
@@ -788,6 +850,100 @@ private:
     double              m_timeMs;
     TempoTimeSignature  m_savedTts;
     bool                m_valid;   // false if no marker existed at timeMs
+};
+
+// ============================================================================
+// Snap To Scale Command
+// Quantizes the pitch curves of selected continuous notes to the nearest
+// scale degree at each note's start time.  Stores per-note old state for undo.
+// ============================================================================
+class SnapToScaleCommand : public QUndoCommand
+{
+public:
+    SnapToScaleCommand(Phrase *phrase,
+                       const QVector<int> &noteIndices,
+                       ScoreCanvas *canvas,
+                       QUndoCommand *parent = nullptr);
+    void undo() override;
+    void redo() override;
+    bool isNoop() const { return m_noteStates.isEmpty(); }
+
+private:
+    struct NoteState {
+        int    index;
+        Curve  oldPitchCurve;
+        Curve  newPitchCurve;
+        bool   wasQuantized;
+        QVector<Segment> oldSegments;
+    };
+
+    Phrase          *m_phrase;
+    QVector<NoteState> m_noteStates;
+    ScoreCanvas     *m_canvas;
+    bool             m_firstTime;
+};
+
+// ============================================================================
+// Fade Out Notes Command
+// Splices a linear fade-out into the tail of each note's dynamics curve,
+// preserving all existing curve points before startTime exactly.
+// ============================================================================
+class FadeOutNotesCommand : public QUndoCommand
+{
+public:
+    FadeOutNotesCommand(Phrase *phrase,
+                        const QVector<int> &noteIndices,
+                        double startTime,   // 0–1, where fade begins
+                        double endValue,    // target value at t=1 (usually 0)
+                        ScoreCanvas *canvas,
+                        QUndoCommand *parent = nullptr);
+    void undo() override;
+    void redo() override;
+
+private:
+    Phrase            *m_phrase;
+    QVector<int>       m_noteIndices;
+    double             m_startTime;
+    double             m_endValue;
+    QVector<Curve>     m_oldCurves;   // For undo
+    ScoreCanvas       *m_canvas;
+};
+
+// ============================================================================
+// Edit Note Property Command
+// Used by the note inspector spinboxes (start, duration, pitch, variation).
+// Merges consecutive changes to the same property so rapid spinbox changes
+// produce a single undo step.
+// ============================================================================
+class EditNotePropertyCommand : public QUndoCommand
+{
+public:
+    enum Property { StartTime, Duration, Pitch, VariationIndex };
+
+    struct NoteChange {
+        int index;
+        double oldValue;
+        double newValue;
+    };
+
+    EditNotePropertyCommand(Phrase *phrase,
+                            const QVector<NoteChange> &changes,
+                            Property property,
+                            ScoreCanvas *canvas,
+                            QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+    int id() const override { return 20; }
+    bool mergeWith(const QUndoCommand *other) override;
+
+private:
+    Phrase *m_phrase;
+    QVector<NoteChange> m_changes;
+    Property m_property;
+    ScoreCanvas *m_canvas;
+
+    void applyValues(bool useNew);
 };
 
 #endif // SCORECANVASCOMMANDS_H

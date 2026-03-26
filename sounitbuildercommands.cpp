@@ -242,3 +242,42 @@ void DeleteConnectionCommand::redo()
     emit m_canvas->graphChanged();
     qDebug() << "Redo: Connection deleted at index" << m_index;
 }
+
+// ============================================================================
+// Set Parameter Command
+// ============================================================================
+
+SetParameterCommand::SetParameterCommand(Container *container, const QString &paramName,
+                                         double oldVal, double newVal,
+                                         QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_container(container)
+    , m_paramName(paramName)
+    , m_oldVal(oldVal)
+    , m_newVal(newVal)
+{
+    setText(QString("Set %1").arg(paramName));
+}
+
+void SetParameterCommand::undo()
+{
+    m_container->setParameter(m_paramName, m_oldVal);
+    qDebug() << "Undo: Set" << m_paramName << "to" << m_oldVal;
+}
+
+void SetParameterCommand::redo()
+{
+    m_container->setParameter(m_paramName, m_newVal);
+    qDebug() << "Redo: Set" << m_paramName << "to" << m_newVal;
+}
+
+bool SetParameterCommand::mergeWith(const QUndoCommand *other)
+{
+    if (other->id() != id())
+        return false;
+    const SetParameterCommand *cmd = static_cast<const SetParameterCommand*>(other);
+    if (cmd->m_container != m_container || cmd->m_paramName != m_paramName)
+        return false;
+    m_newVal = cmd->m_newVal;  // Keep original oldVal, adopt latest newVal
+    return true;
+}

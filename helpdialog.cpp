@@ -144,10 +144,12 @@ void HelpDialog::buildTableOfContents()
     addChild(essential, "Recorder", "recorder.html", "");
     addChild(essential, "Bowed", "bowed.html", "");
     addChild(essential, "Reed", "reed.html", "");
+    addChild(essential, "Clarinet", "clarinet.html", "");
     addChild(essential, "Signal Mixer", "signal-mixer.html", "");
     addChild(essential, "Attack", "attack.html", "");
     addChild(essential, "Wavetable Synth", "wavetable-synth.html", "");
     addChild(essential, "Note Tail", "note-tail.html", "");
+    addChild(essential, "Percussion", "percussion.html", "");
 
     // Shaping (Orange)
     auto *shaping = addCategory("Containers: Shaping (Orange)");
@@ -245,10 +247,12 @@ QMap<QString, QString> HelpDialog::containerToFileMap()
         {"Recorder",            "recorder.html"},
         {"Bowed",               "bowed.html"},
         {"Reed",                "reed.html"},
+        {"Clarinet",            "clarinet.html"},
         {"Signal Mixer",        "signal-mixer.html"},
         {"Attack",              "attack.html"},
         {"Wavetable Synth",     "wavetable-synth.html"},
         {"Note Tail",           "note-tail.html"},
+        {"Percussion",          "percussion.html"},
         // Shaping (Orange)
         {"Rolloff Processor",   "rolloff-processor.html"},
         {"Spectrum Blender",    "spectrum-blender.html"},

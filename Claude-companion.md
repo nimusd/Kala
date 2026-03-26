@@ -24,7 +24,7 @@ User types in CompanionPanel
         ▼
   KalaAgent::onResponseReceived()
         │
-        ├─ finish_reason == "tool_calls"  →  KalaTools::dispatchTool()  →  loop (max 12 rounds)
+        ├─ finish_reason == "tool_calls"  →  KalaTools::dispatchTool()  →  loop (max 40 rounds)
         │
         └─ finish_reason == "stop"        →  emit messageReady()  →  CompanionPanel
 ```
@@ -98,7 +98,7 @@ Always speaks **OpenAI format** to callers. Anthropic adaptation is entirely int
 
 - Holds `QJsonArray m_messages` — conversation history (system prompt NOT stored here,
   prepended fresh on each request by `buildRequestMessages()`).
-- `sendUserMessage(text)` → appends user message → `continueConversation(12)`.
+- `sendUserMessage(text)` → appends user message → `continueConversation(40)`.
 - Tool call loop: appends assistant message → executes tools → appends tool results →
   calls `continueConversation(roundsLeft - 1)`. Capped at **12 rounds**.
 - Signals: `messageReady(text, role)`, `thinkingStarted()`, `thinkingFinished()`.
@@ -186,6 +186,8 @@ Validates port names against `Canvas::getPortsForContainerType()`.
 Pushes an `AddConnectionCommand` through the undo stack.
 
 Valid functions: `passthrough`, `add`, `subtract`, `multiply`, `replace`, `modulate`.
+
+**One-output-one-input constraint**: each output port can only be connected to **one** input port total. You cannot fan a single output to multiple inputs — not even to different inputs on the same container (e.g. `lfoOut → lowRolloff` AND `lfoOut → highRolloff` is forbidden). Use a separate LFO (or other source container) for each additional target input.
 
 ---
 
@@ -620,11 +622,25 @@ Calls `Track::loadVariationToCanvas()`, rebuilds the audio graph, reconnects con
 After this call, all sounit-editing tools (`add_container`, `set_parameter`, etc.) operate on
 the loaded variation's graph. Call `create_variation` to snapshot edits as a new variation when done.
 
+#### `copy_variation_to_base`
+Parameters: `variationIndex` (int, required, 1-based).
+
+Replaces the base sounit with the graph of an existing named variation. This is a single atomic
+operation — it calls `loadVariationToCanvas(N)` then `saveBaseCanvasState()` to permanently
+make the variation the new base. Use this whenever the user asks to "promote", "copy", or
+"merge" a variation into the base. **Never** do this container-by-container.
+
 #### `apply_dynamics_curve`
 Parameters: `points` (array of `{time, value, curveType}`), `noteIds` (optional),
 `weight` (0–1, default 1.0), `perNote` (bool, default false).
 Pushes `ApplyDynamicsCurveCommand`. Points use time=0→first note, time=1→last note.
 `perNote=true` applies the curve within each individual note's own timeline.
+
+#### `scale_dynamics`
+Parameters: `factor` (required, > 0), `noteIds` (optional).
+Multiplies the overall dynamics level of targeted notes by `factor`, preserving each note's
+internal curve shape. `factor > 1.0` boosts (e.g. 1.5 = 50% louder), `factor < 1.0` reduces
+(e.g. 0.7 = 30% quieter). Values are clamped to the [0, 1] range. Pushes `ScaleDynamicsCommand` — supports undo.
 
 #### `scale_timing`
 Parameters: `proportion` (> 0), `noteIds` (optional).
@@ -908,8 +924,10 @@ Apply saves to QSettings, calls `m_kalaAgent->setConfig()` and `clearHistory()`.
   (`setDefaultTempo` emits `tempoSettingsChanged` internally).
 
 - **Multi-track note writing**: The agent writes notes to all tracks via `add_note` with
-  explicit `trackIndex`. For complex arrangements, the tool call count can hit the 12-round
-  cap. If needed, increase `kMaxToolRounds` in `kalaagent.h`.
+  explicit `trackIndex`. For complex arrangements the tool call round count can mount up.
+  The cap is `kMaxToolRounds = 40` in `kalaagent.h` — raise it if needed.
+  When the cap is hit, the agent now executes the final batch of tools before stopping
+  (history stays valid), so saying "continue" will pick up correctly.
 
 - **`duplicate_notes` + undo**: The `PasteNotesCommand` is pushed once and fully undoable,
   but the returned note IDs are only valid for the current redo state. If the user undoes

@@ -115,6 +115,14 @@ void CompositionSettingsDialog::setupUI()
 
     formLayout->addRow("Length:", lengthStack);
 
+    // Pre-render delay
+    preRenderDelaySpinBox = new QSpinBox(this);
+    preRenderDelaySpinBox->setRange(50, 2000);
+    preRenderDelaySpinBox->setSingleStep(50);
+    preRenderDelaySpinBox->setSuffix(" ms");
+    preRenderDelaySpinBox->setValue(settings.preRenderDelayMs);
+    formLayout->addRow("Pre-render delay:", preRenderDelaySpinBox);
+
     mainLayout->addLayout(formLayout);
 
     // Calculated info group box
@@ -257,6 +265,8 @@ CompositionSettings CompositionSettingsDialog::getSettings() const
         s.lengthMs = (t.hour() * 3600 + t.minute() * 60 + t.second()) * 1000.0 + t.msec();
         s.syncLengthFromMs();  // Calculate lengthBars from ms
     }
+
+    s.preRenderDelayMs = preRenderDelaySpinBox->value();
 
     return s;
 }

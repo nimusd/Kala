@@ -244,6 +244,7 @@ void Canvas::keyPressEvent(QKeyEvent *event)
     // Undo: Ctrl+Z
     if (event->matches(QKeySequence::Undo)) {
         undoStack->undo();
+        emit undoRedoPerformed();
         event->accept();
         return;
     }
@@ -251,6 +252,7 @@ void Canvas::keyPressEvent(QKeyEvent *event)
     // Redo: Ctrl+Y or Ctrl+Shift+Z
     if (event->matches(QKeySequence::Redo)) {
         undoStack->redo();
+        emit undoRedoPerformed();
         event->accept();
         return;
     }
@@ -825,6 +827,9 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
     } else if (type == "Frequency Mapper") {
         inputs = {"curve", "pitchMultiplier"};
         outputs = {"controlOut"};
+    } else if (type == "Note Tail") {
+        inputs = {"signalIn", "length"};
+        outputs = {"signalOut"};
     } else if (type == "Signal Mixer") {
         inputs = {"signalA", "signalB", "gainA", "gainB"};
         outputs = {"signalOut"};
@@ -856,10 +861,23 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
         inputs = {"bowPressure", "bowVelocity", "bowPosition",
                   "nlType", "nlAmount", "nlFreqMod", "nlAttack", "pitchMultiplier"};
         outputs = {"signalOut"};
-    } else if (type == "Saxophone" || type == "Reed") {
+    } else if (type == "Reed") {
         inputs = {"breathPressure", "reedStiffness", "reedAperture",
                   "blowPosition", "noiseGain", "vibratoFreq", "vibratoGain",
                   "nlType", "nlAmount", "nlFreqMod", "nlAttack", "pitchMultiplier"};
+        outputs = {"signalOut"};
+    } else if (type == "Clarinet") {
+        inputs = {"breathPressure", "reedStiffness", "reedAperture",
+                  "blowPosition", "noiseGain", "vibratoFreq", "vibratoGain",
+                  "nlType", "nlAmount", "nlFreqMod", "nlAttack",
+                  "vocalTractFreq", "vocalTractGain", "jawVibratoBlend",
+                  "growlFreq", "growlDepth",
+                  "attackChiffGain", "attackOverpressure", "reedSaturation",
+                  "pitchMultiplier"};
+        outputs = {"signalOut"};
+    } else if (type == "Percussion") {
+        inputs = {"strikePosition", "strikeDuration", "inharmonicity",
+                  "decayTime", "noiseGain", "pitchMultiplier"};
         outputs = {"signalOut"};
     } else {
         qWarning() << "Unknown container type:" << type;
@@ -876,6 +894,10 @@ Container* Canvas::deserializeContainer(const QJsonObject &json, QWidget *parent
     if (type == "Karplus Strong Attack") {
         type = "Karplus Strong";
         qDebug() << "Migrated legacy 'Karplus Strong Attack' to 'Karplus Strong'";
+    }
+    if (type == "Saxophone") {
+        type = "Clarinet";
+        qDebug() << "Migrated legacy 'Saxophone' to 'Clarinet'";
     }
 
     // Get position

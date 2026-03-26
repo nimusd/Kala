@@ -142,6 +142,38 @@ Set static value = starting/fallback value.
 
 ---
 
+### Percussion
+**Ports in:** `strikePosition`, `strikeDuration`, `inharmonicity`, `decayTime`, `noiseGain`, `pitchMultiplier`
+**Ports out:** `signalOut`
+
+```json
+"parameters": {
+    "strikePosition":  0.5,    // 0=centre (low modes dominant), 1=rim (all modes equal)
+    "strikeDuration":  5.0,    // ms — mallet contact: short=hard stick, long=padded mallet
+    "inharmonicity":   0.0,    // 0=harmonic/tabla, 0.5=raw membrane, 1.0=bell/gong
+    "decayTime":       1.0,    // seconds — fundamental mode decay
+    "highDecayRate":   1.5,    // 0.3–0.5=gong, 1.5–2=tabla, 3–5=frame drum
+    "numModes":       12.0,    // 2–16 resonant modes computed
+    "noiseGain":       0.15,   // onset broadband burst (skin texture, stick click)
+    "pitchMultiplier": 1.0     // 1.0=note pitch, 2.0=octave up
+}
+```
+
+Modal synthesis: bank of damped sinusoidal resonators, all excited by a mallet impulse at note-on.
+Modes ring down naturally in tail mode — no Note Tail needed (IR Convolution works well instead).
+
+**Instrument recipes:**
+| Instrument | strikePosition | strikeDuration | inharmonicity | decayTime | highDecayRate | noiseGain |
+|---|---|---|---|---|---|---|
+| Tabla / Dayan | 0.4 | 4ms | 0.05 | 0.6 | 2.5 | 0.20 |
+| Bayan (bass tabla) | 0.5 | 6ms | 0.05 | 1.0 | 1.5 | 0.25 |
+| Timpani | 0.3 | 12ms | 0.30 | 4.0 | 1.5 | 0.12 |
+| Tar / frame drum | 0.7 | 5ms | 0.15 | 0.4 | 3.5 | 0.35 |
+| Gong | 0.5 | 30ms | 0.90 | 10.0 | 0.4 | 0.08 |
+| Bell | 0.5 | 20ms | 0.80 | 6.0 | 0.6 | 0.05 |
+
+---
+
 ### Note Tail
 **Ports in:** `signalIn`
 **Ports out:** `signalOut`
@@ -546,7 +578,8 @@ Note Tail IS needed in KS Attack mode (mode=1) since the HG sustain body doesn't
 
 ---
 
-### Reed / Saxophone (conical bore waveguide)
+### Reed (conical bore waveguide — simple, legacy)
+**Type name:** `"Reed"` — uses SaxophoneModel (original). Fewer parameters. Use for oboe, agile reed voices.
 **Ports in:** `breathPressure`, `reedStiffness`, `reedAperture`, `blowPosition`, `noiseGain`, `vibratoFreq`, `vibratoGain`, `nlType`, `nlAmount`, `nlFreqMod`, `nlAttack`, `pitchMultiplier`
 **Ports out:** `signalOut`
 
@@ -555,17 +588,92 @@ Note Tail IS needed in KS Attack mode (mode=1) since the HG sustain body doesn't
     "breathPressure": 0.70,  // driving force — must be ~0.55+ for oscillation
     "reedStiffness": 0.50,   // reed slope: 0.2=soft/round, 0.7+=stiff/bright/nasal
     "reedAperture": 0.50,    // reed resting opening offset
-    "blowPosition": 0.20,    // split ratio of bore delay lines (0.05=clarinet, 0.20=sax, 0.40=oboe)
+    "blowPosition": 0.20,    // see Clarinet section below — same semantics
     "noiseGain": 0.20,       // breath turbulence (0–0.4)
-    "vibratoFreq": 5.735,    // vibrato Hz (0–12)
-    "vibratoGain": 0.0,      // vibrato depth (0=off)
+    "vibratoFreq": 5.735,
+    "vibratoGain": 0.0,
     "nlType": 0,             // 0=open-end, 1=leaky avg, 2=signal², 3=sine@nlFreqMod, 4=sine@pitch
-    "nlAmount": 0.0,         // nonlinearity depth (0=bypassed, inside loop)
-    "nlFreqMod": 10.0,       // oscillator Hz for nlType 3 (0–200)
-    "nlAttack": 0.10,        // nonlinearity ramp-in seconds
-    "pitchMultiplier": 1.0   // pitch ratio: 1.0=no change, 2.0=octave up, 0.5=octave down
+    "nlAmount": 0.0,
+    "nlFreqMod": 10.0,
+    "nlAttack": 0.10,
+    "pitchMultiplier": 1.0
 }
 ```
+
+---
+
+### Clarinet (conical bore waveguide — full-featured)
+**Type name:** `"Clarinet"` — uses SaxophoneModel2. Despite the type name, this container produces BOTH clarinet AND saxophone depending on parameters. **Always prefer this over Reed for new instruments.**
+**Ports in:** `breathPressure`, `reedStiffness`, `reedAperture`, `blowPosition`, `noiseGain`, `vibratoFreq`, `vibratoGain`, `nlType`, `nlAmount`, `nlFreqMod`, `nlAttack`, `vocalTractFreq`, `vocalTractGain`, `jawVibratoBlend`, `growlFreq`, `growlDepth`, `pitchMultiplier`
+**Static params (no port, inspector only):** `vocalTractQ`, `bellReflection`, `attackChiffGain`, `attackOverpressure`, `reedSaturation`
+**Ports out:** `signalOut`
+
+```json
+"parameters": {
+    "breathPressure": 0.72,       // driven by Envelope Engine via breathPressure port
+    "reedStiffness": 0.28,        // 0.20–0.35=clarinet (soft), 0.40–0.55=saxophone (flexible)
+    "reedAperture": 0.54,         // reed opening; wider=more breath flow, faster attack
+    "blowPosition": 0.45,         // *** KEY PARAMETER — see table below ***
+    "noiseGain": 0.05,            // clarinet=0.04–0.07, saxophone=0.14–0.20
+    "vibratoFreq": 5.3,
+    "vibratoGain": 0.0,           // set in score via curves; 0 here
+    "nlType": 0,                  // clarinet=0 (off), saxophone=2 (signal² richness)
+    "nlAmount": 0.0,              // saxophone: 0.25–0.32
+    "nlFreqMod": 10.0,
+    "nlAttack": 0.10,
+    "vocalTractFreq": 490.0,      // clarinet='oo'(480–520Hz), saxophone='ah'(720–780Hz)
+    "vocalTractQ": 3.5,           // clarinet=3.0–4.0 (narrow), saxophone=1.8–2.5 (wide)
+    "vocalTractGain": 0.20,       // clarinet=0.15–0.22, saxophone=0.32–0.42
+    "jawVibratoBlend": 0.12,      // clarinet=0.10–0.20 (diaphragm vib), saxophone=0.75–0.85 (jaw vib)
+    "growlFreq": 85.0,
+    "growlDepth": 0.0,            // 0=off; 0.1=rasp; 0.3=audible growl
+    "bellReflection": 0.92,       // clarinet=0.88–0.95 (small bell), saxophone=0.68–0.76 (flared bell)
+    "attackChiffGain": 3.5,       // clarinet=3.0–4.5 (soft), saxophone=6.0–8.0 (popped)
+    "attackOverpressure": 0.28,   // clarinet=0.25–0.35, saxophone=0.50–0.65
+    "reedSaturation": 0.42,       // clarinet=0.35–0.50 (clean), saxophone=0.55–0.70 (cutting)
+    "pitchMultiplier": 1.0
+}
+```
+
+#### blowPosition — the primary instrument identity parameter
+
+| Value | Character | Why |
+|-------|-----------|-----|
+| 0.05–0.20 | **Saxophone** | Short reed segment → all harmonics present at junction (conical bore native mode) |
+| 0.40–0.50 | **Clarinet** | Long reed segment → even harmonics suppressed at junction (mimics cylindrical odd-harmonic bias) |
+
+**Empirically confirmed.** The header comment in the source code is wrong — the correct mapping is the reverse of what it says. Always use 0.45 for clarinet, 0.10–0.15 for saxophone.
+
+#### Saxophone vs Clarinet — full parameter comparison
+
+| Parameter | Clarinet | Saxophone | Notes |
+|-----------|----------|-----------|-------|
+| `blowPosition` | 0.45 | 0.12 | Single most important differentiator |
+| `bellReflection` | 0.88–0.95 | 0.68–0.76 | Saxophone bell is wide/open |
+| `vocalTractFreq` | 480–520 Hz ("oo") | 720–780 Hz ("ah") | Player's throat shape |
+| `vocalTractQ` | 3.0–4.0 | 1.8–2.5 | Narrow vs wide mouthpiece |
+| `vocalTractGain` | 0.15–0.22 | 0.32–0.42 | Saxophone has prominent honk |
+| `reedSaturation` | 0.35–0.50 | 0.55–0.70 | Saxophone cuts through |
+| `attackChiffGain` | 3.0–4.5 | 6.0–8.0 | Saxophone has popped tongue |
+| `attackOverpressure` | 0.25–0.35 | 0.50–0.65 | Same |
+| `jawVibratoBlend` | 0.10–0.20 | 0.75–0.85 | Clarinet=diaphragm, sax=jaw |
+| `noiseGain` | 0.04–0.07 | 0.14–0.20 | Saxophone is breathier |
+| `nlType` | 0 (off) | 2 (signal²) | Saxophone benefits from harmonic drive |
+| `nlAmount` | 0.0 | 0.25–0.32 | — |
+| HG gainA (waveguide) | 0.28–0.32 | 0.48–0.58 | Waveguide contributes more in sax |
+| HG gainB (additive) | 1.0 | 0.75–0.85 | — |
+| HG DNA | Odd-only (clarinet) | Vocal Warm (all harmonics) | Fundamental spectral identity |
+| HG PAD bandwidth | 6/0.20 | 7/0.22 | Both in safe solo range |
+| Formant Body f1 | 500–520 Hz | 730–760 Hz | Body cavity resonance |
+| Formant Body f2 | 1500–1520 Hz | 1580–1620 Hz | — |
+| Formant directMix | 0.38–0.42 | 0.28–0.34 | Saxophone more colored |
+
+#### Clarinet sensitivity warning
+The clarinet parameter sweet spot is **narrow**. Small changes to `vocalTractFreq`, `bellReflection`, or `reedSaturation` can push the sound saxophonic. The validated baseline is `clarinet-2.sounit`. Do not drift far from those values when making clarinet variants.
+
+#### Validated designs
+- **Clarinet**: `C:\Users\nimus\Music\kala\clarinet-2.sounit` — confirmed very convincing. Do not use `clarinetv2.sounit` (too saxophonic).
+- **Saxophone base**: `C:\c++code\Kala\docs\saxophonev2.sounit` — confirmed sounds like saxophone, good base to build from.
 
 ---
 
@@ -713,9 +821,11 @@ Drive `blend` with Envelope Engine for dynamic breath evolution.
 |------|---------|-------------------|
 | `bowed-lyric.sounit` | Bowed + String DNA + Formant (f1=580/f2=1850) | bowPosition, Envelope max |
 | `bowed-intense.sounit` | Bowed near bridge + wider PADsynth, aggressive swell | nlAmount, Envelope 2 peak |
-| `saxophone.sounit` | Reed (nlType=2) + Vocal Warm, followDynamics | reedStiffness, gainB |
+| `saxophone.sounit` | Reed/old (nlType=2) + Vocal Warm — superseded by saxophonev2 | reedStiffness, gainB |
 | `oboe.sounit` | Reed (nlType=3) + Formant (f1=850/f2=2700) nasal | f1Freq, reedAperture |
-| `clarinet-reed.sounit` | Reed (nlType=1) + Odd Only Clarinet DNA | reedStiffness, gainB |
+| `clarinet-reed.sounit` | Reed/old (nlType=1) + Odd Only — superseded by clarinet-2 | reedStiffness, gainB |
+| `clarinet-2.sounit` ✓ | **Clarinet** — Clarinet container (blowPos=0.45) + Odd Only HG + FormantBody(520/1500Hz). Confirmed very convincing. | vocalTractFreq, bellReflection, gainA |
+| `saxophonev2.sounit` ✓ | **Saxophone base** — Clarinet container (blowPos=0.12, bellReflection=0.72, VT=750Hz) + Vocal Warm HG. Confirmed saxophone character. In `docs/` folder. | blowPosition, vocalTractGain, gainA |
 
 ### Soprano register — DONE
 `C:\Users\nimus\Music\kala\sounit\soprano\`
@@ -743,7 +853,7 @@ Drive `blend` with Envelope Engine for dynamic breath evolution.
 
 | Color | Category | Containers |
 |-------|----------|------------|
-| `#3498db` | Blue — Essential | HG, StoS, Signal Mixer, Note Tail, Attack, Karplus Strong, Wavetable Synth, Recorder, Bowed, Reed |
+| `#3498db` | Blue — Essential | HG, StoS, Signal Mixer, Note Tail, Attack, Karplus Strong, Wavetable Synth, Recorder, Bowed, Reed, Clarinet |
 | `#e67e22` | Orange — Shaping | Rolloff Processor, Spectrum Blender, Formant Body, Noise Color Filter, Breath Turbulence |
 | `#27ae60` | Green — Modifiers | Envelope Engine, Drift Engine, LFO, Physics System, Easing Applicator, Frequency Mapper |
 | `#9b59b6` | Purple — Filters | 10-Band EQ, Comb Filter, LP/HP Filter, IR Convolution |
@@ -759,6 +869,12 @@ Drive `blend` with Envelope Engine for dynamic breath evolution.
 - **Variation methodology** (user pattern): Keep core synthesis → add EQ bandpass + IR Convolution (replace Note Tail) = "placed in space" variant. Remove bow velocity envelope = "static" variant.
 - **Note Tail vs IR Convolution**: Never use both — IR Convolution already has hasTail()=true. Use Note Tail only for pure synthesis chains (no IR).
 - **Follow Dynamics**: `Envelope Engine` with `followDynamics: 1` (and `envelopeSelect: 0`) routes the score pen-pressure directly as a control signal — no custom envelope needed.
+- **Reed vs Clarinet container**: `"type": "Reed"` = SaxophoneModel (legacy, fewer params). `"type": "Clarinet"` = SaxophoneModel2 (full-featured). Always use Clarinet for new designs. Despite the type name, Clarinet produces saxophone at blowPosition=0.12 and clarinet at blowPosition=0.45.
+- **blowPosition is the primary instrument identity**: 0.05–0.20 = saxophone (all harmonics), 0.40–0.50 = clarinet (even harmonics suppressed). The source header has this backwards — empirically confirmed correct mapping above.
+- **Clarinet: HG must dominate**: For clarinet, gainA (waveguide) must be 0.28–0.32 and gainB (HG, odd-only DNA) must be 1.0. The waveguide alone at blowPosition=0.45 is not convincing — the odd-only HG carries the spectral identity.
+- **Saxophone: waveguide contributes more**: For saxophone, gainA=0.48–0.58 (waveguide much more present than in clarinet). The conical bore is its native mode and produces full harmonics naturally.
+- **Clarinet sweet spot is narrow**: Small deviations in vocalTractFreq, bellReflection, or reedSaturation can shift the sound saxophonic. Stick close to clarinet-2.sounit values when making clarinet variants.
+- **VL70-m physical mappings**: bellReflection = inverse of Absorption (low reflection = open bell = saxophone); vocalTractFreq/Q = Throat Formant frequency/intensity; reedSaturation = Graham Function harmonic drive; blowPosition = Short Length; reedStiffness = inverse Reed Flexibility.
 
 ---
 

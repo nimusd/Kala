@@ -55,6 +55,9 @@ private:
     QTimeEdit *durationEdit;     // HH:MM:SS (for Absolute)
     QSpinBox *barsSpinBox;       // Number of bars (for Musical)
 
+    // Editing behaviour
+    QSpinBox *preRenderDelaySpinBox;
+
     // Calculated info labels
     QLabel *infoBarDuration;
     QLabel *infoTotalDuration;

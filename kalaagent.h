@@ -43,9 +43,16 @@ signals:
     void thinkingStarted();   // Show spinner / "thinking..." in UI
     void thinkingFinished();  // Hide spinner
 
+    // Emitted whenever the history size changes — for the message count indicator.
+    void historyCountChanged(int messageCount);
+
 private:
     // Build the full messages array (system message prepended) for the API request
     QJsonArray buildRequestMessages() const;
+
+    // Trim old tool-call blocks from history before sending to API.
+    // Keeps all non-tool-block messages and only the LAST complete tool block.
+    QJsonArray trimForRequest(const QJsonArray &msgs) const;
 
     // Send current conversation to the LLM; roundsLeft caps the tool-call loop
     void continueConversation(int roundsLeft);
@@ -62,7 +69,13 @@ private:
     // Defined as a static function so it can be updated independently.
     static QString buildSystemPrompt();
 
-    static constexpr int kMaxToolRounds = 12;
+    // Session persistence — survives companion resets within one app session,
+    // deleted on app close (or manual Clear).
+    void saveHistory();
+    void loadHistory();
+    static QString sessionFilePath();
+
+    static constexpr int kMaxToolRounds = 40;
 
     LLMClient  *m_client;
     KalaTools  *m_tools;

@@ -28,7 +28,9 @@
 #include "recordermodel.h"
 #include "bowedmodel.h"
 #include "saxophonemodel.h"
+#include "saxophonemodel2.h"
 #include "tailprocessor.h"
+#include "percussionmodel.h"
 #include "spectrum.h"
 #include <QMap>
 #include <QVector>
@@ -72,6 +74,17 @@ public:
     // Returns true if graph contains containers that produce a tail (reverb, string decay, etc.)
     bool hasTail() const;
 
+    // Returns true if graph contains a TailProcessor (Note Tail container)
+    bool hasTailProcessor() const { return m_hasTailProcessor; }
+
+    // Returns true if graph contains a Saxophone container
+    bool hasSaxophoneModel() const;
+
+    // Returns true if graph contains a Percussion container.
+    // Used by the audio engine to treat notes as triggers (cap note-body length).
+    bool hasPercussion() const;
+
+
     // Returns true if graph contains a Karplus-Strong with string damping enabled
     bool hasStringDamping() const;
 
@@ -109,7 +122,9 @@ private:
         RecorderModel   *recorderModel   = nullptr;
         BowedModel      *bowedModel      = nullptr;
         SaxophoneModel  *reedModel       = nullptr;
-        TailProcessor   *tailProc        = nullptr;
+        SaxophoneModel2 *saxophoneModel  = nullptr;
+        TailProcessor    *tailProc         = nullptr;
+        PercussionModel  *percussionModel  = nullptr;
 
         // Data storage for this container's outputs
         Spectrum spectrumOut;
@@ -159,7 +174,9 @@ private:
             delete recorderModel;
             delete bowedModel;
             delete reedModel;
+            delete saxophoneModel;
             delete tailProc;
+            delete percussionModel;
         }
     };
 

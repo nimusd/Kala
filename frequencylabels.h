@@ -17,6 +17,7 @@ public:
         QColor color;
         QString noteName;
         bool isThicker;
+        bool isAccidental;  // Chromatic degree drawn dark grey, label omitted
     };
 
     explicit FrequencyLabels(QWidget *parent = nullptr);

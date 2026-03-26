@@ -33,6 +33,9 @@ struct CompositionSettings
     int sampleRate;         // Sample rate in Hz (44100, 48000, 96000, etc.)
     int bitDepth;           // Bit depth for export (16, 24, 32)
 
+    // Editing behaviour
+    int preRenderDelayMs;   // Background pre-render debounce delay (50-2000 ms)
+
     // Constructors
     CompositionSettings();  // Default values
 

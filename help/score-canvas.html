@@ -87,15 +87,25 @@
         <tr>
           <td>8+</td>
           <td>Pink, Cyan, Gray</td>
-          <td>Extended degrees</td>
+          <td>Extended degrees (8-note and larger scales)</td>
+        </tr>
+        <tr>
+          <td>—</td>
+          <td>Light grey</td>
+          <td>Accidental (chromatic) degrees — notes outside the diatonic
+            core of the scale, drawn at reduced visual weight so they read
+            as background grid rather than primary structure. Currently used
+            by Equal Temperament.</td>
         </tr>
       </tbody>
     </table>
-    <p>The tonic (red) and fifth (blue) are drawn with thicker lines,
-      emphasizing the foundational harmonic relationship that appears in
-      virtually all musical traditions. This color system works regardless of
-      which scale you choose—the red line is always “home,” whether you’re
-      working in Western major, Arabic Maqam Rast, or Indonesian Pelog.</p>
+    <p>The tonic (red) and fifth are drawn with thicker lines, emphasizing
+      the foundational harmonic relationship that appears in virtually all
+      musical traditions. In 7-note scales the fifth is the 5th degree
+      (blue); in the 12-note Equal Temperament scale it is the 8th degree
+      (G, blue). This color system works regardless of which scale you
+      choose—the red line is always “home,” whether you’re working in
+      Western major, Arabic Maqam Rast, or Indonesian Pelog.</p>
     <h3 id="logarithmic-frequency-space">Logarithmic Frequency Space</h3>
     <p>The vertical axis uses logarithmic spacing, matching how humans perceive
       pitch. Each octave occupies the same vertical distance (100 pixels by
@@ -107,17 +117,44 @@
       to a major third in another, because they sound the same in terms of
       interval quality.</p>
     <h3 id="world-scales">World Scales</h3>
-    <p>Kala includes scales from musical traditions around the globe:</p>
-    <p><strong>Western Tunings</strong> - Just Intonation (pure harmonic ratios)
-      - Pythagorean (based on perfect fifths) - Equal Temperament (modern piano
-      tuning) - Quarter-Comma Meantone (Renaissance/Baroque)</p>
-    <p><strong>Arabic Maqamat</strong> - Rast, Bayati, Saba, Hijaz, Nahawand,
-      Kurd</p>
-    <p><strong>Indian Classical</strong> - Hindustani: Bhairav, Yaman, Todi,
-      Bhairavi - Carnatic: Shankarabharana, Mayamalavagowla</p>
-    <p><strong>East Asian</strong> - Chinese Pentatonic - Japanese Hirajoshi</p>
-    <p><strong>Indonesian Gamelan</strong> - Pelog (7-note with characteristic
-      unequal intervals) - Slendro (5-note with roughly equal ~240-cent steps)</p>
+    <p>Kala includes 49 scales from musical traditions around the globe:</p>
+    <p><strong>Western Tunings</strong> — Just Intonation (pure harmonic ratios)
+      · Pythagorean (based on perfect fifths) · Equal Temperament (full 12-note
+      chromatic scale; accidentals shown in light grey, key set via the Scale
+      Dialog’s Key selector) · Quarter-Comma Meantone (Renaissance/Baroque)
+      · Whole Tone (6-note, all whole steps) · Half Diminished</p>
+    <p><strong>Diatonic Modes (Equal Temperament)</strong> — The seven modes
+      derived from the major scale. Each uses the same twelve pitches but starts
+      from a different degree, giving each its own character:
+      Ionian (major) · <strong>Dorian</strong> (minor with major 6th — the jazz
+      minor mode, used in "So What" and countless standards) · Phrygian (minor
+      2nd, Spanish/flamenco flavour) · <strong>Lydian</strong> (raised 4th,
+      bright major) · <strong>Mixolydian</strong> (flat 7th, dominant blues)
+      · Aeolian (natural minor) · Locrian (diminished 5th on tonic).</p>
+    <p>These are the same modes used in medieval church music — Dorian, Phrygian,
+      Lydian and Mixolydian were the four authentic modes of Gregorian chant. Jazz
+      adopted them and added the melodic minor modes below.</p>
+    <p><strong>Melodic Minor Modes (Jazz)</strong> — The seven modes of the
+      ascending melodic minor scale, central to modern jazz harmony especially over
+      dominant and altered chords:
+      Melodic Minor · Dorian ♭2 · Lydian Augmented
+      · <strong>Lydian Dominant</strong> (raised 4th + flat 7th — over dom7♯11
+      and tritone substitutions) · Mixolydian ♭6
+      · <strong>Locrian ♯2</strong> (half-diminished, over m7♭5 chords)
+      · <strong>Altered / Super Locrian</strong> (♭9 ♯9 ♭5 ♭13 — maximum tension
+      over altered dominants).</p>
+    <p><strong>Arabic Maqamat</strong> — Rast, Bayati, Saba, Hijaz, Nahawand,
+      Kurd, Sikah (neutral 3rd), Ajam (major with flat 7th), Athar Kurd
+      (augmented 2nd between 6th and 7th)</p>
+    <p><strong>Persian Dastgah</strong> — Shur (koron inflections) · Mahur
+      (Persian major) · Segah (neutral 3rd and 7th) · Chahargah (augmented 2nds)
+      · Homayun (Hijaz lower tetrachord)</p>
+    <p><strong>Indian Classical</strong> — Hindustani: Bhairav, Yaman, Todi,
+      Bhairavi, Kafi, Asavari, Khamaj, Marwa, Purvi — Carnatic:
+      Shankarabharana, Mayamalavagowla</p>
+    <p><strong>East Asian</strong> — Chinese Pentatonic · Japanese Hirajoshi</p>
+    <p><strong>Indonesian Gamelan</strong> — Pelog (7-note with characteristic
+      unequal intervals) · Slendro (5-note with roughly equal ~240-cent steps)</p>
     <p>Each scale generates its own set of colored lines, with the spacing
       reflecting the actual intervals of that tuning system. When you select
       Maqam Hijaz, for instance, you’ll see the characteristic augmented second
@@ -732,8 +769,9 @@
         visibility</li>
       <li><strong>Non-destructive curve editing</strong> via on-canvas control
         points, presets, or the full curve designer</li>
-      <li><strong>World scales</strong> supporting Western, Arabic, Indian, and
-        Asian musical traditions</li>
+      <li><strong>World scales</strong> — 49 scales spanning Western tunings,
+        diatonic modes, jazz melodic minor modes, Arabic Maqamat, Persian Dastgah,
+        Indian Classical, East Asian, and Indonesian Gamelan traditions</li>
       <li><strong>Continuous pitch</strong> for glissando, portamento, and
         microtonal expression</li>
       <li><strong>Segment system</strong> for subdividing notes with independent

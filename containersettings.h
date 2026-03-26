@@ -323,6 +323,24 @@ public:
         double nlAttackMax       = 2.0;
     } reed;
 
+    // ========== Percussion Settings ==========
+    struct PercussionSettings {
+        double strikePositionMin  = 0.0;
+        double strikePositionMax  = 1.0;
+        double strikeDurationMin  = 0.5;
+        double strikeDurationMax  = 50.0;
+        double inharmonicityMin   = 0.0;
+        double inharmonicityMax   = 1.0;
+        double decayTimeMin       = 0.005;
+        double decayTimeMax       = 15.0;
+        double highDecayRateMin   = 0.1;
+        double highDecayRateMax   = 5.0;
+        int    numModesMin        = 2;
+        int    numModesMax        = 16;
+        double noiseGainMin       = 0.0;
+        double noiseGainMax       = 1.0;
+    } percussion;
+
     // ========== Easing Settings ==========
     // Default parameter values for easing functions (used by both Sound Engine and Score)
     struct EasingSettings {

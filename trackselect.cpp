@@ -75,11 +75,9 @@ void TrackSelector::setActiveTrack(int index)
             tracks[activeTrackIndex].isActive = false;
         }
 
-        // Activate new track — collapse to single selection
-        for (auto &t : tracks) t.isSelected = false;
+        // Activate new track
         activeTrackIndex = index;
         tracks[index].isActive = true;
-        tracks[index].isSelected = true;
 
         update();
         emit trackSelected(index);

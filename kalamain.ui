@@ -1019,10 +1019,16 @@
    <property name="text">
     <string>Undo (Ctrl+Z)</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
   </action>
   <action name="actionRedo_Ctrl_Y">
    <property name="text">
     <string>Redo (Ctrl+Y)</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Y</string>
    </property>
   </action>
   <action name="actionCut_Ctrl_X">

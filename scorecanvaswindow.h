@@ -67,6 +67,8 @@ private slots:
     void onRenderCompleted();
     void onRenderCancelled();
 
+    void scheduleBackgroundRender();
+
     // Auto-scroll request from ScoreCanvas during lasso selection
     void onScoreAutoScroll(int dx, int dy);
 
@@ -97,6 +99,10 @@ private:
 
     // Render progress bar
     QProgressBar *renderProgressBar;
+
+    // Background pre-render
+    QTimer *m_renderDebounceTimer = nullptr;
+    int m_backgroundRenderCount = 0;  // >0 means background renders are active
 
     // Composition settings widgets (Phase 3)
     QPushButton *timeModeToggle;      // Absolute ↔ Musical
@@ -201,6 +207,9 @@ public:
 
     // Get next available track color from palette
     QColor getNextTrackColor();
+
+    // Refresh toolbar spinboxes to reflect the time sig/tempo at the current now-marker position
+    void refreshToolbar();
 
 public slots:
     void stopPlayback(bool stopAudioEngine = true);

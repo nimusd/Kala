@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Clarinet</title>
+  </head>
+  <body>
+    <h1 id="clarinet-documentation">Clarinet Documentation</h1>
+    <h2 id="overview">Overview</h2>
+    <p>The Clarinet container is an <strong>extended conical-bore physical
+        model</strong> of a reed instrument. It is built on the
+      <em>Saxofony</em> waveguide algorithm (Perry R. Cook / STK) and adds
+      a vocal-tract formant filter, jaw-aperture vibrato, growl AM, an
+      attack chiff burst, and a configurable nonlinear allpass section
+      inside the feedback loop. The result covers a wide expressive range
+      — from a woody clarinet-like tone to a more assertive saxophone-like
+      character — depending on how <code>blowPosition</code> and the vocal
+      tract are set.</p>
+    <p>Unlike the <strong>Reed</strong> container (which models a simpler
+      version of the same algorithm), Clarinet exposes the full parameter
+      surface: the vocal tract output formant, an authentic jaw-aperture
+      vibrato path, a growl AM modulator, a transient chiff and
+      overpressure spike at note onset, and adjustable reed saturation.
+      For a pure cylindrical-bore clarinet timbre, pair the Clarinet
+      container with a Harmonic Generator using an odd-only DNA spectrum
+      and blend the two in a Signal Mixer.</p>
+    <h2 id="category">Category</h2>
+    <p><strong>Essential</strong> (Blue) &mdash; Core sound generation</p>
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 20%">
+        <col style="width: 60%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>breathPressure</code></td>
+          <td>Control</td>
+          <td>Modulatable breath pressure (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>reedStiffness</code></td>
+          <td>Control</td>
+          <td>Modulatable reed stiffness (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>reedAperture</code></td>
+          <td>Control</td>
+          <td>Modulatable reed opening offset (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>blowPosition</code></td>
+          <td>Control</td>
+          <td>Modulatable bore split point (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Control</td>
+          <td>Modulatable breath noise level (0&ndash;0.4)</td>
+        </tr>
+        <tr>
+          <td><code>vibratoFreq</code></td>
+          <td>Control</td>
+          <td>Modulatable vibrato rate in Hz (0&ndash;12)</td>
+        </tr>
+        <tr>
+          <td><code>vibratoGain</code></td>
+          <td>Control</td>
+          <td>Modulatable vibrato depth (0&ndash;0.5); 0 disables vibrato</td>
+        </tr>
+        <tr>
+          <td><code>nlType</code></td>
+          <td>Control</td>
+          <td>Nonlinear allpass modulation source: 0&ndash;4 (see Nonlinear Section)</td>
+        </tr>
+        <tr>
+          <td><code>nlAmount</code></td>
+          <td>Control</td>
+          <td>Nonlinear allpass depth &mdash; 0.0 fully bypasses it (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>nlFreqMod</code></td>
+          <td>Control</td>
+          <td>Modulation frequency for NL types 3 and 4 in Hz (0&ndash;200)</td>
+        </tr>
+        <tr>
+          <td><code>nlAttack</code></td>
+          <td>Control</td>
+          <td>Ramp-in time for the nonlinearity at note start (0.001&ndash;2.0 s)</td>
+        </tr>
+        <tr>
+          <td><code>vocalTractFreq</code></td>
+          <td>Control</td>
+          <td>Modulatable vocal tract formant centre frequency in Hz (200&ndash;3000)</td>
+        </tr>
+        <tr>
+          <td><code>vocalTractGain</code></td>
+          <td>Control</td>
+          <td>Modulatable vocal tract mix level (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>jawVibratoBlend</code></td>
+          <td>Control</td>
+          <td>Modulatable vibrato path: 0 = breath tremolo, 1 = jaw aperture (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>growlFreq</code></td>
+          <td>Control</td>
+          <td>Modulatable growl AM rate in Hz (20&ndash;200)</td>
+        </tr>
+        <tr>
+          <td><code>growlDepth</code></td>
+          <td>Control</td>
+          <td>Modulatable growl AM depth (0&ndash;0.5); 0 disables growl</td>
+        </tr>
+        <tr>
+          <td><code>attackChiffGain</code></td>
+          <td>Control</td>
+          <td>Modulatable chiff burst gain at note onset (0&ndash;10)</td>
+        </tr>
+        <tr>
+          <td><code>attackOverpressure</code></td>
+          <td>Control</td>
+          <td>Modulatable breath overpressure spike at note onset (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>reedSaturation</code></td>
+          <td>Control</td>
+          <td>Modulatable reed-opening limiter &mdash; higher values add odd-harmonic content (0&ndash;1)</td>
+        </tr>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Control</td>
+          <td>Modulatable pitch offset as a frequency ratio (1.0 = no detune)</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <colgroup>
+        <col style="width: 20%">
+        <col style="width: 20%">
+        <col style="width: 60%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>signalOut</code></td>
+          <td>Signal</td>
+          <td>The synthesised reed tone with vocal tract, vibrato, and growl applied</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="parameters">Parameters</h2>
+    <h3 id="core-reed">Core Reed</h3>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>breathPressure</code></td>
+          <td>Float</td>
+          <td>0.72</td>
+          <td>0&ndash;1</td>
+          <td>Static air pressure applied to the reed. Higher values produce a louder, more driven tone. Full physical excitation from sample 1 (no internal breath envelope).</td>
+        </tr>
+        <tr>
+          <td><code>reedStiffness</code></td>
+          <td>Float</td>
+          <td>0.45</td>
+          <td>0&ndash;1</td>
+          <td>Slope of the reed valve function. Higher values make the reed harder to open &mdash; brighter, more cutting tone.</td>
+        </tr>
+        <tr>
+          <td><code>reedAperture</code></td>
+          <td>Float</td>
+          <td>0.52</td>
+          <td>0&ndash;1</td>
+          <td>DC offset of the reed opening. Sets the resting aperture of the reed before pressure is applied.</td>
+        </tr>
+        <tr>
+          <td><code>blowPosition</code></td>
+          <td>Float</td>
+          <td>0.45</td>
+          <td>0&ndash;1</td>
+          <td>Position of the bore split point. <strong>Counterintuitive:</strong> low values (0.05&ndash;0.20) produce a saxophone-like tone with a full harmonic series; high values (0.40&ndash;0.50) produce a clarinet-like tone with odd harmonics dominant. Default 0.45 gives clarinet character.</td>
+        </tr>
+        <tr>
+          <td><code>noiseGain</code></td>
+          <td>Float</td>
+          <td>0.12</td>
+          <td>0&ndash;0.4</td>
+          <td>Level of white noise injected into the bore. Adds breath texture and airiness.</td>
+        </tr>
+        <tr>
+          <td><code>bellReflection</code></td>
+          <td>Float</td>
+          <td>0.85</td>
+          <td>0.5&ndash;0.99</td>
+          <td>Reflection coefficient at the bell end of the bore. Higher values give more resonance and sustain; lower values produce a duller, more open tone.</td>
+        </tr>
+        <tr>
+          <td><code>reedSaturation</code></td>
+          <td>Float</td>
+          <td>0.6</td>
+          <td>0&ndash;1</td>
+          <td>Reed-opening limiter (clamp on negative reed coefficient). With the correct negative-slope reed model, the reed can open fully; <code>reedSaturation</code> limits how far it opens. Higher values add odd-harmonic content and tighten the tone.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="vocal-tract">Vocal Tract</h3>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>vocalTractFreq</code></td>
+          <td>Float</td>
+          <td>700</td>
+          <td>200&ndash;3000 Hz</td>
+          <td>Centre frequency of the vocal tract RBJ bandpass filter applied to the output. Approximate vowel positions: ~500 Hz = &ldquo;oh&rdquo;, ~700 Hz = &ldquo;ah&rdquo;, ~1200 Hz = &ldquo;ee&rdquo;.</td>
+        </tr>
+        <tr>
+          <td><code>vocalTractQ</code></td>
+          <td>Float</td>
+          <td>2.5</td>
+          <td>0.5&ndash;10</td>
+          <td>Q (resonance) of the vocal tract filter. Low Q = broad, gentle colouring; high Q = pronounced resonant peak.</td>
+        </tr>
+        <tr>
+          <td><code>vocalTractGain</code></td>
+          <td>Float</td>
+          <td>0.35</td>
+          <td>0&ndash;1</td>
+          <td>Mix level of the vocal tract filter. 0 = no vocal colouring; ~0.35 = warm, subtle; ~0.8 = strongly vocal. Applied as a post-process output formant (not a feedback path).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="vibrato">Vibrato</h3>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>vibratoFreq</code></td>
+          <td>Float</td>
+          <td>5.5</td>
+          <td>0&ndash;12 Hz</td>
+          <td>Vibrato oscillator rate.</td>
+        </tr>
+        <tr>
+          <td><code>vibratoGain</code></td>
+          <td>Float</td>
+          <td>0.04</td>
+          <td>0&ndash;0.5</td>
+          <td>Vibrato depth. 0 disables vibrato entirely. The modulation path (breath tremolo vs. jaw aperture) is set by <code>jawVibratoBlend</code>.</td>
+        </tr>
+        <tr>
+          <td><code>jawVibratoBlend</code></td>
+          <td>Float</td>
+          <td>0.7</td>
+          <td>0&ndash;1</td>
+          <td>Selects the vibrato mechanism. 0 = pure breath pressure tremolo (volume modulation); 1 = pure jaw aperture modulation (pitch modulation, physically authentic). Blend values mix both paths.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="growl">Growl</h3>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>growlFreq</code></td>
+          <td>Float</td>
+          <td>85</td>
+          <td>20&ndash;200 Hz</td>
+          <td>Rate of the growl AM oscillator. Lower frequencies (~80 Hz) produce a classic saxophone growl; higher frequencies approach a rough flutter.</td>
+        </tr>
+        <tr>
+          <td><code>growlDepth</code></td>
+          <td>Float</td>
+          <td>0.0</td>
+          <td>0&ndash;0.5</td>
+          <td>AM depth of the growl modulator applied to breath pressure. 0 = off; ~0.1 = subtle rasp; ~0.3 = noticeable growl; ~0.45 = intense, distorted character.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="attack">Attack</h3>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>attackChiffGain</code></td>
+          <td>Float</td>
+          <td>5.0</td>
+          <td>0&ndash;10</td>
+          <td>Amplitude of the noise burst injected at note onset. Produces the initial chiff or consonant of a real reed attack. 0 removes it entirely for a smooth onset.</td>
+        </tr>
+        <tr>
+          <td><code>attackOverpressure</code></td>
+          <td>Float</td>
+          <td>0.4</td>
+          <td>0&ndash;1</td>
+          <td>Additional breath pressure spike added for the first few milliseconds of each note. Simulates the initial tongue/diaphragm attack of a player and helps the bore jump into oscillation quickly.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="nonlinear">Nonlinear Allpass Section</h3>
+    <p>When <code>nlAmount &gt; 0</code>, a <strong>first-order nonlinear
+        allpass filter</strong> is applied inside the waveguide feedback
+      loop (before the OneZero reflection filter) on every sample. Because
+      it sits inside the loop, harmonic content accumulates with each
+      reflection round-trip rather than acting as a simple post-process.
+      The allpass coefficient θ is derived from a modulation source scaled
+      by <code>nlAmount</code> and clamped to (&minus;0.999, 0.999) for
+      stability.</p>
+    <table>
+      <colgroup>
+        <col style="width: 8%">
+        <col style="width: 24%">
+        <col style="width: 68%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Source</th>
+          <th>Character</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0</td>
+          <td>Open-end signal</td>
+          <td>Signal-dependent modulation. Thickens tone and adds harmonic richness that tracks the bore vibration. The most natural-sounding type for reed timbres.</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>Leaky average of open-end signal</td>
+          <td>Slow, DC-like drift of the coefficient. Produces a gentle tonal shift over time rather than per-sample modulation.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Open-end signal&sup2;</td>
+          <td>Always positive; responds to energy bursts in the bore. Asymmetric modulation that emphasises the attack and forte moments.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Sine wave at <code>nlFreqMod</code> Hz</td>
+          <td>Periodic, independent tremolo-like modulation. At low <code>nlFreqMod</code> values produces slow tonal wobble; at higher values adds audible sidebands.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Sine wave at pitch Hz</td>
+          <td>Sine locked to the fundamental frequency. Pitch-coherent waveshaping that maintains consistent timbre across the register.</td>
+        </tr>
+      </tbody>
+    </table>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>nlType</code></td>
+          <td>Int</td>
+          <td>0</td>
+          <td>0&ndash;4</td>
+          <td>Modulation source for the allpass coefficient (see table above)</td>
+        </tr>
+        <tr>
+          <td><code>nlAmount</code></td>
+          <td>Float</td>
+          <td>0.22</td>
+          <td>0&ndash;1</td>
+          <td>Depth of nonlinear filtering. 0 = bypassed; 0.05&ndash;0.15 = subtle enrichment; 0.20&ndash;0.40 = clear tonal thickening; &gt;0.6 = aggressive/experimental.</td>
+        </tr>
+        <tr>
+          <td><code>nlFreqMod</code></td>
+          <td>Float</td>
+          <td>10.0</td>
+          <td>0&ndash;200 Hz</td>
+          <td>Oscillator frequency for NL type 3 only. Ignored by types 0, 1, 2, and 4.</td>
+        </tr>
+        <tr>
+          <td><code>nlAttack</code></td>
+          <td>Float</td>
+          <td>0.12</td>
+          <td>0.001&ndash;2.0 s</td>
+          <td>Ramp-in time for the nonlinearity at note start. Prevents a click when the allpass activates and lets the bore tone establish itself first.</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="pitch">Pitch</h3>
+    <table>
+      <colgroup>
+        <col style="width: 24%">
+        <col style="width: 10%">
+        <col style="width: 13%">
+        <col style="width: 13%">
+        <col style="width: 40%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Range</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>pitchMultiplier</code></td>
+          <td>Float</td>
+          <td>1.0</td>
+          <td>&gt;0</td>
+          <td>Frequency ratio applied on top of the note pitch. 1.0 = no detune. Use the Drift Engine or LFO on this port for pitch shimmer rather than direct LFO-to-pitchMultiplier connections (LFO is bipolar and can drive pitch out of range).</td>
+        </tr>
+      </tbody>
+    </table>
+    <h2 id="how-it-works">How It Works</h2>
+    <h3 id="bore-model">Conical Bore Waveguide</h3>
+    <p>The Clarinet container implements a conical-bore waveguide (the
+      <em>Saxofony</em> algorithm). Two coupled delay lines &mdash;
+      <code>delay0</code> (open end, length proportional to
+      <code>1&minus;blowPosition</code>) and <code>delay1</code> (bell
+      end, length proportional to <code>blowPosition</code>) &mdash;
+      represent the travelling wave in each half of the bore. On every
+      sample:</p>
+    <ol>
+      <li><strong>Reed table</strong>: Computes a reed coefficient from
+        <code>breathPressure + delay1_output</code> through a linear valve
+        function with a <em>negative slope</em>:
+        <code>slope = &minus;(0.1 + 0.4 &times; reedStiffness)</code>.
+        The negative slope is critical &mdash; it ensures high bore
+        pressure closes the reed (as in a real instrument). The coefficient
+        is clamped by <code>reedSaturation</code> to limit fully-open reed
+        excursions.</li>
+      <li><strong>Bore junction</strong>: The delay lines couple at the
+        blow position. The excitation signal fed into the junction is
+        <code>reedCoeff &times; pressureDiff + delay1_output</code>,
+        following the STK junction formula.</li>
+      <li><strong>OneZero filter</strong>: A one-zero FIR low-pass
+        <code>y[n] = 0.5 &times; (x[n] + x[n&minus;1])</code> applied at
+        the open end, modelling the low-frequency reflection characteristic
+        of the bore.</li>
+      <li><strong>Nonlinear allpass</strong> (optional): Inserted after
+        the OneZero filter and before it feeds back into the delay line,
+        adding harmonic richness on every round trip.</li>
+      <li><strong>Vocal tract formant</strong>: A RBJ bandpass filter
+        centred at <code>vocalTractFreq</code> with Q =
+        <code>vocalTractQ</code> is applied to the output signal (not
+        inside the feedback loop). The filtered signal is mixed with the
+        dry bore output at <code>vocalTractGain</code>.</li>
+      <li><strong>Growl AM</strong>: An AM oscillator at
+        <code>growlFreq</code> Hz modulates the breath pressure by
+        <code>growlDepth</code>, adding periodic amplitude variation that
+        simulates a growl technique.</li>
+      <li><strong>Vibrato</strong>: A sine oscillator at
+        <code>vibratoFreq</code> Hz produces pitch and/or amplitude
+        modulation. <code>jawVibratoBlend = 0</code> routes it entirely
+        into breath pressure (tremolo); <code>jawVibratoBlend = 1</code>
+        routes it into the reed aperture (jaw modulation, authentic
+        saxophone technique).</li>
+      <li><strong>Attack burst</strong>: On the first sample of each
+        (non-legato) note, a noise burst scaled by
+        <code>attackChiffGain</code> is injected into the bore, and
+        <code>breathPressure</code> is temporarily boosted by
+        <code>attackOverpressure</code> for a brief onset spike.</li>
+    </ol>
+    <h3 id="blow-position-detail">Blow Position and Harmonic Content</h3>
+    <p>The <code>blowPosition</code> parameter controls the split between
+      the two delay lines and has a counterintuitive effect on timbre:</p>
+    <ul>
+      <li><strong>0.05&ndash;0.20</strong>: The bore splits close to the
+        reed end. The short delay1 and long delay0 produce a tone with
+        a full harmonic series &mdash; saxophone-like, bright, and even
+        harmonics present.</li>
+      <li><strong>0.40&ndash;0.50</strong>: The bore splits at the centre.
+        The delay ratio emphasises odd harmonics and suppresses even ones
+        &mdash; clarinet-like, hollow, with characteristic register breaks.
+        <strong>This is the clarinet default (0.45).</strong></li>
+    </ul>
+    <p>For a pure clarinet tone, combine <code>blowPosition = 0.45</code>
+      with a <strong>Harmonic Generator</strong> using an odd-only DNA
+      spectrum (gainB dominant at 1.0) and blend the two with a Signal
+      Mixer. The HG carries the pitch and spectral identity; the Clarinet
+      contributes breath noise, attack transient, and expressive
+      modulation.</p>
+    <h3 id="legato">Legato Behaviour</h3>
+    <p>For legato note transitions the bore delay buffers, OneZero filter
+      state, and nonlinear allpass memory are all <strong>preserved</strong>.
+      The bore continues oscillating at the previous pitch; only the delay
+      lengths are updated. The attack burst is skipped, producing a smooth
+      slur with no re-onset transient. Vibrato phase is also preserved.</p>
+    <p>For non-legato notes, all bore state is cleared and the attack burst
+      fires normally.</p>
+    <h3 id="tail-behaviour">Tail Behaviour</h3>
+    <p>The Clarinet container has its own built-in tail mode. When a note
+      ends, the bore delay buffers drain naturally as breath pressure ramps
+      to zero. This typically takes less than 100 ms. The audio engine
+      detects silence and closes the tail cleanly. A separate Note Tail
+      container is generally <strong>not</strong> needed unless you want
+      a longer decay or let-ring effect beyond the natural bore drain.</p>
+    <h2 id="usage-patterns">Usage Patterns</h2>
+    <h3 id="pure-clarinet">Pure Clarinet (Waveguide + HG Blend)</h3>
+    <p>This is the recommended pattern for a realistic clarinet tone.
+      The Clarinet container provides attack texture and breath noise;
+      the HG carries the spectral character:</p>
+    <pre><code>Clarinet:
+  blowPosition:      0.45
+  breathPressure:    0.70
+  reedStiffness:     0.45
+  reedAperture:      0.50
+  noiseGain:         0.10
+  vocalTractFreq:    520
+  vocalTractQ:       1.8
+  vocalTractGain:    0.30
+
+Harmonic Generator (odd-only DNA, PAD 6 / 0.20):
+  gainA:   0.00   (spectrum DNA)
+  gainB:   1.00   (odd-only body — dominant)
+
+Signal Mixer:
+  gainA (Clarinet):  0.30
+  gainB (HG):        0.70
+
+→ Formant Body (520 / 1500 Hz, low Q)
+→ Note Tail</code></pre>
+    <h3 id="saxophone-mode">Saxophone-Like Mode</h3>
+    <pre><code>Clarinet:
+  blowPosition:      0.12   (full harmonic series)
+  breathPressure:    0.74
+  reedStiffness:     0.50
+  noiseGain:         0.12
+  vocalTractFreq:    700    (ah vowel)
+  vocalTractGain:    0.40
+  attackChiffGain:   6.0
+  attackOverpressure: 0.45</code></pre>
+    <h3 id="with-vibrato">Expressive Vibrato (Jaw Aperture Style)</h3>
+    <pre><code>Clarinet:
+  vibratoFreq:      5.5
+  vibratoGain:      0.06
+  jawVibratoBlend:  1.0    (authentic jaw aperture path)
+
+Envelope Engine → vibratoGain port:
+  Shape the vibrato to fade in after the initial attack
+  (ramp from 0 to 0.06 over 0.5 s)</code></pre>
+    <h3 id="with-growl">Growl / Extended Technique</h3>
+    <pre><code>Clarinet:
+  growlFreq:   85     (classic ~85 Hz saxophone growl rate)
+  growlDepth:  0.25   (clear but not overwhelming)
+
+Envelope Engine → growlDepth port:
+  Shape growl to increase on sustained or crescendo notes</code></pre>
+    <h3 id="with-nl">Nonlinear Warmth</h3>
+    <pre><code>Clarinet:
+  nlType:   0     (signal-dependent — most natural)
+  nlAmount: 0.18
+  nlAttack: 0.12</code></pre>
+    <p>Type 0 at low depth adds subtle upper partials that give the bore
+      model more of a &ldquo;lived-in&rdquo; quality without fundamentally
+      changing the character.</p>
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <h3 id="no-sound">No Sound / Very Weak Tone</h3>
+    <ol type="1">
+      <li>Ensure <code>breathPressure</code> is above ~0.50. Values below
+        this may not sustain oscillation.</li>
+      <li>Check that <code>reedAperture</code> is not set to 0.0 (fully
+        closed reed).</li>
+      <li>If <code>attackOverpressure = 0</code> and
+        <code>attackChiffGain = 0</code>, the bore must self-start from
+        internal noise &mdash; raise <code>noiseGain</code> slightly
+        (to ~0.10) to ensure excitation.</li>
+    </ol>
+    <h3 id="wrong-octave">Instrument Plays an Octave Too High</h3>
+    <p>This is a register-jump symptom common with conical-bore models at
+      high breath pressure. Reduce <code>breathPressure</code> (try 0.65)
+      and <code>reedStiffness</code> (try 0.40). Alternatively, increase
+      <code>reedAperture</code> slightly to let more air through at lower
+      pressure.</p>
+    <h3 id="clicking-at-note-start">Click or Pop at Note Start</h3>
+    <ol type="1">
+      <li>Reduce <code>attackChiffGain</code> &mdash; a value of 2.0&ndash;3.0
+        is more subtle.</li>
+      <li>Reduce <code>attackOverpressure</code>.</li>
+      <li>If using a nonlinear allpass, increase <code>nlAttack</code> to
+        give the bore time to stabilise before the effect activates.</li>
+    </ol>
+    <h3 id="even-harmonics-present">Even Harmonics Present / Not Clarinet-Like</h3>
+    <p>Ensure <code>blowPosition</code> is in the 0.40&ndash;0.50 range.
+      Lower values (saxophone mode) allow even harmonics. Also confirm
+      the paired Harmonic Generator is using an odd-only DNA spectrum with
+      <code>gainB</code> dominant.</p>
+    <h3 id="vibrato-kills-pitch">Vibrato Causes Pitch Instability or Silence</h3>
+    <p>Do <strong>not</strong> connect an LFO directly to
+      <code>pitchMultiplier</code> &mdash; the LFO is bipolar and drives
+      the multiplier negative, which collapses the bore. Use the Drift
+      Engine for gentle pitch shimmer, or connect the LFO to
+      <code>vibratoGain</code> to shape vibrato depth instead.</p>
+    <hr>
+    <p><em>Documentation accurate as of Kala v1.4. Source files:
+        <code>saxophonemodel2.h</code>,
+        <code>saxophonemodel2.cpp</code></em></p>
+  </body>
+</html>

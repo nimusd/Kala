@@ -32,10 +32,11 @@ public:
 
     struct ScaleLine {
         double frequencyHz;
-        int scaleDegree;        // 1-7 for major scale
+        int scaleDegree;        // 1-N for scale
         QColor color;
         QString noteName;
         bool isThicker;         // Tonic and Fifth are thicker
+        bool isAccidental;      // Chromatic degree not in the diatonic core (drawn dark grey)
     };
 
     explicit ScoreCanvas(QWidget *parent = nullptr);
@@ -128,6 +129,9 @@ public:
         const Scale &newScale, double newBaseFreq);
     void applyNotePitchChanges(const QVector<NotePitchChange> &changes, bool forward);
 
+    // Pitch curve quantization (public so SnapToScaleCommand can call it)
+    Curve quantizePitchCurveToScale(const Curve &pitchCurve, const Note &note) const;
+
     // Note editing operations
     void snapSelectedNotesToScale();  // Quantize selected continuous notes to scale degrees
     void makeSelectedNotesContinuous();  // Convert selected discrete notes to continuous
@@ -144,6 +148,7 @@ public:
 
     // Dynamics curve dialog
     void showDynamicsCurveDialog();
+    void showScaleDynamicsDialog();
     void showExpressiveCurveApplyDialog();
 
     // Expressive curve management
@@ -180,6 +185,7 @@ signals:
     void pressureChanged(double pressure, bool active);  // Emits pressure updates during drawing
     void cursorPositionChanged(double timeMs, double pitchHz);  // Emits cursor position for status bar
     void notesChanged();  // Emitted when notes are added, removed, or modified
+    void undoRedoPerformed();  // Emitted after undo/redo via keyboard
     void scaleSettingsChanged();  // Emitted when scale or modulations change
     void noteSelectionChanged();  // Emitted when note selection changes
     void tempoSettingsChanged();  // Emitted when tempo or time signature changes
@@ -258,6 +264,7 @@ private:
 
     // Selection state
     QVector<int> selectedNoteIndices;  // Empty if no selection
+    int m_selectionAnchorIndex = -1;   // Anchor for Shift+Click range selection
 
     // Clipboard state
     QVector<Note> clipboard;           // Copied notes
@@ -339,6 +346,7 @@ private:
     int findNoteAtPosition(const QPoint &pos) const;
     QVector<int> findNotesInRectangle(const QRect &rect) const;
     void selectNote(int index, bool addToSelection = false);
+    void selectNoteRange(int toIndex);  // Shift+Click: select from anchor to toIndex
     bool isNoteSelected(int index) const;
 
     // Drag helpers
@@ -350,9 +358,6 @@ private:
     int resolveActiveCurveIndex(const Note &note) const;
     QRect getLeftResizeHandle(const Note &note) const;
     QRect getRightResizeHandle(const Note &note) const;
-
-    // Pitch curve quantization
-    Curve quantizePitchCurveToScale(const Curve &pitchCurve, const Note &note) const;
 
     // Context menu helper
     void showNoteContextMenu(const QPoint &globalPos);

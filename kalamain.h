@@ -10,6 +10,7 @@
 #include "containersettings.h"
 #include "keyboardshortcutsdialog.h"
 #include "llmconfig.h"
+#include "kalatools.h"  // for ToolMode
 
 class KalaTools;
 class KalaAgent;
@@ -135,6 +136,8 @@ private:
     void populateRecorderInspector();
     void populateBowedInspector();
     void populateReedInspector();
+    void populateSaxophoneInspector();
+    void populatePercussionInspector();
     void updateSpectrumVisualization();
     void updateEnvelopeParameters(int envelopeType);  // Update contextual envelope params
     void updateEnvelopePreview();  // Update envelope preview visualization
@@ -181,9 +184,11 @@ public slots:
     bool loadProjectFile(const QString &filePath);  // AI companion: open a project
     bool saveProjectFile(const QString &filePath);  // AI companion: save to path
     QString getProjectFilePath() const { return m_currentProjectPath; }
+    void setCompanionToolMode(ToolMode mode);  // Set tool mode and update panel label
 
 private slots:
     void onTabChanged(int index);
+    void onToolModeToggle();
 
     // Project file menu slots
     void onNewProject();

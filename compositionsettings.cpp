@@ -12,6 +12,7 @@ CompositionSettings::CompositionSettings()
     , lengthBars(20)
     , sampleRate(48000)
     , bitDepth(24)
+    , preRenderDelayMs(400)
 {
 }
 
@@ -57,6 +58,7 @@ QJsonObject CompositionSettings::toJson() const
     json["lengthBars"] = lengthBars;
     json["sampleRate"] = sampleRate;
     json["bitDepth"] = bitDepth;
+    json["preRenderDelayMs"] = preRenderDelayMs;
     return json;
 }
 
@@ -74,6 +76,7 @@ CompositionSettings CompositionSettings::fromJson(const QJsonObject &json)
     s.lengthBars = json["lengthBars"].toInt(20);
     s.sampleRate = json["sampleRate"].toInt(48000);
     s.bitDepth = json["bitDepth"].toInt(24);
+    s.preRenderDelayMs = json["preRenderDelayMs"].toInt(400);
     return s;
 }
 

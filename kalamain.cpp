@@ -14,6 +14,8 @@
 #include "envelopelibraryDialog.h"
 #include "scaledialog.h"
 #include "scorecanvascommands.h"
+#include "sounitbuildercommands.h"
+#include "trackcommands.h"
 #include "tempodialog.h"
 #include "easing.h"
 #include "easingapplicator.h"
@@ -58,6 +60,8 @@
 #include <QJsonArray>
 #include <QSet>
 #include <QRegularExpression>
+#include <QApplication>
+#include <QWindow>
 #include <cmath>
 #include <algorithm>
 
@@ -107,6 +111,7 @@ KalaMain::KalaMain(QWidget *parent)
 
     // Set SounitBuilder to display the default track's canvas
     sounitBuilder->setTrackCanvas(defaultTrack);
+    currentEditingTrack = 0;
 
     // Create ScoreCanvasWindow - NOT parented to this to make it independent
     scoreCanvasWindow = new ScoreCanvasWindow(audioEngine);
@@ -363,19 +368,34 @@ KalaMain::KalaMain(QWidget *parent)
     connect(ui->actionUndo_Ctrl_Z, &QAction::triggered, this, [this]() {
         if (ui->MainTab->currentIndex() == 0) {  // Sound Engine tab
             Canvas *c = sounitBuilder->getCanvas();
-            if (c) c->getUndoStack()->undo();
+            if (c) {
+                c->getUndoStack()->undo();
+                if (currentContainer) onContainerSelected(currentContainer);
+            }
         } else if (ui->MainTab->currentIndex() == 1) {  // Composition tab
             scoreCanvasWindow->getScoreCanvas()->getUndoStack()->undo();
+            updateNoteInspector();
         }
     });
     connect(ui->actionRedo_Ctrl_Y, &QAction::triggered, this, [this]() {
         if (ui->MainTab->currentIndex() == 0) {  // Sound Engine tab
             Canvas *c = sounitBuilder->getCanvas();
-            if (c) c->getUndoStack()->redo();
+            if (c) {
+                c->getUndoStack()->redo();
+                if (currentContainer) onContainerSelected(currentContainer);
+            }
         } else if (ui->MainTab->currentIndex() == 1) {  // Composition tab
             scoreCanvasWindow->getScoreCanvas()->getUndoStack()->redo();
+            updateNoteInspector();
         }
     });
+    // Refresh inspectors after keyboard-driven undo/redo (canvas handles Ctrl+Z itself)
+    connect(sounitBuilder, &SounitBuilder::undoRedoPerformed, this, [this]() {
+        if (currentContainer) onContainerSelected(currentContainer);
+    });
+    connect(scoreCanvasWindow->getScoreCanvas(), &ScoreCanvas::undoRedoPerformed,
+            this, &KalaMain::updateNoteInspector);
+
     connect(ui->actionCut_Ctrl_X, &QAction::triggered, this, [this]() {
         if (ui->MainTab->currentIndex() == 1) {
             scoreCanvasWindow->getScoreCanvas()->performCut();
@@ -607,9 +627,53 @@ KalaMain::KalaMain(QWidget *parent)
             m_kalaAgent,       &KalaAgent::cancel);
     connect(m_companionPanel, &CompanionPanel::clearRequested,
             m_kalaAgent,       &KalaAgent::clearHistory);
+    connect(m_kalaAgent,      &KalaAgent::historyCountChanged,
+            m_companionPanel,  &CompanionPanel::setMessageCount);
+    connect(m_companionPanel, &CompanionPanel::toolModeToggleRequested,
+            this,              &KalaMain::onToolModeToggle);
+
+    // Auto-detect tool mode from which window is focused
+    connect(qApp, &QApplication::focusWindowChanged, this, [this](QWindow *w) {
+        if (!w) return;
+        if (sounitBuilder && sounitBuilder->windowHandle() == w)
+            setCompanionToolMode(ToolMode::Sounit);
+        else if (scoreCanvasWindow && scoreCanvasWindow->windowHandle() == w)
+            setCompanionToolMode(ToolMode::Composition);
+    });
+
+    // Initialise companion tool mode label
+    setCompanionToolMode(ToolMode::Sounit);
 
     // ── Initialize window title
     updateWindowTitle();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Companion — tool mode management
+// ─────────────────────────────────────────────────────────────────────────────
+
+void KalaMain::setCompanionToolMode(ToolMode mode)
+{
+    if (!m_kalaTools) return;
+    m_kalaTools->setToolMode(mode);
+    QString label;
+    switch (mode) {
+        case ToolMode::Sounit:      label = "Sounit"; break;
+        case ToolMode::Composition: label = "Score";  break;
+        case ToolMode::Full:        label = "Full";   break;
+    }
+    if (m_companionPanel) m_companionPanel->setToolModeLabel(label);
+}
+
+void KalaMain::onToolModeToggle()
+{
+    if (!m_kalaTools) return;
+    ToolMode current = m_kalaTools->toolMode();
+    ToolMode next;
+    if (current == ToolMode::Sounit)           next = ToolMode::Composition;
+    else if (current == ToolMode::Composition) next = ToolMode::Full;
+    else                                        next = ToolMode::Sounit;
+    setCompanionToolMode(next);
 }
 
 void KalaMain::onTabChanged(int index)
@@ -819,8 +883,12 @@ void KalaMain::onContainerSelected(Container *container)
         populateRecorderInspector();
     } else if (container->getName() == "Bowed") {
         populateBowedInspector();
-    } else if (container->getName() == "Saxophone" || container->getName() == "Reed") {
+    } else if (container->getName() == "Reed") {
         populateReedInspector();
+    } else if (container->getName() == "Clarinet") {
+        populateSaxophoneInspector();
+    } else if (container->getName() == "Percussion") {
+        populatePercussionInspector();
     }
 }
 
@@ -1487,27 +1555,33 @@ void KalaMain::addParameterSlider(QFormLayout *layout, const QString &label,
     paramLayout->addWidget(spinBox);
 
     // Connect slider and spinbox
-    connect(slider, &QSlider::valueChanged, this, [this, spinBox, slider, paramName, step](int value) {
-        double doubleVal = value * step;
+    connect(slider, &QSlider::valueChanged, this, [this, spinBox, paramName, step](int value) {
+        double newVal = value * step;
         spinBox->blockSignals(true);
-        spinBox->setValue(doubleVal);
+        spinBox->setValue(newVal);
         spinBox->blockSignals(false);
         if (currentContainer) {
-            currentContainer->setParameter(paramName, doubleVal);
-            int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
-            sounitBuilder->rebuildGraph(trackIndex);
+            double oldVal = currentContainer->getParameter(paramName, newVal);
+            if (oldVal != newVal) {
+                Canvas *c = sounitBuilder->getCanvas();
+                if (c) c->getUndoStack()->push(
+                    new SetParameterCommand(currentContainer, paramName, oldVal, newVal));
+            }
         }
     });
 
     connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, [this, slider, paramName, step](double value) {
+            this, [this, slider, paramName, step](double newVal) {
         slider->blockSignals(true);
-        slider->setValue(static_cast<int>(value / step));
+        slider->setValue(static_cast<int>(newVal / step));
         slider->blockSignals(false);
         if (currentContainer) {
-            currentContainer->setParameter(paramName, value);
-            int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
-            sounitBuilder->rebuildGraph(trackIndex);
+            double oldVal = currentContainer->getParameter(paramName, newVal);
+            if (oldVal != newVal) {
+                Canvas *c = sounitBuilder->getCanvas();
+                if (c) c->getUndoStack()->push(
+                    new SetParameterCommand(currentContainer, paramName, oldVal, newVal));
+            }
         }
     });
 
@@ -3290,6 +3364,207 @@ void KalaMain::populateReedInspector()
     mainLayout->addStretch();
 }
 
+// Saxophone Inspector (SaxophoneModel2 — enhanced reed with vocal tract, jaw vibrato, growl)
+void KalaMain::populateSaxophoneInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    // ── Core reed parameters (same ranges as Reed) ───────────────────────────
+    const auto &s = ContainerSettings::instance().reed;
+
+    addParameterSlider(formLayout, "Breath Pressure", "breathPressure",
+                       s.breathPressureMin, s.breathPressureMax, 0.72, 0.01, 2);
+    addParameterSlider(formLayout, "Reed Stiffness", "reedStiffness",
+                       s.reedStiffnessMin, s.reedStiffnessMax, 0.45, 0.01, 2);
+    addParameterSlider(formLayout, "Reed Aperture", "reedAperture",
+                       s.reedApertureMin, s.reedApertureMax, 0.52, 0.01, 2);
+    addParameterSlider(formLayout, "Blow Position", "blowPosition",
+                       s.blowPositionMin, s.blowPositionMax, 0.22, 0.01, 2);
+    addParameterSlider(formLayout, "Noise Gain", "noiseGain",
+                       s.noiseGainMin, s.noiseGainMax, 0.12, 0.01, 2);
+    addParameterSlider(formLayout, "Vibrato Freq (Hz)", "vibratoFreq",
+                       s.vibratoFreqMin, s.vibratoFreqMax, 5.5, 0.1, 2);
+    addParameterSlider(formLayout, "Vibrato Gain", "vibratoGain",
+                       s.vibratoGainMin, s.vibratoGainMax, 0.04, 0.01, 2);
+    addParameterSlider(formLayout, "NL Type (0–4)", "nlType",
+                       s.nlTypeMin, s.nlTypeMax, 0.0, 1.0, 0);
+    addParameterSlider(formLayout, "NL Amount", "nlAmount",
+                       s.nlAmountMin, s.nlAmountMax, 0.22, 0.01, 2);
+    addParameterSlider(formLayout, "NL Freq Mod (Hz)", "nlFreqMod",
+                       s.nlFreqModMin, s.nlFreqModMax, 10.0, 0.1, 1);
+    addParameterSlider(formLayout, "NL Attack (s)", "nlAttack",
+                       s.nlAttackMin, s.nlAttackMax, 0.12, 0.01, 2);
+
+    // ── Saxophone-specific parameters ────────────────────────────────────────
+    QLabel *sectVocalTract = new QLabel("── Vocal Tract ──");
+    sectVocalTract->setStyleSheet("color: #aaaaaa; font-size: 10px;");
+    formLayout->addRow("", sectVocalTract);
+
+    addParameterSlider(formLayout, "VT Freq (Hz)", "vocalTractFreq",
+                       200.0, 3000.0, 700.0, 10.0, 0);
+    QLabel *vtFreqDesc = new QLabel("Throat resonance: ~500=oh, ~700=ah, ~1200=ee");
+    vtFreqDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", vtFreqDesc);
+
+    addParameterSlider(formLayout, "VT Q", "vocalTractQ",
+                       0.5, 10.0, 2.5, 0.1, 1);
+    addParameterSlider(formLayout, "VT Gain", "vocalTractGain",
+                       0.0, 1.0, 0.35, 0.01, 2);
+    QLabel *vtGainDesc = new QLabel("0=off · 0.35=warm · 0.8=very vocal");
+    vtGainDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", vtGainDesc);
+
+    QLabel *sectVibrato = new QLabel("── Vibrato ──");
+    sectVibrato->setStyleSheet("color: #aaaaaa; font-size: 10px;");
+    formLayout->addRow("", sectVibrato);
+
+    addParameterSlider(formLayout, "Jaw Blend", "jawVibratoBlend",
+                       0.0, 1.0, 0.7, 0.01, 2);
+    QLabel *jawDesc = new QLabel("0=breath tremolo · 1=jaw aperture (authentic sax)");
+    jawDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", jawDesc);
+
+    QLabel *sectGrowl = new QLabel("── Growl ──");
+    sectGrowl->setStyleSheet("color: #aaaaaa; font-size: 10px;");
+    formLayout->addRow("", sectGrowl);
+
+    addParameterSlider(formLayout, "Growl Freq (Hz)", "growlFreq",
+                       20.0, 200.0, 85.0, 1.0, 0);
+    addParameterSlider(formLayout, "Growl Depth", "growlDepth",
+                       0.0, 0.5, 0.0, 0.01, 2);
+    QLabel *growlDesc = new QLabel("0=off · 0.1=rasp · 0.3=growl · 0.45=intense");
+    growlDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", growlDesc);
+
+    QLabel *sectAttack = new QLabel("── Attack ──");
+    sectAttack->setStyleSheet("color: #aaaaaa; font-size: 10px;");
+    formLayout->addRow("", sectAttack);
+
+    addParameterSlider(formLayout, "Chiff Gain", "attackChiffGain",
+                       0.0, 10.0, 5.0, 0.1, 1);
+    QLabel *chiffDesc = new QLabel("Tongue-release noise burst (0=off · 5=natural · 10=hard)");
+    chiffDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", chiffDesc);
+
+    addParameterSlider(formLayout, "Overpressure", "attackOverpressure",
+                       0.0, 1.0, 0.4, 0.01, 2);
+    QLabel *opDesc = new QLabel("Breath pressure spike at tongue release (0=off · 0.4=natural)");
+    opDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", opDesc);
+
+    addParameterSlider(formLayout, "Reed Saturation", "reedSaturation",
+                       0.0, 1.0, 0.6, 0.01, 2);
+    QLabel *reedSatDesc = new QLabel("Reed nonlinearity drive: wider harmonic spectrum (0=linear)");
+    reedSatDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", reedSatDesc);
+
+    QLabel *sectBell = new QLabel("── Bell ──");
+    sectBell->setStyleSheet("color: #aaaaaa; font-size: 10px;");
+    formLayout->addRow("", sectBell);
+
+    addParameterSlider(formLayout, "Bell Reflection", "bellReflection",
+                       0.5, 0.99, 0.85, 0.01, 2);
+    QLabel *bellDesc = new QLabel("0.95=dark/resonant · 0.85=default · 0.7=bright/open");
+    bellDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", bellDesc);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier",
+                       0.25, 4.0, 1.0, 0.01, 2);
+    QLabel *pitchDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Percussion Inspector (PercussionModel — modal synthesis)
+void KalaMain::populatePercussionInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    const auto &p = ContainerSettings::instance().percussion;
+
+    // --- Strike ---
+    addParameterSlider(formLayout, "Strike Position", "strikePosition",
+                       p.strikePositionMin, p.strikePositionMax, 0.5, 0.01, 2);
+    QLabel *strikeDesc = new QLabel("0 = centre (low modes)  ·  1 = rim (all modes)");
+    strikeDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", strikeDesc);
+
+    addParameterSlider(formLayout, "Strike Duration (ms)", "strikeDuration",
+                       p.strikeDurationMin, p.strikeDurationMax, 5.0, 0.5, 1);
+    QLabel *durDesc = new QLabel("Short = hard stick  ·  Long = padded mallet / palm");
+    durDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", durDesc);
+
+    // --- Timbral character ---
+    addParameterSlider(formLayout, "Inharmonicity", "inharmonicity",
+                       p.inharmonicityMin, p.inharmonicityMax, 0.0, 0.01, 2);
+    QLabel *inharmDesc = new QLabel("0 = tabla (harmonic)  ·  0.5 = membrane  ·  1 = gong/bell");
+    inharmDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", inharmDesc);
+
+    // --- Decay ---
+    addParameterSlider(formLayout, "Decay Time (s)", "decayTime",
+                       p.decayTimeMin, p.decayTimeMax, 1.0, 0.05, 2);
+
+    addParameterSlider(formLayout, "High Decay Rate", "highDecayRate",
+                       p.highDecayRateMin, p.highDecayRateMax, 1.5, 0.05, 2);
+    QLabel *hdrDesc = new QLabel("How much faster high modes decay.\n0.3–0.5 = gong · 1.5–2 = tabla · 3–5 = frame drum");
+    hdrDesc->setStyleSheet("color: gray; font-size: 10px;");
+    hdrDesc->setWordWrap(true);
+    formLayout->addRow("", hdrDesc);
+
+    // --- Modes ---
+    // numModes uses an integer spinbox
+    {
+        QHBoxLayout *numLayout = new QHBoxLayout();
+        QSpinBox *spinModes = new QSpinBox();
+        spinModes->setRange(p.numModesMin, p.numModesMax);
+        spinModes->setValue(static_cast<int>(currentContainer->getParameter("numModes", 12.0)));
+        connect(spinModes, QOverload<int>::of(&QSpinBox::valueChanged),
+                this, [this](int value) {
+            if (currentContainer) {
+                currentContainer->setParameter("numModes", static_cast<double>(value));
+                int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
+                sounitBuilder->rebuildGraph(trackIndex);
+            }
+        });
+        numLayout->addWidget(spinModes);
+        numLayout->addStretch();
+        formLayout->addRow("Num Modes:", numLayout);
+    }
+
+    // --- Noise ---
+    addParameterSlider(formLayout, "Noise Gain", "noiseGain",
+                       p.noiseGainMin, p.noiseGainMax, 0.15, 0.01, 2);
+    QLabel *noiseDesc = new QLabel("Broadband onset burst — skin texture / stick click");
+    noiseDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", noiseDesc);
+
+    // --- Pitch ---
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    QLabel *pitchDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
 // Update envelope parameters based on envelope type (contextual sliders)
 void KalaMain::updateEnvelopeParameters(int envelopeType)
 {
@@ -3513,6 +3788,9 @@ void KalaMain::closeEvent(QCloseEvent *event)
         scoreCanvasWindow->close();
     }
 
+    // Delete companion session so it doesn't bleed into a future app session
+    if (m_kalaAgent) m_kalaAgent->clearHistory();
+
     // Accept the close event
     QMainWindow::closeEvent(event);
 }
@@ -3688,7 +3966,7 @@ void KalaMain::newProject()
     trackCanvasStates.clear();
     trackContainers.clear();
     trackConnections.clear();
-    currentEditingTrack = -1;
+    currentEditingTrack = 0;
 
     // Clear notes from ScoreCanvas
     scoreCanvasWindow->getScoreCanvas()->clearNotes();
@@ -4372,9 +4650,9 @@ bool KalaMain::loadProject(const QString &filePath)
         Track *track = trackManager->addTrack(trackName, trackColor);
         track->fromJson(trackJson);
 
-        // Update track selector UI
+        // Update track selector UI (use display name, which is kept in sync with sounit name)
         scoreCanvasWindow->getTrackSelector()->addTrack(
-            track->getSounitName().isEmpty() ? trackName : track->getSounitName(),
+            trackName,
             trackColor,
             25.0, 2000.0
         );
@@ -4394,6 +4672,12 @@ bool KalaMain::loadProject(const QString &filePath)
         for (auto it = canvasStatesJson.constBegin(); it != canvasStatesJson.constEnd(); ++it) {
             int trackIndex = it.key().toInt();
             trackCanvasStates[trackIndex] = it.value().toObject();
+        }
+        // Backward compat: old projects saved canvas state under key -1 (bug where
+        // currentEditingTrack was never set to 0 at startup). Remap -1 → 0.
+        if (trackCanvasStates.contains(-1) && !trackCanvasStates.contains(0)) {
+            trackCanvasStates[0] = trackCanvasStates.take(-1);
+            qDebug() << "Remapped legacy canvas state from track -1 to track 0";
         }
         qDebug() << "Loaded canvas states for" << trackCanvasStates.size() << "tracks";
     }
@@ -4690,6 +4974,9 @@ void KalaMain::loadCanvasStateForTrack(int trackIndex)
         // Migrate legacy container names
         if (type == "Karplus Strong Attack") {
             type = "Karplus Strong";
+        }
+        if (type == "Saxophone") {
+            type = "Clarinet";
         }
 
         // Get port lists from the single source of truth
@@ -5318,7 +5605,7 @@ void KalaMain::onSounitNameChanged(const QString &name)
     // Update window title to show sounit name
     setWindowTitle(QString("Kala - %1").arg(name));
 
-    // Update the current editing track's name in our map
+    // Update the current editing track's sounit name in our map
     if (currentEditingTrack >= 0) {
         trackSounitNames[currentEditingTrack] = name;
     }
@@ -5726,32 +6013,51 @@ void KalaMain::rebuildMixer()
 
         // Connect volume dial to track
         int trackIndex = i;  // Capture by value for lambda
-        connect(volumeDial, &QDial::valueChanged, this, [this, trackIndex, volumeLabel](int value) {
+        QPointer<QDial>  pVolumeDial  = volumeDial;
+        QPointer<QLabel> pVolumeLabel = volumeLabel;
+        QPointer<QDial>  pGainDial    = gainDial;
+        QPointer<QLabel> pGainLabel   = gainLabel;
+        QPointer<QDial>  pPanDial     = panDial;
+        QPointer<QLabel> pPanLabel    = panLabel;
+
+        connect(volumeDial, &QDial::valueChanged, this, [this, trackIndex, pVolumeDial, pVolumeLabel](int value) {
             Track *t = trackManager->getTrack(trackIndex);
             if (t) {
-                float volume = value / 100.0f;
-                t->setVolume(volume);
-                volumeLabel->setText(QString("V:%1%").arg(value));
+                float newVol = value / 100.0f;
+                float oldVol = t->getVolume();
+                if (oldVol != newVol) {
+                    ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
+                    sc->getUndoStack()->push(new SetTrackMixerCommand(
+                        t, SetTrackMixerCommand::Volume, oldVol, newVol, pVolumeDial, pVolumeLabel));
+                }
             }
         });
 
         // Connect gain dial to track
-        connect(gainDial, &QDial::valueChanged, this, [this, trackIndex, gainLabel](int value) {
+        connect(gainDial, &QDial::valueChanged, this, [this, trackIndex, pGainDial, pGainLabel](int value) {
             Track *t = trackManager->getTrack(trackIndex);
             if (t) {
-                float gain = value / 100.0f;
-                t->setGain(gain);
-                gainLabel->setText(QString("G:%1%").arg(value));
+                float newGain = value / 100.0f;
+                float oldGain = t->getGain();
+                if (oldGain != newGain) {
+                    ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
+                    sc->getUndoStack()->push(new SetTrackMixerCommand(
+                        t, SetTrackMixerCommand::Gain, oldGain, newGain, pGainDial, pGainLabel));
+                }
             }
         });
 
         // Connect pan dial to track
-        connect(panDial, &QDial::valueChanged, this, [this, trackIndex, panLabel](int value) {
+        connect(panDial, &QDial::valueChanged, this, [this, trackIndex, pPanDial, pPanLabel](int value) {
             Track *t = trackManager->getTrack(trackIndex);
             if (t) {
-                float pan = value / 100.0f;
-                t->setPan(pan);
-                panLabel->setText(QString("P:%1").arg(value));
+                float newPan = value / 100.0f;
+                float oldPan = t->getPan();
+                if (oldPan != newPan) {
+                    ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
+                    sc->getUndoStack()->push(new SetTrackMixerCommand(
+                        t, SetTrackMixerCommand::Pan, oldPan, newPan, pPanDial, pPanLabel));
+                }
             }
         });
 
@@ -6019,36 +6325,34 @@ void KalaMain::onTempoEditClicked()
     TempoDialog dialog(currentTts, !canDelete, this);  // Disable delete if we can't delete
     if (dialog.exec() == QDialog::Accepted) {
         if (dialog.isDeleteRequested() && canDelete) {
-            // Delete the marker that's selected in the spinbox
-            scoreCanvas->removeTempoChange(selectedMarkerTime);
+            // Delete the marker — undoable
+            scoreCanvas->getUndoStack()->push(
+                new RemoveTempoChangeCommand(scoreCanvas, selectedMarkerTime));
             qDebug() << "KalaMain: Deleted tempo marker at" << selectedMarkerTime << "ms";
         } else {
             TempoTimeSignature newTts = dialog.getTempoTimeSignature();
 
             if (isEditingDefault) {
-                // At time 0, update the defaults
-                double oldTempo = scoreCanvas->getDefaultTempo();
-                double newTempo = newTts.bpm;
+                // At time 0 — fully undoable via SetDefaultTempoCommand
+                double oldTempo  = scoreCanvas->getDefaultTempo();
+                int oldNum       = scoreCanvas->getDefaultTimeSigNum();
+                int oldDenom     = scoreCanvas->getDefaultTimeSigDenom();
 
-                scoreCanvas->setDefaultTempo(newTts.bpm);
-                scoreCanvas->setDefaultTimeSignature(newTts.timeSigNumerator, newTts.timeSigDenominator);
+                scoreCanvas->getUndoStack()->push(
+                    new SetDefaultTempoCommand(scoreCanvas,
+                        oldTempo, oldNum, oldDenom,
+                        newTts.bpm, newTts.timeSigNumerator, newTts.timeSigDenominator));
 
-                // Scale note times to maintain musical positions when tempo changes
-                if (oldTempo != newTempo && oldTempo > 0) {
-                    double scaleFactor = oldTempo / newTempo;
-                    scoreCanvasWindow->scaleNoteTimes(scaleFactor);
-                    qDebug() << "KalaMain: Scaled note times by factor" << scaleFactor
-                             << "(tempo changed from" << oldTempo << "to" << newTempo << "BPM)";
-
-                    // Re-render notes with new durations
+                // Re-render notes if tempo changed (eager; undo/redo will just mark dirty)
+                if (oldTempo != newTts.bpm && oldTempo > 0)
                     scoreCanvasWindow->prerenderNotes();
-                }
 
                 qDebug() << "KalaMain: Updated default tempo to" << newTts.bpm << "BPM,"
                          << newTts.timeSigNumerator << "/" << newTts.timeSigDenominator;
             } else {
-                // Edit the marker selected in the spinbox
-                scoreCanvas->addTempoChange(selectedMarkerTime, newTts);
+                // Edit the marker — undoable
+                scoreCanvas->getUndoStack()->push(
+                    new AddTempoChangeCommand(scoreCanvas, selectedMarkerTime, newTts));
                 qDebug() << "KalaMain: Updated tempo marker at" << selectedMarkerTime << "ms";
             }
         }
@@ -6103,8 +6407,9 @@ void KalaMain::onTempoAddClicked()
     if (dialog.exec() == QDialog::Accepted) {
         TempoTimeSignature newTts = dialog.getTempoTimeSignature();
 
-        // Create the new marker at the timeline position
-        scoreCanvas->addTempoChange(timelinePosition, newTts);
+        // Create the new marker at the timeline position — undoable
+        scoreCanvas->getUndoStack()->push(
+            new AddTempoChangeCommand(scoreCanvas, timelinePosition, newTts));
         qDebug() << "KalaMain: Created new tempo marker at" << timelinePosition << "ms:"
                  << newTts.bpm << "BPM," << newTts.timeSigNumerator << "/" << newTts.timeSigDenominator;
 
@@ -6291,6 +6596,7 @@ void KalaMain::onDeleteVariation()
     if (reply == QMessageBox::Yes) {
         if (track->deleteVariation(varIndex)) {
             refreshVariationsList();
+            emit sounitBuilder->variationsChanged();
             qDebug() << "KalaMain: Deleted variation" << varIndex << ":" << varName;
         }
     }
@@ -6318,6 +6624,7 @@ void KalaMain::onRenameVariation()
     if (ok && !newName.isEmpty() && newName != currentName) {
         if (track->setVariationName(varIndex, newName)) {
             refreshVariationsList();
+            emit sounitBuilder->variationsChanged();
             qDebug() << "KalaMain: Renamed variation" << varIndex << "to:" << newName;
         }
     }
@@ -6334,10 +6641,9 @@ void KalaMain::onVariationsTrackNameEdited()
         return;
     }
 
-    // Determine which tracks to rename: all selected, or just the current one
-    QVector<int> targets = m_selectedTrackIndices.isEmpty()
-        ? QVector<int>{ trackManager->getCurrentTrackIndex() }
-        : m_selectedTrackIndices;
+    // Always rename only the currently active track
+    // (m_selectedTrackIndices is a visibility flag, not a batch-rename selection)
+    QVector<int> targets = { trackManager->getCurrentTrackIndex() };
 
     TrackSelector *trackSelector = scoreCanvasWindow->getTrackSelector();
 
@@ -6556,14 +6862,19 @@ void KalaMain::onNoteStartChanged(double value)
     if (selectedIndices.isEmpty()) return;
 
     QVector<Note> &notes = canvas->getPhrase().getNotes();
+    QVector<EditNotePropertyCommand::NoteChange> changes;
     for (int index : selectedIndices) {
         if (index >= 0 && index < notes.size()) {
-            notes[index].setStartTime(value);
-            notes[index].setRenderDirty(true);
+            double oldVal = notes[index].getStartTime();
+            if (oldVal != value)
+                changes.append({index, oldVal, value});
         }
     }
+    if (changes.isEmpty()) return;
 
-    canvas->update();
+    canvas->getUndoStack()->push(
+        new EditNotePropertyCommand(&canvas->getPhrase(), changes,
+                                    EditNotePropertyCommand::StartTime, canvas));
     markProjectDirty();
     qDebug() << "KalaMain: Note start changed to" << value << "ms";
 }
@@ -6577,14 +6888,19 @@ void KalaMain::onNoteDurationChanged(double value)
     if (selectedIndices.isEmpty()) return;
 
     QVector<Note> &notes = canvas->getPhrase().getNotes();
+    QVector<EditNotePropertyCommand::NoteChange> changes;
     for (int index : selectedIndices) {
         if (index >= 0 && index < notes.size()) {
-            notes[index].setDuration(value);
-            notes[index].setRenderDirty(true);
+            double oldVal = notes[index].getDuration();
+            if (oldVal != value)
+                changes.append({index, oldVal, value});
         }
     }
+    if (changes.isEmpty()) return;
 
-    canvas->update();
+    canvas->getUndoStack()->push(
+        new EditNotePropertyCommand(&canvas->getPhrase(), changes,
+                                    EditNotePropertyCommand::Duration, canvas));
     markProjectDirty();
     qDebug() << "KalaMain: Note duration changed to" << value << "ms";
 }
@@ -6598,14 +6914,20 @@ void KalaMain::onNotePitchChanged(int value)
     if (selectedIndices.isEmpty()) return;
 
     QVector<Note> &notes = canvas->getPhrase().getNotes();
+    QVector<EditNotePropertyCommand::NoteChange> changes;
     for (int index : selectedIndices) {
         if (index >= 0 && index < notes.size()) {
-            notes[index].setPitchHz(static_cast<double>(value));
-            notes[index].setRenderDirty(true);
+            double oldVal = notes[index].getPitchHz();
+            double newVal = static_cast<double>(value);
+            if (oldVal != newVal)
+                changes.append({index, oldVal, newVal});
         }
     }
+    if (changes.isEmpty()) return;
 
-    canvas->update();
+    canvas->getUndoStack()->push(
+        new EditNotePropertyCommand(&canvas->getPhrase(), changes,
+                                    EditNotePropertyCommand::Pitch, canvas));
     markProjectDirty();
     qDebug() << "KalaMain: Note pitch changed to" << value << "Hz";
 }
@@ -6619,14 +6941,20 @@ void KalaMain::onNoteVariationChanged(int index)
     if (selectedIndices.isEmpty()) return;
 
     QVector<Note> &notes = canvas->getPhrase().getNotes();
+    QVector<EditNotePropertyCommand::NoteChange> changes;
     for (int noteIndex : selectedIndices) {
         if (noteIndex >= 0 && noteIndex < notes.size()) {
-            notes[noteIndex].setVariationIndex(index);
-            notes[noteIndex].setRenderDirty(true);
+            double oldVal = static_cast<double>(notes[noteIndex].getVariationIndex());
+            double newVal = static_cast<double>(index);
+            if (oldVal != newVal)
+                changes.append({noteIndex, oldVal, newVal});
         }
     }
+    if (changes.isEmpty()) return;
 
-    canvas->update();
+    canvas->getUndoStack()->push(
+        new EditNotePropertyCommand(&canvas->getPhrase(), changes,
+                                    EditNotePropertyCommand::VariationIndex, canvas));
     markProjectDirty();
     qDebug() << "KalaMain: Note variation changed to" << index;
 }
@@ -6649,19 +6977,15 @@ void KalaMain::onNoteVibratoToggled(bool checked)
     }
 
     QVector<Note> &notes = canvas->getPhrase().getNotes();
+    QUndoCommand *macro = new QUndoCommand("Toggle Vibrato Active");
     for (int noteIndex : selectedIndices) {
         if (noteIndex >= 0 && noteIndex < notes.size()) {
-            qDebug() << "KalaMain: Setting vibrato.active =" << checked
-                     << "for note" << noteIndex
-                     << "(was:" << notes[noteIndex].getVibrato().active << ")";
-            notes[noteIndex].getVibrato().active = checked;
-            notes[noteIndex].setRenderDirty(true);
-            qDebug() << "KalaMain: After set, vibrato.active ="
-                     << notes[noteIndex].getVibrato().active;
+            Vibrato newVibrato = notes[noteIndex].getVibrato();
+            newVibrato.active = checked;
+            new SetVibratoCommand(&canvas->getPhrase(), {noteIndex}, newVibrato, canvas, macro);
         }
     }
-
-    canvas->update();
+    canvas->getUndoStack()->push(macro);
     markProjectDirty();
 
     qDebug() << "KalaMain: Note vibrato toggled to" << checked;
@@ -6686,22 +7010,15 @@ void KalaMain::onNoteVibratoEditClicked()
     if (dialog.exec() == QDialog::Accepted) {
         Vibrato newVibrato = dialog.getVibrato();
 
-        // Apply to all selected notes
-        for (int noteIndex : selectedIndices) {
-            if (noteIndex >= 0 && noteIndex < notes.size()) {
-                notes[noteIndex].setVibrato(newVibrato);
-                notes[noteIndex].setRenderDirty(true);
-            }
-        }
+        canvas->getUndoStack()->push(
+            new SetVibratoCommand(&canvas->getPhrase(), selectedIndices, newVibrato, canvas));
 
         // Update checkbox to reflect active state (guard to prevent retriggering toggle)
         m_updatingNoteInspector = true;
         ui->checkNoteVibrato->setChecked(newVibrato.active);
         m_updatingNoteInspector = false;
 
-        canvas->update();
         markProjectDirty();
-
         qDebug() << "KalaMain: Vibrato edited for" << selectedIndices.size() << "note(s)";
     }
 }

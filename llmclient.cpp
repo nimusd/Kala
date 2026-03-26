@@ -93,12 +93,27 @@ void LLMClient::handleReply(QNetworkReply *reply, bool isAnthropic,
 {
     reply->deleteLater();
 
+    QByteArray data = reply->readAll();
+
     if (reply->error() != QNetworkReply::NoError) {
+        // Try to extract a meaningful message from the response body first
+        QJsonParseError pe;
+        QJsonDocument doc = QJsonDocument::fromJson(data, &pe);
+        if (pe.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonValue errVal = doc.object()["error"];
+            QString msg;
+            if (errVal.isObject())
+                msg = errVal.toObject()["message"].toString();
+            if (!msg.isEmpty()) {
+                callback({}, msg);
+                return;
+            }
+        }
+        // Fall back to the Qt network error string
         callback({}, reply->errorString());
         return;
     }
 
-    QByteArray data = reply->readAll();
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
 

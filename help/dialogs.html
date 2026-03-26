@@ -58,21 +58,20 @@ name</td>
 <strong>Cancel</strong> to abort.</li>
 </ol>
 <hr />
-<h2 id="scale-dialog">2. Scale Dialog</h2>
-<p><strong>Window Title:</strong> Scale Settings <strong>Size:</strong>
-400 x 200 <strong>Modal:</strong> Yes <strong>Source:</strong>
-<code>scaledialog.h</code>, <code>scaledialog.cpp</code>,
-<code>scaledialog.ui</code></p>
-<h3 id="how-to-open-1">How to Open</h3>
+<h2 id=”scale-dialog”>2. Scale Dialog</h2>
+<p><strong>Window Title:</strong> Scale Settings <strong>Modal:</strong>
+Yes <strong>Source:</strong> <code>scaledialog.h</code>,
+<code>scaledialog.cpp</code>, <code>scaledialog.ui</code></p>
+<h3 id=”how-to-open-1”>How to Open</h3>
 <p>Click the <strong>Edit</strong> button in the Scale panel at the
 bottom of the Composition tab. The Scale panel displays the current
 scale in the format <code>1 · [Scale Name] · [Base Freq] Hz</code>.</p>
-<h3 id="ui-components-1">UI Components</h3>
+<h3 id=”ui-components-1”>UI Components</h3>
 <table>
 <colgroup>
-<col style="width: 36%" />
-<col style="width: 20%" />
-<col style="width: 43%" />
+<col style=”width: 36%” />
+<col style=”width: 20%” />
+<col style=”width: 43%” />
 </colgroup>
 <thead>
 <tr>
@@ -85,48 +84,84 @@ scale in the format <code>1 · [Scale Name] · [Base Freq] Hz</code>.</p>
 <tr>
 <td>Scale</td>
 <td>QComboBox</td>
-<td>Dropdown populated with all available scales (20+ world scales).
-Each entry shows the scale name and stores the scale ID as user
-data.</td>
+<td>Dropdown populated with all available scales (49 scales spanning Western
+tunings, diatonic modes, jazz melodic minor modes, Arabic Maqamat, Persian
+Dastgah, Indian Classical, East Asian, and Indonesian Gamelan).
+Each entry shows the scale name and stores the scale ID as user data.</td>
 </tr>
 <tr>
 <td>Base Frequency</td>
 <td>QDoubleSpinBox</td>
-<td>Sets the reference frequency. Range: 10.00 - 1000.00 Hz. Default:
-25.00 Hz. Suffix: ” Hz”.</td>
+<td>Sets the reference (tonic) frequency for the lowest octave. Range:
+10.00–1000.00 Hz. Default: 25.00 Hz.</td>
+</tr>
+<tr>
+<td>Key&nbsp;(A&nbsp;=&nbsp;440&nbsp;Hz)</td>
+<td>12 QPushButtons</td>
+<td>One button per chromatic note: <strong>C C# D D# E F F# G G# A A#
+B</strong>. Clicking a button sets the Base Frequency to the standard
+concert-pitch value for that note (C = 32.703 Hz, …, A = 55.000 Hz,
+…, B = 61.735 Hz), placing A at 440 Hz across all octaves. Accidental
+buttons (C# D# F# G# A#) are styled dark to match the chromatic lines
+on the canvas. Hovering shows the exact Hz value as a tooltip.</td>
+</tr>
+<tr>
+<td>Scale Information</td>
+<td>QTextBrowser</td>
+<td>Read-only HTML panel. Describes the selected scale: note count,
+tradition, interval ratios or step sizes, and note names. Updates
+automatically when the scale dropdown changes.</td>
+</tr>
+<tr>
+<td>Delete Modulation</td>
+<td>QPushButton</td>
+<td>Removes the scale modulation at the current time position. Disabled
+when editing the initial scale (time zero).</td>
 </tr>
 <tr>
 <td>OK</td>
 <td>Button</td>
-<td>Accepts the selected scale and base frequency</td>
+<td>Accepts the selected scale and base frequency.</td>
 </tr>
 <tr>
 <td>Cancel</td>
 <td>Button</td>
-<td>Dismisses without changing the scale</td>
+<td>Dismisses without changing the scale.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="interaction-flow-1">Interaction Flow</h3>
-<ol type="1">
+<h3 id=”interaction-flow-1”>Interaction Flow</h3>
+<ol type=”1”>
 <li>Dialog opens pre-populated with the current scale selected in the
 dropdown and the current base frequency in the spinbox.</li>
-<li>User selects a different scale from the dropdown (e.g., Pythagorean,
-Just Intonation, Raga Bhairav, etc.).</li>
-<li>User optionally adjusts the base frequency.</li>
+<li>User selects a scale from the dropdown. The information panel updates
+immediately to describe the selected scale.</li>
+<li>User sets the base frequency in one of two ways:
+  <ul>
+    <li>Type or spin a value directly into the <strong>Base
+    Frequency</strong> spinbox.</li>
+    <li>Click a <strong>Key</strong> button to snap to standard concert
+    pitch (A&nbsp;=&nbsp;440&nbsp;Hz) for that note. For example,
+    clicking <strong>A</strong> sets 55.000 Hz so that A appears at 55,
+    110, 220, 440&nbsp;Hz across the canvas octaves.</li>
+  </ul>
+</li>
 <li>Clicking <strong>OK</strong> applies the new scale and base
-frequency to the ScoreCanvas. The canvas regenerates its scale lines
-using the new tuning ratios.</li>
+frequency. The canvas regenerates its scale lines using the new tuning
+ratios.</li>
 <li>Clicking <strong>Cancel</strong> discards any changes.</li>
 </ol>
-<h3 id="data-flow">Data Flow</h3>
+<h3 id=”data-flow”>Data Flow</h3>
 <ul>
 <li>On accept, the caller retrieves the selected scale via
 <code>getSelectedScale()</code> and base frequency via
 <code>getBaseFrequency()</code>.</li>
-<li>The ScoreCanvas then calls <code>setScale()</code> and
-<code>setBaseFrequency()</code>, which regenerate the colored horizontal
-scale lines across octaves 0-9.</li>
+<li>The ScoreCanvas calls <code>setScale()</code> and
+<code>setBaseFrequency()</code>, which regenerate the coloured horizontal
+scale lines across octaves 0–9.</li>
+<li>For Equal Temperament specifically, the Key buttons are the primary
+way to set the key: click the desired tonic note and the chromatic grid
+snaps to concert pitch for that key.</li>
 </ul>
 <hr />
 <h2 id="composition-settings-dialog">3. Composition Settings Dialog</h2>
@@ -135,7 +170,7 @@ scale lines across octaves 0-9.</li>
 <strong>Source:</strong> <code>compositionsettingsdialog.h</code>,
 <code>compositionsettingsdialog.cpp</code></p>
 <h3 id="how-to-open-2">How to Open</h3>
-<p>Accessible via <strong>File &gt; Composition Settings</strong>. Syncs
+<p>Accessible via <strong>Settings &gt; Composition Settings…</strong> in the Score Canvas menu bar. Syncs
 with ScoreCanvasWindow toolbar controls.</p>
 <h3 id="ui-components-2">UI Components</h3>
 <table>
@@ -188,6 +223,14 @@ bars.</td>
 bars”.</td>
 </tr>
 <tr>
+<td>Pre-render Delay</td>
+<td>QSpinBox</td>
+<td>How long Kala waits after the last edit before triggering a
+background re-render. Range: 50 – 2000 ms. Step: 50 ms. Default:
+400 ms. Lower values make playback reflect edits sooner; higher values
+reduce CPU churn when you are making rapid changes.</td>
+</tr>
+<tr>
 <td>Calculated Info</td>
 <td>QGroupBox</td>
 <td>Read-only section showing computed values: bar duration in ms and
@@ -205,8 +248,8 @@ total duration in bars = MM:SS.mmm format.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="interaction-flow-2">Interaction Flow</h3>
-<ol type="1">
+<h3 id=”interaction-flow-2”>Interaction Flow</h3>
+<ol type=”1”>
 <li>Dialog opens pre-populated with current composition settings.</li>
 <li>User can change the composition name.</li>
 <li>Selecting a <strong>Time Mode</strong> radio button switches the
@@ -230,11 +273,29 @@ loops.</li>
 <code>CompositionSettings</code> struct via
 <code>getSettings()</code>.</li>
 </ol>
-<h3 id="live-updates">Live Updates</h3>
+<h3 id=”live-updates”>Live Updates</h3>
 <p>All input fields are connected to recalculation slots. Any change to
 tempo, time signature, duration, or bar count triggers
 <code>updateLengthConversion()</code>, which refreshes the Calculated
 Info labels in real time.</p>
+<h3 id=”background-pre-rendering”>Background Pre-rendering</h3>
+<p>Every time you commit an edit on the Score Canvas (draw, move, delete
+a note, or any undoable action), Kala starts a debounce timer. When the
+timer fires — after the <strong>Pre-render Delay</strong> has elapsed
+with no further edits — a background render updates the audio buffers
+for all dirty notes. This means the next press of Play uses freshly
+rendered audio without any blocking “Rendering…” progress bar.</p>
+<ul>
+<li><strong>Lower delay (e.g. 100 ms)</strong>: Audio stays more
+up-to-date during fast edits, but more CPU is used while you are still
+typing/drawing.</li>
+<li><strong>Higher delay (e.g. 1000 ms)</strong>: Kala waits longer
+before rendering, so rapid note edits don't trigger multiple back-to-back
+renders. Useful on slower machines or with very large scores.</li>
+<li>The default of <strong>400 ms</strong> is a comfortable middle
+ground: fast enough to feel responsive, conservative enough not to
+interrupt your flow.</li>
+</ul>
 <hr />
 <h2 id="go-to-dialog">4. Go To Dialog</h2>
 <p><strong>Window Title:</strong> Go To <strong>Size:</strong> 350 x 200

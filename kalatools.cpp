@@ -113,11 +113,28 @@ QJsonObject KalaTools::error(const QString &message)
 
 QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &args)
 {
+    // Suppress the "Invalid Graph Connection" modal dialog during AI tool calls.
+    // Intermediate graph states are expected to be invalid while building.
+    m_builder->setSuppressInvalidGraphWarning(true);
+    struct Restore { SounitBuilder *b; ~Restore() { b->setSuppressInvalidGraphWarning(false); } } restore{m_builder};
+
+    // Clear the anti-loop guard for any mutating tool so get_graph_state works again after a real change.
+    static const QSet<QString> kReadOnlyTools = {
+        "get_graph_state", "get_variation_list", "get_sounit_list", "get_spectrum_list",
+        "get_ir_list", "get_envelope_list", "get_project_list", "get_composition_state",
+        "get_track_list", "get_engine_settings", "get_note_curves", "get_note_vibrato",
+        "get_selected_notes", "get_time_signature_changes", "get_library_root"
+    };
+    if (!kReadOnlyTools.contains(toolName)) {
+        m_graphStateJustProvided    = false;
+        m_selectedNotesJustProvided = false;
+    }
     if (toolName == "get_graph_state")       return toolGetGraphState();
     if (toolName == "get_sounit_list")       return toolGetSounitList();
     if (toolName == "clear_graph")           return toolClearGraph();
     if (toolName == "add_container")         return toolAddContainer(args);
     if (toolName == "set_parameter")         return toolSetParameter(args);
+    if (toolName == "set_parameters")        return toolSetParameters(args);
     if (toolName == "connect_containers")    return toolConnectContainers(args);
     if (toolName == "remove_container")      return toolRemoveContainer(args);
     if (toolName == "load_sounit")           return toolLoadSounit(args);
@@ -146,12 +163,14 @@ QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &
     if (toolName == "delete_variation")          return toolDeleteVariation(args);
     if (toolName == "rename_variation")          return toolRenameVariation(args);
     if (toolName == "switch_variation")          return toolSwitchVariation(args);
+    if (toolName == "copy_variation_to_base")    return toolCopyVariationToBase(args);
     if (toolName == "shift_notes")               return toolShiftNotes(args);
     if (toolName == "apply_beat_dynamics")        return toolApplyBeatDynamics(args);
     if (toolName == "set_note_dynamics")          return toolSetNoteDynamics(args);
     if (toolName == "select_notes")              return toolSelectNotes(args);
     if (toolName == "get_selected_notes")        return toolGetSelectedNotes();
     if (toolName == "apply_dynamics_curve")  return toolApplyDynamicsCurve(args);
+    if (toolName == "scale_dynamics")        return toolScaleDynamics(args);
     if (toolName == "scale_timing")          return toolScaleTiming(args);
     if (toolName == "apply_rhythm_easing")   return toolApplyRhythmEasing(args);
     if (toolName == "link_legato")           return toolLinkLegato(args);
@@ -170,6 +189,7 @@ QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &
     if (toolName == "remove_time_signature_change") return toolRemoveTimeSignatureChange(args);
     if (toolName == "get_note_curves")       return toolGetNoteCurves(args);
     if (toolName == "set_note_curve")        return toolSetNoteCurve(args);
+    if (toolName == "fade_out_notes")        return toolFadeOutNotes(args);
     if (toolName == "get_note_vibrato")      return toolGetNoteVibrato(args);
     if (toolName == "set_note_vibrato")      return toolSetNoteVibrato(args);
     if (toolName == "play_score")            return toolPlayScore();
@@ -223,6 +243,9 @@ Container *KalaTools::findContainer(const QString &instanceName) const
 
 QJsonObject KalaTools::toolGetGraphState()
 {
+    if (m_graphStateJustProvided)
+        return QJsonObject{{"result", "Graph state was already provided in the previous response. Use that data and proceed with your task — do not call get_graph_state again until you have made a change."}};
+
     Canvas *cv = currentCanvas();
     if (!cv)
         return error("No active track/canvas.");
@@ -259,6 +282,7 @@ QJsonObject KalaTools::toolGetGraphState()
     result["sounitName"]  = cv->getSounitName();
     result["containers"]  = containers;
     result["connections"] = connections;
+    m_graphStateJustProvided = true;
     return QJsonObject{ {"result", result} };
 }
 
@@ -402,6 +426,42 @@ QJsonObject KalaTools::toolSetParameter(const QJsonObject &args)
     c->setParameter(param, args["value"].toDouble());
     // parameterChanged() signal fires automatically → rebuildGraph via existing connection
     return ok("Parameter set.");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool: set_parameters (batch)
+// ─────────────────────────────────────────────────────────────────────────────
+
+QJsonObject KalaTools::toolSetParameters(const QJsonObject &args)
+{
+    const QJsonArray changes = args["changes"].toArray();
+    if (changes.isEmpty()) return error("'changes' array is required and must not be empty.");
+
+    QJsonArray errors;
+    int applied = 0;
+
+    for (const QJsonValue &v : changes) {
+        const QJsonObject ch = v.toObject();
+        const QString instanceName = ch["instanceName"].toString();
+        const QString param        = ch["param"].toString();
+        if (instanceName.isEmpty() || param.isEmpty() || !ch.contains("value")) {
+            errors.append(QString("Skipped malformed entry (missing instanceName/param/value)."));
+            continue;
+        }
+        Container *c = findContainer(instanceName);
+        if (!c) {
+            errors.append(QString("Container not found: %1").arg(instanceName));
+            continue;
+        }
+        c->setParameter(param, ch["value"].toDouble());
+        ++applied;
+    }
+
+    QJsonObject result;
+    result["applied"] = applied;
+    if (!errors.isEmpty()) result["errors"] = errors;
+    result["message"] = QString("Set %1 parameter(s).").arg(applied);
+    return QJsonObject{{"result", result}};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1064,6 +1124,7 @@ QJsonObject KalaTools::toolSetTempo(const QJsonObject &args)
 
     sc->setDefaultTempo(bpm);
     sc->update();
+    m_scoreCanvasWindow->refreshToolbar();
 
     return ok(QString("Tempo set to %1 BPM.").arg(bpm));
 }
@@ -1286,7 +1347,55 @@ QJsonObject KalaTools::toolSwitchVariation(const QJsonObject &args)
         m_builder->connectContainerSignals(container);
 
     const QString label = (index == 0) ? "base sounit" : QString("variation %1 '%2'").arg(index).arg(track->getVariationName(index));
-    return ok(QString("Switched to %1. Canvas is now ready for editing.").arg(label));
+
+    // Include graph state and variation list in the response so the model
+    // doesn't need to call get_graph_state / get_variation_list afterwards.
+    QJsonObject graphResult = toolGetGraphState()["result"].toObject();
+
+    QJsonArray vars;
+    vars.append(QJsonObject{ {"index", 0}, {"name", "Base Sounit"} });
+    const int vcount = track->getVariationCount();
+    for (int i = 1; i <= vcount; ++i)
+        vars.append(QJsonObject{ {"index", i}, {"name", track->getVariationName(i)} });
+
+    QJsonObject result;
+    result["message"]    = QString("Switched to %1. Canvas is ready for editing.").arg(label);
+    result["variations"] = vars;
+    result["graph"]      = graphResult;
+    m_graphStateJustProvided = true;
+    return QJsonObject{ {"result", result} };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool: copy_variation_to_base
+// ─────────────────────────────────────────────────────────────────────────────
+
+QJsonObject KalaTools::toolCopyVariationToBase(const QJsonObject &args)
+{
+    Track *track = currentTrack();
+    if (!track) return error("No current track.");
+    if (!args.contains("variationIndex")) return error("'variationIndex' is required.");
+
+    const int index = args["variationIndex"].toInt();
+    if (index <= 0 || index > track->getVariationCount())
+        return error(QString("Variation index %1 out of range (1–%2).").arg(index).arg(track->getVariationCount()));
+
+    // Load the variation onto the canvas
+    if (!track->loadVariationToCanvas(index))
+        return error(QString("Failed to load variation %1 onto canvas.").arg(index));
+
+    // Persist it as the new base sounit state
+    track->saveBaseCanvasState();
+
+    // Rebuild audio graph and reconnect signals
+    m_builder->rebuildGraph(track->getTrackId());
+    Canvas *canvas = track->getCanvas();
+    canvas->cancelPendingConnection();
+    for (Container *container : canvas->findChildren<Container*>())
+        m_builder->connectContainerSignals(container);
+
+    const QString varName = track->getVariationName(index);
+    return ok(QString("Variation %1 '%2' copied to base sounit. The base sounit now matches this variation.").arg(index).arg(varName));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1316,6 +1425,28 @@ QJsonObject KalaTools::toolApplyDynamicsCurve(const QJsonObject &args)
         new ApplyDynamicsCurveCommand(&sc->getPhrase(), indices, pts, weight, perNote, sc));
 
     return ok(QString("Dynamics curve applied to %1 note(s).").arg(indices.size()));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool: scale_dynamics
+// ─────────────────────────────────────────────────────────────────────────────
+
+QJsonObject KalaTools::toolScaleDynamics(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    if (!args.contains("factor")) return error("'factor' is required.");
+    const double factor = args["factor"].toDouble();
+    if (factor <= 0) return error("factor must be > 0.");
+
+    const QVector<int> indices = resolveNoteIndices(sc, args["noteIds"].toArray());
+    if (indices.isEmpty()) return error("No matching notes found.");
+
+    sc->getUndoStack()->push(
+        new ScaleDynamicsCommand(&sc->getPhrase(), indices, factor, sc));
+
+    return ok(QString("Dynamics scaled by ×%1 on %2 note(s).").arg(factor).arg(indices.size()));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1467,6 +1598,9 @@ QJsonObject KalaTools::toolMakeDiscrete(const QJsonObject &args)
 
 QJsonObject KalaTools::toolGetSelectedNotes()
 {
+    if (m_selectedNotesJustProvided)
+        return QJsonObject{{"result", "Selected note IDs were already provided. Use those IDs and proceed — do not call get_selected_notes again until the selection changes."}};
+
     ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
     if (!sc) return error("Score canvas not available.");
 
@@ -1485,6 +1619,7 @@ QJsonObject KalaTools::toolGetSelectedNotes()
     result["message"]       = ids.isEmpty()
                                   ? "No notes are currently selected."
                                   : QString("%1 note(s) are selected.").arg(ids.size());
+    m_selectedNotesJustProvided = true;
     return QJsonObject{ {"result", result} };
 }
 
@@ -1838,6 +1973,7 @@ QJsonObject KalaTools::toolSetTimeSignature(const QJsonObject &args)
         sc->setDefaultTempo(bpm);
         msg += QString(" Tempo set to %1 BPM.").arg(bpm);
     }
+    m_scoreCanvasWindow->refreshToolbar();
     return ok(msg);
 }
 
@@ -2344,6 +2480,31 @@ QJsonObject KalaTools::toolSetNoteCurve(const QJsonObject &args)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tool: fade_out_notes
+// ─────────────────────────────────────────────────────────────────────────────
+
+QJsonObject KalaTools::toolFadeOutNotes(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    const double startTime = args.value("startTime").toDouble(0.85);
+    const double endValue  = args.value("endValue").toDouble(0.0);
+
+    if (startTime <= 0.0 || startTime >= 1.0)
+        return error("startTime must be between 0 and 1 (exclusive). Typical value: 0.85.");
+
+    const QVector<int> indices = resolveNoteIndices(sc, args["noteIds"].toArray());
+    if (indices.isEmpty()) return error("No matching notes found.");
+
+    sc->getUndoStack()->push(
+        new FadeOutNotesCommand(&sc->getPhrase(), indices, startTime, endValue, sc));
+
+    return ok(QString("Fade-out applied to %1 note(s): preserves existing curve up to t=%2, then fades to %3.")
+              .arg(indices.size()).arg(startTime).arg(endValue));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tool: open_project
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2698,9 +2859,100 @@ static QJsonObject objProp(const QString &desc, const QJsonObject &props = {})
     return o;
 }
 
-QJsonArray KalaTools::getToolSchemas()
+// ─────────────────────────────────────────────────────────────────────────────
+// Private static schema helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+static QJsonArray coreSchemas()
 {
-    // All valid container type names
+    QJsonArray schemas;
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_track_list"},{"description","Returns all tracks: index, name, sounit."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_project_list"},{"description","Returns all .kala project files."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "open_project"},
+            {"description", "Opens a .kala project file."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"filePath", strProp("Absolute path")}}},
+                {"required", QJsonArray{"filePath"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "save_project"},
+            {"description", "Saves project. Omit filePath to save in place."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"filePath", strProp("Optional save path")}}},
+                {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","undo"},{"description","Undo last action."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","redo"},{"description","Redo last undone action."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "add_track"},
+            {"description", "Adds a track. Returns new index."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"name",  strProp("Track name")},
+                    {"color", strProp("Hex color (optional)")}
+                }},
+                {"required", QJsonArray{"name"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "rename_track"},
+            {"description", "Renames a track."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"trackIndex", QJsonObject{{"type","integer"},{"description","0-based index"}}},
+                    {"name",       strProp("New name")}
+                }},
+                {"required", QJsonArray{"trackIndex","name"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "delete_track"},
+            {"description", "Deletes a track and its notes."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"trackIndex", QJsonObject{{"type","integer"},{"description","0-based index"}}}}},
+                {"required", QJsonArray{"trackIndex"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "set_library_root"},
+            {"description", "Sets library root folder (saved permanently)."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"path", strProp("Absolute path to library root")}}},
+                {"required", QJsonArray{"path"}}
+            }}
+        }}
+    });
+    return schemas;
+}
+
+static QJsonArray sounitSchemas()
+{
     const QJsonArray containerTypes = {
         "Harmonic Generator", "Spectrum to Signal", "Karplus Strong",
         "Signal Mixer", "Note Tail", "Attack", "Wavetable Synth",
@@ -2711,1716 +2963,862 @@ QJsonArray KalaTools::getToolSchemas()
         "Drift Engine", "LFO", "Frequency Mapper",
         "10-Band EQ", "Comb Filter", "LP/HP Filter", "IR Convolution"
     };
-
-    // All valid connection functions
     const QJsonArray connectionFunctions = {
         "passthrough", "add", "subtract", "multiply", "replace", "modulate"
     };
-
     QJsonArray schemas;
-
-    // ── get_graph_state ──────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_graph_state"},
-            {"description",
-             "Returns the current sounit graph: all containers (type, instance name, "
-             "position, parameters) and all connections. Use this to inspect what has "
-             "already been built before making changes."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── get_sounit_list ──────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_sounit_list"},
-            {"description",
-             "Returns a list of available .sounit files (name + path) from the user's "
-             "sounit library. Use this before load_sounit to find the right file path."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── clear_graph ──────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "clear_graph"},
-            {"description",
-             "Removes all containers and connections from the current sounit graph. "
-             "Use before building a new instrument from scratch."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── add_container ────────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_graph_state"},{"description","Returns all containers and connections."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_sounit_list"},{"description","Returns all .sounit files from library."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","clear_graph"},{"description","Removes all containers and connections."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "add_container"},
-            {"description",
-             "Adds a new audio processing container to the graph. Returns the assigned "
-             "instance name (e.g. 'Envelope Engine 2'). Default parameters are set "
-             "automatically; use the params object to override specific values. "
-             "Position is optional — containers stack automatically if omitted."},
+            {"description", "Adds a container. Returns instance name."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"type", QJsonObject{
-                        {"type", "string"},
-                        {"description", "Container type name. Must be one of the valid types."},
-                        {"enum", containerTypes}
-                    }},
-                    {"params", QJsonObject{
-                        {"type", "object"},
-                        {"description",
-                         "Optional parameter overrides. Keys are parameter names (e.g. "
-                         "'numHarmonics', 'dnaSelect', 'amount', 'frequency'). Values are "
-                         "numbers. Only specify parameters you want to change from defaults."}
-                    }},
-                    {"position", QJsonObject{
-                        {"type", "object"},
-                        {"description", "Optional {x, y} pixel position on the canvas."},
-                        {"properties", QJsonObject{
-                            {"x", numProp("Horizontal position in pixels")},
-                            {"y", numProp("Vertical position in pixels")}
-                        }}
-                    }}
+                    {"type", QJsonObject{{"type","string"},{"description","Container type."},{"enum",containerTypes}}},
+                    {"params", QJsonObject{{"type","object"},{"description","Param overrides."}}},
+                    {"position", QJsonObject{{"type","object"},{"description","{x,y} position."},{"properties",QJsonObject{{"x",numProp("X")},{"y",numProp("Y")}}}}}
                 }},
                 {"required", QJsonArray{"type"}}
             }}
         }}
     });
-
-    // ── set_parameter ────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_parameter"},
-            {"description",
-             "Sets a single parameter on an existing container. The audio graph "
-             "rebuilds automatically. Use the instance name returned by add_container."},
+            {"description", "Sets one parameter on a container. Prefer set_parameters for multiple changes."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"instanceName", strProp("Instance name of the container (e.g. 'Drift Engine 1')")},
-                    {"param",        strProp("Parameter name (e.g. 'amount', 'rate', 'dnaSelect')")},
-                    {"value",        numProp("New numeric value for the parameter")}
+                    {"instanceName", strProp("Instance name")},
+                    {"param",        strProp("Parameter name")},
+                    {"value",        numProp("Value")}
                 }},
                 {"required", QJsonArray{"instanceName", "param", "value"}}
             }}
         }}
     });
-
-    // ── connect_containers ───────────────────────────────────────────────────
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "set_parameters"},
+            {"description", "Sets multiple parameters across one or more containers in a single call. Always use this instead of multiple set_parameter calls."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"changes", QJsonObject{
+                        {"type", "array"},
+                        {"description", "Array of {instanceName, param, value} objects."},
+                        {"items", QJsonObject{
+                            {"type", "object"},
+                            {"properties", QJsonObject{
+                                {"instanceName", strProp("Container instance name")},
+                                {"param",        strProp("Parameter name")},
+                                {"value",        numProp("Parameter value")}
+                            }},
+                            {"required", QJsonArray{"instanceName", "param", "value"}}
+                        }}
+                    }}
+                }},
+                {"required", QJsonArray{"changes"}}
+            }}
+        }}
+    });
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "connect_containers"},
-            {"description",
-             "Creates a connection between an output port of one container and an input "
-             "port of another. Port names are validated — call get_graph_state first if "
-             "unsure of instance names. Common patterns: "
-             "spectrum→spectrumIn (spectral routing), "
-             "signalOut→signalIn (audio signal), "
-             "controlOut→param (modulation). "
-             "function 'passthrough' for direct routing, 'add' for additive modulation, "
-             "'multiply' for amplitude control, 'modulate' for bipolar LFO-style."},
+            {"description", "Connects output port to input port between containers. CONSTRAINT: each output port may only be connected to ONE input port total — you cannot fan one output to multiple inputs. Use separate source containers for each target input."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"fromInstance", strProp("Instance name of the source container")},
-                    {"fromPort",     strProp("Output port name on the source container")},
-                    {"toInstance",   strProp("Instance name of the destination container")},
-                    {"toPort",       strProp("Input port name on the destination container")},
-                    {"function",     QJsonObject{
-                        {"type", "string"},
-                        {"description", "How the source value combines with the destination. Default: passthrough"},
-                        {"enum", connectionFunctions}
-                    }},
-                    {"weight",       numProp("Scaling factor for add/subtract/multiply/modulate. Default: 1.0")}
+                    {"fromInstance", strProp("Source instance")},
+                    {"fromPort",     strProp("Source port")},
+                    {"toInstance",   strProp("Dest instance")},
+                    {"toPort",       strProp("Dest port")},
+                    {"function",     QJsonObject{{"type","string"},{"description","Combine fn (default passthrough)"},{"enum",connectionFunctions}}},
+                    {"weight",       numProp("Scale factor")}
                 }},
                 {"required", QJsonArray{"fromInstance", "fromPort", "toInstance", "toPort"}}
             }}
         }}
     });
-
-    // ── remove_connection ─────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "remove_connection"},
-            {"description",
-             "Removes a single connection between two containers without affecting the containers "
-             "themselves. Use get_graph_state to see current connections and exact port/instance names. "
-             "Supports undo."},
+            {"description", "Removes one connection. Undoable."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"fromInstance", strProp("Instance name of the source container")},
-                    {"fromPort",     strProp("Output port name on the source container")},
-                    {"toInstance",   strProp("Instance name of the destination container")},
-                    {"toPort",       strProp("Input port name on the destination container")}
+                    {"fromInstance", strProp("Source instance")},
+                    {"fromPort",     strProp("Source port")},
+                    {"toInstance",   strProp("Dest instance")},
+                    {"toPort",       strProp("Dest port")}
                 }},
                 {"required", QJsonArray{"fromInstance", "fromPort", "toInstance", "toPort"}}
             }}
         }}
     });
-
-    // ── remove_container ─────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "remove_container"},
-            {"description", "Removes a container (and all its connections) from the graph."},
+            {"description", "Removes container and its connections."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"instanceName", strProp("Instance name of the container to remove")}
-                }},
+                {"properties", QJsonObject{{"instanceName", strProp("Instance name")}}},
                 {"required", QJsonArray{"instanceName"}}
             }}
         }}
     });
-
-    // ── load_sounit ──────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "load_sounit"},
-            {"description",
-             "Loads a .sounit file into the current track, replacing the existing graph. "
-             "Call get_sounit_list first to find the correct file path."},
+            {"description", "Loads .sounit file, replacing current graph."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"filePath", strProp("Absolute path to the .sounit file to load")}
-                }},
+                {"properties", QJsonObject{{"filePath", strProp("Absolute path")}}},
                 {"required", QJsonArray{"filePath"}}
             }}
         }}
     });
-
-    // ── save_sounit ──────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "save_sounit"},
-            {"description", "Saves the current graph to a .sounit file."},
+            {"description", "Saves current graph to .sounit file."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"filePath", strProp("Absolute path where the .sounit file will be saved")},
-                    {"name",     strProp("Optional display name to embed in the sounit metadata")}
+                    {"filePath", strProp("Absolute path")},
+                    {"name",     strProp("Display name (optional)")}
                 }},
                 {"required", QJsonArray{"filePath"}}
             }}
         }}
     });
-
-    // ── play_preview ─────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "play_preview"},
-            {"description",
-             "Triggers playback of the current track so the user can audition the "
-             "graph that was just built. Call this after finishing graph construction."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── get_spectrum_list ─────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_spectrum_list"},
-            {"description",
-             "Returns all custom DNA spectrum files available in the user's spectrum library "
-             "(~/Music/kala/spectrum). These are mathematical/organic harmonic profiles that "
-             "can be loaded into a Harmonic Generator using dnaSelect=-1 and a dnaFilePath. "
-             "Includes spectra like fibonacci, phi, prime numbers, vocal warm, brass, etc. "
-             "Call this when the user asks about custom timbres or unusual harmonic content."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── get_project_list ──────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_project_list"},
-            {"description",
-             "Returns all Kala project files (.kala) in the user's projects directory. "
-             "Each entry has a name and an absolute file path. "
-             "Use this when the user asks what compositions exist or wants to reference "
-             "a project by name."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── get_ir_list ───────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_ir_list"},
-            {"description",
-             "Returns all impulse response (.wav) files available in the user's IR library. "
-             "These can be used with IR Convolution containers to place an instrument in a "
-             "space. IMPORTANT: IR Convolution files cannot be set programmatically — the "
-             "user must assign them manually in the IR Convolution inspector. Use this tool "
-             "to tell the user which IR files are available so they can choose one."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── set_library_root ──────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "set_library_root"},
-            {"description",
-             "Sets the root folder of the user's Kala file library. All subsequent calls to "
-             "get_sounit_list, get_spectrum_list, get_project_list, and get_ir_list will scan "
-             "from this root. The path is saved permanently. "
-             "Use this when the user tells you their files are in a different location than "
-             "~/Music/kala (e.g. 'my kala files are on D:/Music/kala')."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"path", strProp("Absolute path to the root of the kala library folder "
-                                    "(the folder that contains sounit/, spectrum/, projects/, etc.)")}
-                }},
-                {"required", QJsonArray{"path"}}
-            }}
-        }}
-    });
-
-    // ── load_ir ───────────────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","play_preview"},{"description","Auditions current graph."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_spectrum_list"},{"description","Returns all .dna.json spectrum files."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_ir_list"},{"description","Returns all IR .wav files."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "load_ir"},
-            {"description",
-             "Loads a WAV impulse response file into an IR Convolution container. "
-             "Call get_ir_list first to find the available file paths. "
-             "The audio graph rebuilds automatically after loading. "
-             "Workflow: add_container(IR Convolution) → connect it → load_ir with the path."},
+            {"description", "Loads WAV IR into an IR Convolution container."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"instanceName", strProp("Instance name of the IR Convolution container "
-                                            "(e.g. 'IR Convolution 1')")},
-                    {"filePath",     strProp("Absolute path to the .wav IR file")}
+                    {"instanceName", strProp("Instance name")},
+                    {"filePath",     strProp("Absolute .wav path")}
                 }},
                 {"required", QJsonArray{"instanceName", "filePath"}}
             }}
         }}
     });
-
-    // ── get_envelope_list ─────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_envelope_list"},
-            {"description",
-             "Returns all saved envelope shapes (.env.json) from the user's envelope library. "
-             "Each entry has a name and absolute file path. "
-             "Call this before load_envelope to find the right path."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── load_envelope ─────────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_envelope_list"},{"description","Returns all .env.json envelope files."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "load_envelope"},
-            {"description",
-             "Loads a saved envelope shape (.env.json) into an Envelope Engine container. "
-             "Call get_envelope_list first to find the file path. "
-             "Sets envelopeSelect=7 (custom) and stores all control points. "
-             "Workflow: add_container(Envelope Engine) → load_envelope."},
+            {"description", "Loads .env.json into an Envelope Engine."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"instanceName", strProp("Instance name of the Envelope Engine container "
-                                            "(e.g. 'Envelope Engine 1')")},
-                    {"filePath",     strProp("Absolute path to the .env.json file")}
+                    {"instanceName", strProp("Instance name")},
+                    {"filePath",     strProp("Absolute .env.json path")}
                 }},
                 {"required", QJsonArray{"instanceName", "filePath"}}
             }}
         }}
     });
-
-    // ── set_envelope_shape ────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_envelope_shape"},
-            {"description",
-             "Builds a custom envelope shape from scratch and applies it to an Envelope Engine. "
-             "Each point has time (0.0–1.0), value (0.0–1.0), and optional curveType "
-             "(0=Linear, 1=Smooth, 2=Step; default 1). "
-             "The envelope maps to the note lifetime: time=0 is note start, time=1 is note end. "
-             "First and last points are auto-clamped to time=0 and time=1 if not provided. "
-             "loopMode: 0=None (default), 1=Loop, 2=Ping-pong. "
-             "Examples: "
-             "Attack-sustain-release: [{0,0},{0.05,1},{0.2,0.7},{1,0.7}]. "
-             "Swell: [{0,0},{0.5,1},{1,0}]. "
-             "Fade in: [{0,0},{1,1}]. "
-             "Fade out: [{0,1},{1,0}]. "
-             "Bell: [{0,0},{0.1,1},{0.4,0.3},{1,0}]."},
+            {"description", "Sets custom envelope on Envelope Engine. Points: [{time,value,curveType}] (0–1). loopMode: 0=None,1=Loop,2=PingPong."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"instanceName", strProp("Instance name of the Envelope Engine container")},
+                    {"instanceName", strProp("Instance name")},
                     {"points", QJsonObject{
-                        {"type", "array"},
-                        {"description", "Array of control points. Each: {time, value, curveType (optional)}."},
-                        {"items", QJsonObject{
-                            {"type", "object"},
-                            {"properties", QJsonObject{
-                                {"time",      numProp("Normalised time 0.0–1.0")},
-                                {"value",     numProp("Normalised value 0.0–1.0")},
-                                {"curveType", numProp("0=Linear, 1=Smooth (default), 2=Step")}
-                            }}
-                        }}
+                        {"type","array"},
+                        {"description","[{time,value,curveType}]"},
+                        {"items", QJsonObject{{"type","object"}}}
                     }},
-                    {"name",     strProp("Optional display name for the envelope")},
-                    {"loopMode", numProp("0=None (default), 1=Loop, 2=Ping-pong")}
+                    {"name",     strProp("Envelope name (optional)")},
+                    {"loopMode", numProp("0=None,1=Loop,2=PingPong")}
                 }},
                 {"required", QJsonArray{"instanceName", "points"}}
             }}
         }}
     });
-
-    // ── load_spectrum ─────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "load_spectrum"},
-            {"description",
-             "Loads a custom DNA harmonic spectrum (.dna.json) into a Harmonic Generator "
-             "container. Call get_spectrum_list first to find the file path. "
-             "Sets dnaSelect=-1 and stores all amplitude values as numeric parameters. "
-             "The spectrum name is preserved for display in the inspector. "
-             "Workflow: add_container(Harmonic Generator) → load_spectrum with the HG "
-             "instance name and the .dna.json file path."},
+            {"description", "Loads .dna.json into Harmonic Generator (sets dnaSelect=-1)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"instanceName", strProp("Instance name of the Harmonic Generator container "
-                                            "(e.g. 'Harmonic Generator 1')")},
-                    {"filePath",     strProp("Absolute path to the .dna.json spectrum file")}
+                    {"instanceName", strProp("Instance name")},
+                    {"filePath",     strProp("Absolute .dna.json path")}
                 }},
                 {"required", QJsonArray{"instanceName", "filePath"}}
             }}
         }}
     });
-
-    // ── get_composition_state ─────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_composition_state"},
-            {"description",
-             "Returns all notes currently on the score canvas, plus scale, tempo and "
-             "time signature. Each note has: id, startTime (ms), duration (ms), pitchHz, "
-             "dynamics (0–1), trackIndex. Optionally filter to a single track."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"trackIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "If provided, return only notes on this track index. Omit to return all notes."}
-                    }}
-                }},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── get_track_list ────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_track_list"},
-            {"description",
-             "Returns all tracks in the composition with their index, name, and loaded "
-             "sounit name. Use this to find track indices before adding notes."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── add_note ─────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "add_note"},
-            {"description",
-             "Adds a note to the score canvas. startTime and duration are in milliseconds. "
-             "pitchHz is the fundamental frequency (e.g. A4=440, C4=261.63, G4=392, D5=587.33). "
-             "dynamics is 0–1 (0.7 is a good default). trackIndex selects which instrument track "
-             "plays the note. Returns the note's unique id. Supports full undo."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"startTime",  numProp("Note start time in milliseconds (>= 0)")},
-                    {"duration",   numProp("Note duration in milliseconds (> 0)")},
-                    {"pitchHz",    numProp("Fundamental pitch in Hz (e.g. 440 = A4)")},
-                    {"dynamics",   numProp("Loudness 0.0–1.0 (default 0.7)")},
-                    {"trackIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "Which track/instrument to assign the note to (0-based). "
-                                        "Use get_track_list to find available tracks."}
-                    }}
-                }},
-                {"required", QJsonArray{"startTime", "duration", "pitchHz"}}
-            }}
-        }}
-    });
-
-    // ── delete_note ──────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "delete_note"},
-            {"description",
-             "Deletes a single note by its id. Use get_composition_state to find note ids. "
-             "Supports undo."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"id", strProp("Unique note id returned by add_note or get_composition_state")}
-                }},
-                {"required", QJsonArray{"id"}}
-            }}
-        }}
-    });
-
-    // ── clear_notes ───────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "clear_notes"},
-            {"description",
-             "Removes notes from the score canvas. Without trackIndex, removes ALL notes. "
-             "With trackIndex, removes only notes on that track. Supports undo."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"trackIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "Optional. If provided, only clear notes on this track."}
-                    }}
-                }},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── set_scale ─────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "set_scale"},
-            {"description",
-             "Sets the tuning scale and optionally the base frequency (tonic). "
-             "Provide either scaleId (integer) or scaleName (string). "
-             "Common scales and IDs: 0=Just Intonation, 1=Pythagorean, 2=Equal Temperament, "
-             "3=Quarter-Comma Meantone, 4=Maqam Rast, 5=Maqam Bayati, 7=Maqam Hijaz, "
-             "10=Raga Bhairav, 11=Raga Yaman, 13=Raga Bhairavi, 16=Chinese Pentatonic, "
-             "17=Hirajoshi, 20=Whole Tone, 30=Persian Shur. "
-             "baseFreqHz is the tonic frequency (default 261.63 = C4)."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"scaleId",    QJsonObject{{"type","integer"},{"description","Scale ID (see description)"}}},
-                    {"scaleName",  strProp("Scale name (e.g. 'Just Intonation', 'Raga Yaman')")},
-                    {"baseFreqHz", numProp("Tonic/base frequency in Hz (e.g. 261.63 for C4, 293.66 for D4)")}
-                }},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── set_tempo ─────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "set_tempo"},
-            {"description",
-             "Sets the default composition tempo in beats per minute (BPM). "
-             "Valid range: 20–400. This controls bar lines and musical time display. "
-             "Typical values: 60=Largo, 80=Andante, 100=Moderato, 120=Allegro, 160=Vivace."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"bpm", numProp("Tempo in beats per minute (20–400)")}
-                }},
-                {"required", QJsonArray{"bpm"}}
-            }}
-        }}
-    });
-
-    // ── get_variation_list ────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_variation_list"},
-            {"description",
-             "Returns all sound variations available on the current track. "
-             "Index 0 is the base sounit; higher indices are named variations "
-             "(e.g. 'Wood Room', 'Plate', 'Cantabile'). "
-             "Call this before apply_variation to discover valid variation indices."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── apply_variation ───────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_variation_list"},{"description","Returns all variations (index 0=base)."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "apply_variation"},
-            {"description",
-             "Assigns a sound variation to one or more notes on the score canvas. "
-             "Call get_variation_list first to find the variation index. "
-             "Call get_composition_state first to find note ids. "
-             "Leave noteIds empty to apply to all notes on the current track. "
-             "Variation 0 = base sounit, 1+ = named variations."},
+            {"description", "Assigns variation index to notes. Empty=all."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"variationIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "Variation index to assign (0=base, 1+=named variations)"}
-                    }},
-                    {"noteIds", QJsonObject{
-                        {"type", "array"},
-                        {"description", "Array of note id strings to target. Empty = all notes on current track."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"variationIndex", QJsonObject{{"type","integer"},{"description","0=base,1+=named"}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"variationIndex"}}
             }}
         }}
     });
-
-    // ── create_variation ──────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "create_variation"},
-            {"description",
-             "Snapshots the current canvas state as a named variation on the current track. "
-             "Use this after building or modifying a sounit to save it as a named alternative "
-             "(e.g. 'Wood Room', 'Bright Plate'). The base sounit on the canvas is unchanged. "
-             "Returns the variation index for use with apply_variation."},
+            {"description", "Snapshots canvas as named variation. Returns index."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"name", strProp("Name for the new variation (e.g. 'Wood Room', 'Bright Plate')")}
-                }},
+                {"properties", QJsonObject{{"name", strProp("Variation name")}}},
                 {"required", QJsonArray{"name"}}
             }}
         }}
     });
-
-    // ── create_variation_from_sounit ──────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "create_variation_from_sounit"},
-            {"description",
-             "Loads a .sounit file as a named variation without touching the current canvas. "
-             "Use get_sounit_list first to find the file path. "
-             "Returns the variation index for use with apply_variation."},
+            {"description", "Loads .sounit as named variation without touching canvas."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"filePath", strProp("Absolute path to the .sounit file")},
-                    {"name",     strProp("Name for the new variation")}
+                    {"filePath", strProp("Absolute .sounit path")},
+                    {"name",     strProp("Variation name")}
                 }},
                 {"required", QJsonArray{"filePath", "name"}}
             }}
         }}
     });
-
-    // ── delete_variation ──────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "delete_variation"},
-            {"description",
-             "Deletes a variation from the current track by index. "
-             "Call get_variation_list first to find the index. "
-             "Index 0 (base sounit) cannot be deleted."},
+            {"description", "Deletes variation by index (1+). Cannot delete index 0."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"variationIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "1-based variation index to delete"}
-                    }}
-                }},
+                {"properties", QJsonObject{{"variationIndex", QJsonObject{{"type","integer"},{"description","1-based index"}}}}},
                 {"required", QJsonArray{"variationIndex"}}
             }}
         }}
     });
-
-    // ── rename_variation ──────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "rename_variation"},
-            {"description", "Renames an existing variation on the current track."},
+            {"description", "Renames a variation."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"variationIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "1-based variation index to rename"}
-                    }},
-                    {"name", strProp("New name for the variation")}
+                    {"variationIndex", QJsonObject{{"type","integer"},{"description","1-based index"}}},
+                    {"name", strProp("New name")}
                 }},
                 {"required", QJsonArray{"variationIndex", "name"}}
             }}
         }}
     });
-
-    // ── switch_variation ──────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "switch_variation"},
-            {"description",
-             "Loads a variation (or the base sounit) onto the canvas so it can be edited. "
-             "Use index 0 to restore the base sounit. "
-             "After switching, the sounit builder shows the variation's graph and all "
-             "add_container / set_parameter / connect_containers calls will modify it. "
-             "Call create_variation to save edits as a new snapshot when done."},
+            {"description", "Loads variation onto canvas for editing (0=base). Returns graph state and variation list — do NOT call get_graph_state or get_variation_list afterwards."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"variationIndex", QJsonObject{
-                        {"type", "integer"},
-                        {"description", "Variation index to load (0 = base sounit, 1+ = named variations)"}
-                    }}
-                }},
+                {"properties", QJsonObject{{"variationIndex", QJsonObject{{"type","integer"},{"description","0=base,1+=named"}}}}},
                 {"required", QJsonArray{"variationIndex"}}
             }}
         }}
     });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "copy_variation_to_base"},
+            {"description", "Replaces the base sounit with the graph of an existing variation. Use this when the user wants to 'promote' or 'copy' a variation to the base. Much faster than rebuilding container by container."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"variationIndex", QJsonObject{{"type","integer"},{"description","1-based variation index to copy to base"}}}}},
+                {"required", QJsonArray{"variationIndex"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_engine_settings"},{"description","Returns containerSettings (min/max) and project settings."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "set_engine_settings"},
+            {"description", "Partial update of engine settings. containerSettings keys: harmonicGenerator, rolloffProcessor, spectrumToSignal, formantBody, breathTurbulence, noiseColorFilter, physicsSystem, driftEngine, gateProcessor, karplusStrong, attack, lfo, wavetableSynth, frequencyMapper, bandpassEQ, combFilter, lowHighPassFilter, irConvolution, recorder, bowed, reed, easing. project: compositionName, sampleRate, bitDepth, lengthMs."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"containerSettings", QJsonObject{{"type","object"},{"description","By group name."}}},
+                    {"project",           QJsonObject{{"type","object"},{"description","Project fields."}}}
+                }},
+                {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    return schemas;
+}
 
-    // ── apply_dynamics_curve ──────────────────────────────────────────────────
+static QJsonArray compositionSchemas()
+{
+    QJsonArray schemas;
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "get_composition_state"},
+            {"description", "Returns notes (id,startTime,duration,pitchHz,dynamics,trackIndex), scale, tempo, time sig. Optional trackIndex filter."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"trackIndex", QJsonObject{{"type","integer"},{"description","Track filter"}}}}},
+                {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "add_note"},
+            {"description", "Adds a note (startTime/duration ms, pitchHz Hz, dynamics 0–1). Returns id."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"startTime",  numProp("Start ms")},
+                    {"duration",   numProp("Duration ms")},
+                    {"pitchHz",    numProp("Hz (A4=440)")},
+                    {"dynamics",   numProp("0–1 (default 0.7)")},
+                    {"trackIndex", QJsonObject{{"type","integer"},{"description","0-based track"}}}
+                }},
+                {"required", QJsonArray{"startTime", "duration", "pitchHz"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "delete_note"},
+            {"description", "Deletes a note by id."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"id", strProp("Note id")}}},
+                {"required", QJsonArray{"id"}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "clear_notes"},
+            {"description", "Removes notes. Omit trackIndex to clear all."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"trackIndex", QJsonObject{{"type","integer"},{"description","Track filter"}}}}},
+                {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "set_scale"},
+            {"description", "Sets tuning scale and optional base freq. IDs: 0=JustIntonation,1=Pythagorean,2=EqualTemperament,3=Meantone,4=MaqamRast,5=MaqamBayati,7=MaqamHijaz,10=RagaBhairav,11=RagaYaman,13=RagaBhairavi,16=ChinesePentatonic,17=Hirajoshi,20=WholeTone,30=PersianShur."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"scaleId",    QJsonObject{{"type","integer"},{"description","Scale ID"}}},
+                    {"scaleName",  strProp("Scale name")},
+                    {"baseFreqHz", numProp("Tonic Hz (default 261.63)")}
+                }},
+                {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "set_tempo"},
+            {"description", "Sets default tempo in BPM."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{{"bpm", numProp("BPM (20–400)")}}},
+                {"required", QJsonArray{"bpm"}}
+            }}
+        }}
+    });
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "apply_dynamics_curve"},
-            {"description",
-             "Applies a dynamics (loudness) envelope curve to a set of notes. "
-             "The curve is defined by control points {time 0–1, value 0–1, curveType}. "
-             "time=0 maps to the first note, time=1 maps to the last note. "
-             "value=1 keeps the note's original dynamics; value=0 silences it. "
-             "weight controls blend between original and target dynamics (1.0=full replace). "
-             "perNote=true resets time to 0–1 within each note independently. "
-             "Supports undo. Leave noteIds empty for all notes."},
+            {"description", "Applies loudness curve to notes. Points [{time,value,curveType}] 0–1. Undoable."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"points", QJsonObject{
-                        {"type", "array"},
-                        {"description", "Dynamics curve control points. Each: {time 0–1, value 0–1, curveType 0/1/2}."},
-                        {"items", QJsonObject{
-                            {"type","object"},
-                            {"properties", QJsonObject{
-                                {"time",      numProp("0.0–1.0 position across the note selection")},
-                                {"value",     numProp("0.0–1.0 dynamics multiplier (1.0 = unchanged)")},
-                                {"curveType", numProp("0=Linear, 1=Smooth, 2=Step")}
-                            }}
-                        }}
-                    }},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to target. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }},
-                    {"weight",  numProp("Blend factor 0–1 (default 1.0 = full apply)")},
-                    {"perNote", QJsonObject{{"type","boolean"},{"description","If true, apply the curve independently to each note's internal timeline"}}}
+                    {"points", QJsonObject{{"type","array"},{"description","[{time,value,curveType 0/1/2}]"},{"items",QJsonObject{{"type","object"}}}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}},
+                    {"weight",  numProp("Blend 0–1")},
+                    {"perNote", QJsonObject{{"type","boolean"},{"description","Per-note lifetime"}}}
                 }},
                 {"required", QJsonArray{"points"}}
             }}
         }}
     });
-
-    // ── scale_timing ──────────────────────────────────────────────────────────
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "scale_dynamics"},
+            {"description", "Multiplies the dynamics level of notes by a factor, preserving each note's internal curve shape. factor>1.0 boosts (louder), factor<1.0 reduces (quieter), values clamped to 1.0. Undoable."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"factor",  numProp("Multiplier, e.g. 1.5 = 50% louder, 0.7 = 30% quieter")},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all current track."}}}
+                }},
+                {"required", QJsonArray{"factor"}}
+            }}
+        }}
+    });
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "scale_timing"},
-            {"description",
-             "Scales the timing (start times and durations) of notes by a factor. "
-             "proportion=2.0 doubles all timings (half tempo). "
-             "proportion=0.5 halves them (double tempo). "
-             "Supports undo. Leave noteIds empty for all notes."},
+            {"description", "Scales start times and durations by factor. Undoable."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"proportion", numProp("Timing scale factor (e.g. 1.5 = 50% slower, 0.5 = 50% faster)")},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to target. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"proportion", numProp("Factor (2.0=half tempo)")},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"proportion"}}
             }}
         }}
     });
-
-    // ── apply_rhythm_easing ───────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "apply_rhythm_easing"},
-            {"description",
-             "Redistributes the temporal spacing between notes using an easing curve. "
-             "Makes note onsets follow an acceleration/deceleration pattern instead of "
-             "uniform timing. Minimum 2 notes required. Supports undo. "
-             "easingType: 0=Linear, 1=QuadIn, 2=QuadOut, 3=QuadInOut, 4=CubicIn, 5=CubicOut, "
-             "6=CubicInOut, 7=QuartIn, 8=QuartOut, 9=QuartInOut, 10=SineIn, 11=SineOut, "
-             "12=SineInOut, 13=ExpoIn, 14=ExpoOut, 15=ExpoInOut, 16=CircIn, 17=CircOut, "
-             "18=CircInOut, 19=BackIn, 20=BackOut, 21=BackInOut, 22=ElasticIn, 23=ElasticOut, "
-             "24=ElasticInOut, 25=BounceIn, 26=BounceOut, 27=BounceInOut, 28=Wobble. "
-             "anchorMode: 0=None, 1=AnchorFirst, 2=AnchorLast, 3=AnchorBoth (default). "
-             "Leave noteIds empty for all notes."},
+            {"description", "Redistributes onset spacing by easing curve. easingType 0–28 (0=Linear,1=QuadIn,2=QuadOut,3=QuadInOut,4=CubicIn,5=CubicOut,6=CubicInOut,7-9=QuartIn/Out/InOut,10-12=SineIn/Out/InOut,13-15=ExpoIn/Out/InOut,16-18=CircIn/Out/InOut,19-21=BackIn/Out/InOut,22-24=ElasticIn/Out/InOut,25-27=BounceIn/Out/InOut,28=Wobble). anchorMode 0-3 (3=AnchorBoth default)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"easingType", QJsonObject{{"type","integer"},{"description","Easing curve type (0=Linear default; see description for full list)"}}},
-                    {"anchorMode", QJsonObject{{"type","integer"},{"description","0=None, 1=AnchorFirst, 2=AnchorLast, 3=AnchorBoth (default)"}}},
-                    {"weight",     numProp("Blend 0–1 (default 1.0 = full easing)")},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to target. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"easingType", QJsonObject{{"type","integer"},{"description","0–28"}}},
+                    {"anchorMode", QJsonObject{{"type","integer"},{"description","0–3"}}},
+                    {"weight",     numProp("Blend 0–1")},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── link_legato ───────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "link_legato"},
-            {"description",
-             "Links two or more notes as a legato group so they play connected without "
-             "retriggering the envelope between them. Each note sustains into the next. "
-             "Requires at least 2 notes. Supports undo."},
+            {"description", "Links notes as legato (no retrigger). Min 2 noteIds required."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to link (at least 2 required)."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
-                {"required", QJsonArray{"noteIds"}}
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids (min 2)."}}}}}
+                ,{"required", QJsonArray{"noteIds"}}
             }}
         }}
     });
-
-    // ── unlink_legato ─────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "unlink_legato"},
-            {"description",
-             "Removes legato linking from notes, making them discrete/staccato again. "
-             "Each note will retrigger its envelope independently. Supports undo. "
-             "Leave noteIds empty to unlink all notes."},
+            {"description", "Removes legato links. Empty=all."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to unlink. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}}},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── quantize_to_scale ─────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "quantize_to_scale"},
-            {"description",
-             "Snaps the pitch of selected notes to the nearest degree in the current scale. "
-             "Useful after placing notes by frequency to make them scale-correct. "
-             "Leave noteIds empty to quantize all notes."},
+            {"description", "Snaps pitches to nearest scale degree."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to quantize. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}}},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── make_continuous ───────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "make_continuous"},
-            {"description",
-             "Converts notes to continuous mode: each note extends in time until the next "
-             "note starts, creating a flowing glide-like texture. "
-             "Leave noteIds empty to convert all notes."},
+            {"description", "Sets notes to continuous mode (extends to next note)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to convert. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}}},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── make_discrete ─────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "make_discrete"},
-            {"description",
-             "Converts notes to discrete mode: each note plays for exactly its stated duration "
-             "and stops. The opposite of make_continuous. "
-             "Leave noteIds empty to convert all notes."},
+            {"description", "Sets notes to discrete mode (plays exact duration)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to convert. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}}},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── set_note_dynamics ─────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_note_dynamics"},
-            {"description",
-             "Sets an individual dynamics value (0.0–1.0) for each specified note. "
-             "noteIds and values must be the same length — each value maps to the note at the same position. "
-             "Use this for per-note variation: call get_composition_state to get note IDs and start times, "
-             "compute a dynamics value for each note (e.g. beat-pattern base + small random offset), "
-             "then call this tool once with all IDs and values. "
-             "The entire operation is a single undoable command (Ctrl+Z restores all previous dynamics)."},
+            {"description", "Sets dynamics per note. noteIds and values parallel arrays."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note IDs to set dynamics on (from get_composition_state)."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }},
-                    {"values", QJsonObject{
-                        {"type","array"},
-                        {"description","Dynamics value (0.0–1.0) for each note, in the same order as noteIds."},
-                        {"items", QJsonObject{{"type","number"}}}
-                    }}
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids."}}},
+                    {"values",  QJsonObject{{"type","array"},{"description","Dynamics 0–1 per note."},{"items",QJsonObject{{"type","number"}}}}}
                 }},
                 {"required", QJsonArray{"noteIds","values"}}
             }}
         }}
     });
-
-    // ── apply_beat_dynamics ───────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "apply_beat_dynamics"},
-            {"description",
-             "Applies a per-beat accent pattern to notes based on their position within each measure. "
-             "The pattern is an array of dynamics values (0.0–1.0) indexed by beat (beat 1 = index 0). "
-             "For example, a 5/4 accent pattern [0.9, 0.4, 0.7, 0.5, 0.35] sets beat 1 strong, "
-             "beat 3 medium, beat 4 light, beats 2 and 5 lighter. "
-             "If the pattern is shorter than the time signature numerator it wraps. "
-             "The time signature and tempo are read from the score canvas at each note's position "
-             "so mid-piece time signature changes are handled correctly. "
-             "Leave noteIds empty to apply to all notes. "
-             "Fully undoable with Ctrl+Z."},
+            {"description", "Applies per-beat accent pattern (beat 1=index 0). Wraps if shorter than numerator."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"pattern", QJsonObject{
-                        {"type", "array"},
-                        {"description", "Dynamics value (0.0–1.0) for each beat, starting from beat 1 (index 0)."},
-                        {"items", QJsonObject{{"type","number"}}}
-                    }},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to target. Empty = all notes on the canvas."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"pattern", QJsonObject{{"type","array"},{"description","Dynamics 0–1 per beat."},{"items",QJsonObject{{"type","number"}}}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"pattern"}}
             }}
         }}
     });
-
-    // ── get_selected_notes ────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_selected_notes"},
-            {"description",
-             "Returns the IDs of the notes currently selected on the score canvas (by the user). "
-             "Use this when the user says 'work on the selected notes', 'apply this to my selection', etc. "
-             "The returned noteIds can be passed directly to shift_notes, apply_variation, "
-             "apply_dynamics_curve, delete_note, link_legato, and any other tool that accepts noteIds."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── select_notes ─────────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_selected_notes"},{"description","Returns ids of user-selected notes on canvas."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "select_notes"},
-            {"description",
-             "Selects notes on the score canvas by pitch range and/or track. "
-             "At least one filter (pitchMinHz, pitchMaxHz, or trackIndex) should be provided, "
-             "otherwise all notes are selected. "
-             "The matched notes are visually highlighted on the canvas AND their IDs are returned "
-             "so they can be passed directly to shift_notes, apply_variation, apply_dynamics_curve, etc."},
+            {"description", "Selects notes by pitch range and/or track. Returns ids."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"pitchMinHz",  numProp("Select only notes at or above this frequency (Hz). Omit for no lower bound.")},
-                    {"pitchMaxHz",  numProp("Select only notes at or below this frequency (Hz). Omit for no upper bound.")},
-                    {"trackIndex",  QJsonObject{{"type","integer"},{"description","If set, only consider notes on this track index."}}}
+                    {"pitchMinHz",  numProp("Lower Hz bound")},
+                    {"pitchMaxHz",  numProp("Upper Hz bound")},
+                    {"trackIndex",  QJsonObject{{"type","integer"},{"description","Track filter"}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── shift_notes ───────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "shift_notes"},
-            {"description",
-             "Shifts the start time of notes by a given offset in milliseconds. "
-             "Positive offsetMs = later, negative = earlier. "
-             "Optionally filter by pitch using pitchHz + pitchToleranceCents. "
-             "Leave noteIds empty to target all notes (then pitch filter applies to all). "
-             "All shifts are pushed as a single undoable command (Ctrl+Z reverses all at once)."},
+            {"description", "Shifts start times by offsetMs. Optional pitch filter."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"offsetMs", numProp("Time offset in milliseconds (positive = later, negative = earlier)")},
-                    {"pitchHz",  numProp("If set, only shift notes whose pitch is within pitchToleranceCents of this frequency")},
-                    {"pitchToleranceCents", numProp("Tolerance for pitch matching in cents (default 50). Only used when pitchHz is set.")},
-                    {"noteIds",  QJsonObject{
-                        {"type","array"},
-                        {"description","Explicit note ids to target. Empty = all notes (pitch filter still applies if pitchHz is set)."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"offsetMs",             numProp("Ms (+later,-earlier)")},
+                    {"pitchHz",              numProp("Pitch filter Hz")},
+                    {"pitchToleranceCents",  numProp("Tolerance cents")},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"offsetMs"}}
             }}
         }}
     });
-
-    // ── get_note_vibrato ──────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "get_note_vibrato"},
-            {"description",
-             "Returns the vibrato settings on a note: active flag, rate (Hz), pitchDepth, "
-             "amplitudeDepth, onset, regularity, and the intensity envelope. "
-             "Inspects the first note from noteIds (or first note overall if empty). "
-             "Use before set_note_vibrato to see current settings."},
+            {"description", "Returns vibrato of first targeted note."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids — first one is inspected. Empty = first note."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids — first inspected."}}}}},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── set_note_vibrato ──────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_note_vibrato"},
-            {"description",
-             "Applies vibrato settings to one or more notes. All parameters are optional — "
-             "unspecified ones are preserved from the first targeted note's current settings. "
-             "Parameters:\n"
-             "  active (bool): true = enable vibrato.\n"
-             "  rate (Hz): oscillation speed, typical 3–8 Hz. Default 5.\n"
-             "  pitchDepth (0–1): pitch variation fraction. 0.02 = 2% = subtle, 0.06 = expressive. Default 0.02.\n"
-             "  amplitudeDepth (0–1): loudness variation depth. 0 = pitch-only, 0.3 = natural. Default 0.3.\n"
-             "  onset (0–1): when vibrato starts (fraction into note). 0.2 = after 20% of note. Default 0.2.\n"
-             "  regularity (0–1): 0 = mechanical/metronome, 1 = organic/human. Default 0.5.\n"
-             "  envelope: [{time, value, curveType}] — shape of vibrato intensity over note lifetime. "
-             "Default is a linear rise from 0 to 1. Example delayed-then-full: [{0,0,1},{0.3,0,1},{0.6,1,1},{1,1,1}].\n"
-             "Leave noteIds empty to apply to all notes. Supports undo."},
+            {"description", "Sets vibrato. Unspecified params preserved. active=bool, rate=Hz(3–8), pitchDepth=0–1, amplitudeDepth=0–1, onset=0–1, regularity=0–1, envelope=[{time,value,curveType}]."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"active",         QJsonObject{{"type","boolean"},{"description","Enable or disable vibrato."}}},
-                    {"rate",           numProp("Oscillation speed in Hz (3–8 typical, default 5).")},
-                    {"pitchDepth",     numProp("Pitch variation as fraction (0.02 = subtle, 0.06 = expressive).")},
-                    {"amplitudeDepth", numProp("Loudness variation 0–1 (0 = pitch-only, 0.3 = natural).")},
-                    {"onset",          numProp("Fraction into the note when vibrato starts (0–1, default 0.2).")},
-                    {"regularity",     numProp("0 = mechanical, 1 = organic (default 0.5).")},
-                    {"envelope", QJsonObject{
-                        {"type","array"},
-                        {"description","Vibrato intensity curve over note lifetime: [{time 0–1, value 0–1, curveType 0/1/2}]."},
-                        {"items", QJsonObject{{"type","object"}}}
-                    }},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to target. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"active",         QJsonObject{{"type","boolean"},{"description","Enable"}}},
+                    {"rate",           numProp("Hz")},
+                    {"pitchDepth",     numProp("0–1")},
+                    {"amplitudeDepth", numProp("0–1")},
+                    {"onset",          numProp("0–1")},
+                    {"regularity",     numProp("0–1")},
+                    {"envelope", QJsonObject{{"type","array"},{"description","[{time,value,curveType}]"},{"items",QJsonObject{{"type","object"}}}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── undo ─────────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "undo"},
-            {"description",
-             "Undoes the last action on the score canvas (equivalent to Ctrl+Z). "
-             "Use this to recover from mistakes made by previous tool calls. "
-             "Returns the name of the undone action, or an error if nothing to undo."},
-            {"parameters", QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}
-        }}
-    });
-
-    // ── redo ─────────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "redo"},
-            {"description",
-             "Redoes the last undone action on the score canvas (equivalent to Ctrl+Y). "
-             "Returns the name of the redone action, or an error if nothing to redo."},
-            {"parameters", QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}
-        }}
-    });
-
-    // ── play_score ────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "play_score"},
-            {"description",
-             "Starts playback of the full score canvas composition from the current now-marker position. "
-             "Use after composing or modifying notes to let the user hear the result."},
-            {"parameters", QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}
-        }}
-    });
-
-    // ── stop_score ────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "stop_score"},
-            {"description", "Stops score canvas playback."},
-            {"parameters", QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}
-        }}
-    });
-
-    // ── seek ──────────────────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","play_score"},{"description","Starts playback from now-marker."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","stop_score"},{"description","Stops playback."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "seek"},
-            {"description",
-             "Moves the now-marker (playback position) to a specific time. "
-             "Provide either 'timeMs' (milliseconds from start) or 'barsAndBeats' ({bar, beat}) "
-             "for musical positioning. bar and beat are 1-based. "
-             "Call play_score after seek to start playback from that position."},
+            {"description", "Moves now-marker. Provide timeMs or barsAndBeats {bar,beat} (1-based)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"timeMs", numProp("Absolute position in milliseconds from the start.")},
-                    {"barsAndBeats", QJsonObject{
-                        {"type", "object"},
-                        {"description", "Musical position. bar and beat are 1-based integers."},
-                        {"properties", QJsonObject{
-                            {"bar",  QJsonObject{{"type","integer"},{"description","Bar number (1-based)."}}},
-                            {"beat", QJsonObject{{"type","integer"},{"description","Beat within the bar (1-based, default 1)."}}}
-                        }}
-                    }}
+                    {"timeMs", numProp("Position ms")},
+                    {"barsAndBeats", QJsonObject{{"type","object"},{"description","{bar,beat} 1-based"},{"properties",QJsonObject{{"bar",QJsonObject{{"type","integer"},{"description","Bar"}}},{"beat",QJsonObject{{"type","integer"},{"description","Beat"}}}}}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── set_loop ──────────────────────────────────────────────────────────────
     {
         auto bbProp = [](const QString &label) {
-            return QJsonObject{
-                {"type", "object"},
-                {"description", label + " as musical position. bar and beat are 1-based integers."},
-                {"properties", QJsonObject{
-                    {"bar",  QJsonObject{{"type","integer"},{"description","Bar number (1-based)."}}},
-                    {"beat", QJsonObject{{"type","integer"},{"description","Beat within the bar (1-based, default 1)."}}}
-                }}
-            };
+            return QJsonObject{{"type","object"},{"description",label},{"properties",QJsonObject{{"bar",QJsonObject{{"type","integer"},{"description","Bar"}}},{"beat",QJsonObject{{"type","integer"},{"description","Beat"}}}}}};
         };
         schemas.append(QJsonObject{
             {"type", "function"},
             {"function", QJsonObject{
                 {"name", "set_loop"},
-                {"description",
-                 "Sets a loop region on the timeline and seeks to the loop start. "
-                 "Playback will cycle between start and end when play_score is called. "
-                 "For start/end use either the Ms suffix keys (startMs/endMs) or the "
-                 "musical position keys (start/end with {bar, beat}). "
-                 "Example — loop bars 3–5: "
-                 "{\"start\": {\"bar\":3,\"beat\":1}, \"end\": {\"bar\":5,\"beat\":1}}"},
+                {"description", "Sets loop region. Use startMs/endMs or start/end {bar,beat}."},
                 {"parameters", QJsonObject{
                     {"type", "object"},
                     {"properties", QJsonObject{
-                        {"startMs", numProp("Loop start in milliseconds.")},
-                        {"endMs",   numProp("Loop end in milliseconds.")},
-                        {"start",   bbProp("Loop start")},
-                        {"end",     bbProp("Loop end")}
+                        {"startMs", numProp("Loop start ms")},
+                        {"endMs",   numProp("Loop end ms")},
+                        {"start",   bbProp("Loop start {bar,beat}")},
+                        {"end",     bbProp("Loop end {bar,beat}")}
                     }},
                     {"required", QJsonArray{}}
                 }}
             }}
         });
     }
-
-    // ── clear_loop ────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "clear_loop"},
-            {"description", "Removes the loop region from the timeline. Playback will run to the end of the piece."},
-            {"parameters", QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}
-        }}
-    });
-
-    // ── transpose_notes ───────────────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","clear_loop"},{"description","Removes loop region."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "transpose_notes"},
-            {"description",
-             "Transposes note pitches either by a frequency ratio or by a number of scale degrees. "
-             "Use ratio for interval transposition: 2.0 = octave up, 0.5 = octave down, "
-             "1.5 = perfect fifth up (JI), 4.0/3.0 = perfect fourth up (JI). "
-             "Use scaleDegrees for scale-step transposition: +1 = one step up in the current scale, "
-             "-3 = three steps down. Scale degree walking respects the scale active at each note's time position. "
-             "Pitch curves (glissandi) are transposed together with the note. "
-             "Leave noteIds empty to transpose all notes. Supports undo."},
+            {"description", "Transposes by ratio (2.0=up octave) or scaleDegrees steps. Empty=all."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"ratio",        numProp("Pitch multiplier (e.g. 2.0 = octave up, 0.5 = octave down). Use instead of scaleDegrees.")},
-                    {"scaleDegrees", QJsonObject{{"type","integer"},{"description","Steps to walk in the current scale (+up, -down). Use instead of ratio."}}},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to transpose. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"ratio",        numProp("Pitch multiplier")},
+                    {"scaleDegrees", QJsonObject{{"type","integer"},{"description","Steps (+up,-down)"}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── set_note_duration ─────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_note_duration"},
-            {"description",
-             "Changes the duration of one or more notes. "
-             "Provide 'duration' (single value in ms) to set all targeted notes to the same length. "
-             "Provide 'values' (array of ms values, same length as noteIds) for per-note control. "
-             "Leave noteIds empty to target all notes. Supports undo."},
+            {"description", "Sets duration ms. Use 'duration' (all same) or 'values' (per note)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"duration", numProp("Duration in ms to apply to all targeted notes.")},
-                    {"values", QJsonObject{
-                        {"type","array"},
-                        {"description","Per-note durations in ms (must match noteIds length)."},
-                        {"items", QJsonObject{{"type","number"}}}
-                    }},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to target. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"duration", numProp("Duration ms")},
+                    {"values",   QJsonObject{{"type","array"},{"description","Per-note ms."},{"items",QJsonObject{{"type","number"}}}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── duplicate_notes ───────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "duplicate_notes"},
-            {"description",
-             "Duplicates a set of notes and places the copies at a new time position. "
-             "'offsetMs' is relative to the start of the source phrase (earliest note start time). "
-             "Example: if source phrase starts at 2000ms and offsetMs=4000, copies start at 6000ms. "
-             "To place copies immediately after the source, set offsetMs = phrase duration. "
-             "Optional 'pitchRatio' transposes the copies (2.0 = octave up, 0.5 = octave down). "
-             "Optional 'trackIndex' sends copies to a different track. "
-             "Returns the new note IDs so they can immediately be piped into scale_timing, "
-             "apply_rhythm_easing, transpose_notes, etc. Supports undo."},
+            {"description", "Duplicates notes at source+offsetMs. Returns new ids."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"offsetMs",    numProp("Time of first copy = source_start + offsetMs. Use phrase duration to place copies directly after.")},
-                    {"pitchRatio",  numProp("Optional pitch multiplier for copies (e.g. 2.0 = octave up). Default 1.0 = same pitch.")},
-                    {"trackIndex",  QJsonObject{{"type","integer"},{"description","Optional target track for copies. Default = current track."}}},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to duplicate. Empty = all notes on current track."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"offsetMs",   numProp("Offset from source ms")},
+                    {"pitchRatio", numProp("Pitch multiplier")},
+                    {"trackIndex", QJsonObject{{"type","integer"},{"description","Target track"}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"offsetMs"}}
             }}
         }}
     });
-
-    // ── get_note_curves ───────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "get_note_curves"},
-            {"description",
-             "Returns all expressive curves on a note (dynamics plus any named curves like "
-             "'Brightness', 'Breathiness', etc.). "
-             "Inspects the first note from the noteIds list (or the first note overall if empty). "
-             "Returns curve names, point counts, and point data (time 0–1, value 0–1). "
-             "Use before set_note_curve to see what curves already exist."},
+            {"description", "Returns expressive curves on first targeted note."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids — first one is inspected. Empty = inspect first note."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
-                }},
+                {"properties", QJsonObject{{"noteIds", QJsonObject{{"type","array"},{"description","Note ids — first inspected."}}}}},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── set_note_curve ────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_note_curve"},
-            {"description",
-             "Sets a named expressive curve on one or more notes. "
-             "'name' can be 'Dynamics' (default) or any named expressive curve such as "
-             "'Brightness', 'Breathiness', 'Resonance', 'Bow Pressure', etc. "
-             "For non-Dynamics curves, the curve modulates the parameter routed to that curve name "
-             "in the synthesis graph. "
-             "Points use time 0–1 (note lifetime) and value 0–1. "
-             "'weight' scales the applied curve (1.0 = full, 0.5 = half). "
-             "'perNote' true = curve is applied within each note's own lifetime. "
-             "Leave noteIds empty to apply to all notes. Supports undo."},
+            {"description", "Sets named expressive curve. name='Dynamics' or custom. Points [{time,value,curveType}] 0–1."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"name",    strProp("Curve name: 'Dynamics' (default) or a named expressive curve.")},
-                    {"points",  QJsonObject{
-                        {"type","array"},
-                        {"description","Curve points: [{time: 0–1, value: 0–1, curveType: 0=Linear/1=Smooth/2=Step}]. "
-                                       "Common shapes: Swell [{0,0},{0.5,1},{1,0}], Fade-in [{0,0},{1,1}], "
-                                       "Bell [{0,0},{0.1,1},{0.4,0.3},{1,0}]."},
-                        {"items", QJsonObject{{"type","object"}}}
-                    }},
-                    {"weight",  numProp("Blend weight 0–1 (default 1.0 = full curve).")},
-                    {"perNote", QJsonObject{{"type","boolean"},{"description","If true, curve maps to each note's own lifetime. Default false."}}},
-                    {"noteIds", QJsonObject{
-                        {"type","array"},
-                        {"description","Note ids to apply to. Empty = all notes."},
-                        {"items", QJsonObject{{"type","string"}}}
-                    }}
+                    {"name",    strProp("Curve name")},
+                    {"points",  QJsonObject{{"type","array"},{"description","[{time,value,curveType}]"},{"items",QJsonObject{{"type","object"}}}}},
+                    {"weight",  numProp("Blend 0–1")},
+                    {"perNote", QJsonObject{{"type","boolean"},{"description","Per-note lifetime"}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"points"}}
             }}
         }}
     });
-
-    // ── open_project ──────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
-            {"name", "open_project"},
-            {"description",
-             "Opens a .kala project file, replacing the current session. "
-             "Use get_project_list first to find available project file paths. "
-             "Warning: unsaved changes to the current project will be lost."},
+            {"name", "fade_out_notes"},
+            {"description", "Splices a fade-out into the tail of each note's dynamics curve. Preserves the existing curve exactly up to startTime, then fades linearly to endValue at t=1. Use this to eliminate end-of-note clicks while keeping expressive dynamics intact."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"filePath", strProp("Absolute path to the .kala file to open.")}
-                }},
-                {"required", QJsonArray{"filePath"}}
-            }}
-        }}
-    });
-
-    // ── save_project ──────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "save_project"},
-            {"description",
-             "Saves the current project. If filePath is omitted, saves to the current project path. "
-             "If the project has never been saved, filePath is required. "
-             "Use after making significant changes to preserve the user's work."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"filePath", strProp("Optional absolute path to save to. Omit to save to current path.")}
+                    {"startTime", numProp("Normalized time (0–1) where fade begins. Default 0.85 = last 15%.")},
+                    {"endValue",  numProp("Target value at t=1. Default 0.0 (silence).")},
+                    {"noteIds",   QJsonObject{{"type","array"},{"description","Note IDs. Empty = all notes on current track."}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── add_track ─────────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "add_track"},
-            {"description",
-             "Adds a new instrument track to the project. "
-             "Returns the new track's index so you can immediately load a sounit onto it. "
-             "Each track is independent and holds its own sounit + notes."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"name",  strProp("Track display name (e.g. 'Violin', 'Cello').")},
-                    {"color", strProp("Optional track color as hex string (e.g. '#3498db').")}
-                }},
-                {"required", QJsonArray{"name"}}
-            }}
-        }}
-    });
-
-    // ── rename_track ──────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "rename_track"},
-            {"description", "Renames an existing track. Use get_track_list to find track indices."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"trackIndex", QJsonObject{{"type","integer"},{"description","0-based track index."}}},
-                    {"name",       strProp("New track name.")}
-                }},
-                {"required", QJsonArray{"trackIndex","name"}}
-            }}
-        }}
-    });
-
-    // ── delete_track ──────────────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "delete_track"},
-            {"description",
-             "Deletes a track and all its notes. Cannot delete the last remaining track. "
-             "Track indices above the deleted one shift down by one. "
-             "This action is not undoable — use with care."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"trackIndex", QJsonObject{{"type","integer"},{"description","0-based index of the track to delete."}}}
-                }},
-                {"required", QJsonArray{"trackIndex"}}
-            }}
-        }}
-    });
-
-    // ── set_note_pitch ────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_note_pitch"},
-            {"description",
-             "Sets the pitch of one or more notes by absolute frequency (Hz). "
-             "Use 'noteIds' to target specific notes; omit to target all notes in the phrase. "
-             "Provide either a single 'pitchHz' applied to all, or a 'values' array with one Hz per note. "
-             "Any attached glissando/pitch curves are preserved (scaled proportionally). "
-             "Push-undoable."},
+            {"description", "Sets pitch Hz. Use pitchHz (all) or values (per note)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"noteIds",  QJsonObject{{"type","array"},{"description","Optional array of note ID strings to target. Omit to affect all notes."}}},
-                    {"pitchHz",  QJsonObject{{"type","number"},{"description","Target pitch in Hz, applied to every targeted note."}}},
-                    {"values",   QJsonObject{{"type","array"},{"description","Array of Hz values, one per targeted note (parallel to noteIds / note order)."}}}
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}},
+                    {"pitchHz", QJsonObject{{"type","number"},{"description","Hz for all"}}},
+                    {"values",  QJsonObject{{"type","array"},{"description","Per-note Hz"}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── stretch_notes ─────────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "stretch_notes"},
-            {"description",
-             "Multiplies the duration of targeted notes by a factor without moving their start times. "
-             "factor > 1 makes notes longer; factor < 1 makes them shorter. "
-             "Use 'noteIds' to target specific notes; omit for all notes. Push-undoable."},
+            {"description", "Multiplies durations by factor (starts unchanged)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"factor",  QJsonObject{{"type","number"},{"description","Duration multiplier (e.g. 2.0 = double length, 0.5 = halve)."}}},
-                    {"noteIds", QJsonObject{{"type","array"},{"description","Optional array of note ID strings to stretch. Omit to affect all notes."}}}
+                    {"factor",  QJsonObject{{"type","number"},{"description","Duration multiplier"}}},
+                    {"noteIds", QJsonObject{{"type","array"},{"description","Note ids. Empty=all."}}}
                 }},
                 {"required", QJsonArray{"factor"}}
             }}
         }}
     });
-
-    // ── set_time_signature ────────────────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_time_signature"},
-            {"description",
-             "Sets the default (opening) tempo and time signature of the score — the marker at time 0. "
-             "All parameters are optional; omitted values keep their current setting. "
-             "Push-undoable."},
+            {"description", "Sets opening tempo/time sig (time 0). All optional."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"bpm",          QJsonObject{{"type","number"},{"description","Tempo in beats per minute."}}},
-                    {"numerator",    QJsonObject{{"type","integer"},{"description","Time signature numerator (e.g. 3 for 3/4)."}}},
-                    {"denominator",  QJsonObject{{"type","integer"},{"description","Time signature denominator (e.g. 4 for 3/4)."}}},
-                    {"gradual",      QJsonObject{{"type","boolean"},{"description","If true the transition to this tempo is gradual rather than a hard cut."}}}
+                    {"bpm",         QJsonObject{{"type","number"},{"description","BPM"}}},
+                    {"numerator",   QJsonObject{{"type","integer"},{"description","Numerator"}}},
+                    {"denominator", QJsonObject{{"type","integer"},{"description","Denominator"}}},
+                    {"gradual",     QJsonObject{{"type","boolean"},{"description","Gradual transition"}}}
                 }},
                 {"required", QJsonArray{}}
             }}
         }}
     });
-
-    // ── get_time_signature_changes ────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_time_signature_changes"},
-            {"description",
-             "Returns all tempo/time-signature markers in the score, including the default marker at time 0. "
-             "Each entry has: timeMs, bpm, numerator, denominator, gradual."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
-    // ── add_time_signature_change ─────────────────────────────────────────────
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","get_time_signature_changes"},{"description","Returns all tempo/time-sig markers."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{}},{"required",QJsonArray{}}}}}}});
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "add_time_signature_change"},
-            {"description",
-             "Inserts (or replaces) a tempo/time-signature change at a specific time position. "
-             "timeMs must be > 0 (use set_time_signature for the opening marker). "
-             "If 'bpm' is omitted it inherits the current bpm at that point. "
-             "Push-undoable."},
+            {"description", "Inserts tempo/time-sig change at timeMs (>0)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
-                    {"timeMs",      QJsonObject{{"type","number"},{"description","Position in milliseconds (must be > 0)."}}},
-                    {"bpm",         QJsonObject{{"type","number"},{"description","Tempo at this marker. Omit to inherit."}}},
-                    {"numerator",   QJsonObject{{"type","integer"},{"description","Time signature numerator."}}},
-                    {"denominator", QJsonObject{{"type","integer"},{"description","Time signature denominator."}}},
-                    {"gradual",     QJsonObject{{"type","boolean"},{"description","Gradual tempo transition."}}}
+                    {"timeMs",      QJsonObject{{"type","number"},{"description","Position ms (>0)"}}},
+                    {"bpm",         QJsonObject{{"type","number"},{"description","BPM"}}},
+                    {"numerator",   QJsonObject{{"type","integer"},{"description","Numerator"}}},
+                    {"denominator", QJsonObject{{"type","integer"},{"description","Denominator"}}},
+                    {"gradual",     QJsonObject{{"type","boolean"},{"description","Gradual"}}}
                 }},
                 {"required", QJsonArray{"timeMs","numerator","denominator"}}
             }}
         }}
     });
-
-    // ── remove_time_signature_change ──────────────────────────────────────────
     schemas.append(QJsonObject{
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "remove_time_signature_change"},
-            {"description",
-             "Removes the tempo/time-signature change marker at the given time position. "
-             "timeMs must be > 0 (the default marker at 0 cannot be removed). "
-             "Returns an error if no marker exists at that position. Push-undoable."},
+            {"description", "Removes tempo/time-sig marker at timeMs (>0)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
-                {"properties", QJsonObject{
-                    {"timeMs", QJsonObject{{"type","number"},{"description","Position in milliseconds of the marker to remove."}}}
-                }},
+                {"properties", QJsonObject{{"timeMs", QJsonObject{{"type","number"},{"description","Position ms"}}}}},
                 {"required", QJsonArray{"timeMs"}}
             }}
         }}
     });
+    return schemas;
+}
 
-    // ── get_engine_settings ───────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "get_engine_settings"},
-            {"description",
-             "Returns all Sound Engine Settings: the container parameter ranges (min/max for every "
-             "container type) and the current project settings (name, sampleRate, bitDepth, lengthMs). "
-             "Call this before set_engine_settings to inspect current values and exact key names. "
-             "The result has two top-level keys: 'containerSettings' (nested by container group) "
-             "and 'project'."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{}},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
+// ─────────────────────────────────────────────────────────────────────────────
+// Instance method: assemble schemas based on current tool mode
+// ─────────────────────────────────────────────────────────────────────────────
 
-    // ── set_engine_settings ───────────────────────────────────────────────────
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "set_engine_settings"},
-            {"description",
-             "Updates Sound Engine Settings. Only the groups/fields you provide are changed — "
-             "everything else is preserved. "
-             "'containerSettings' is a nested partial object matching the structure from get_engine_settings. "
-             "Container groups: harmonicGenerator, rolloffProcessor, spectrumToSignal, formantBody, "
-             "breathTurbulence, noiseColorFilter, physicsSystem, driftEngine, gateProcessor, "
-             "karplusStrong, attack, lfo, wavetableSynth, frequencyMapper, bandpassEQ, combFilter, "
-             "lowHighPassFilter, irConvolution, recorder, bowed, reed, easing. "
-             "Each group contains Min/Max (and sometimes Default) fields for the slider ranges shown "
-             "in the inspector. "
-             "'project' can contain: compositionName (string), sampleRate (int: 44100/48000/96000/192000), "
-             "bitDepth (int: 16/24/32), lengthMs (number). "
-             "All changes are saved immediately to QSettings."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"containerSettings", QJsonObject{
-                        {"type", "object"},
-                        {"description",
-                         "Partial container settings. Include only the groups/fields to change. "
-                         "Example: {\"driftEngine\": {\"amountMax\": 0.3}} raises the drift slider ceiling."}
-                    }},
-                    {"project", QJsonObject{
-                        {"type", "object"},
-                        {"description",
-                         "Partial project settings. Fields: compositionName, sampleRate, bitDepth, lengthMs."}
-                    }}
-                }},
-                {"required", QJsonArray{}}
-            }}
-        }}
-    });
-
+QJsonArray KalaTools::getToolSchemas() const
+{
+    QJsonArray schemas = coreSchemas();
+    if (m_toolMode == ToolMode::Sounit || m_toolMode == ToolMode::Full)
+        for (const QJsonValue &v : sounitSchemas()) schemas.append(v);
+    if (m_toolMode == ToolMode::Composition || m_toolMode == ToolMode::Full)
+        for (const QJsonValue &v : compositionSchemas()) schemas.append(v);
     return schemas;
 }
