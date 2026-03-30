@@ -179,7 +179,7 @@ void HelpDialog::buildTableOfContents()
     addTopLevel("Settings", "settings.html");
 
     // AI Companion
-    auto *companion = addTopLevel("Kala Companion (AI)", "companion.html");
+    auto *companion = addTopLevel("Anima (AI Companion)", "companion.html");
     addChild(companion, "Setting Up",          "companion.html", "setting-up");
     addChild(companion, "Build Sounits",       "companion.html", "build-sounits");
     addChild(companion, "Browse the Library",  "companion.html", "browse-the-library");

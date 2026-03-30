@@ -1,8 +1,8 @@
-# Kala Companion — AI Agent Documentation
+# Anima — AI Agent Documentation
 
-The Kala Companion is a built-in AI agent that lives inside Kala. It can answer questions
+Anima is a built-in AI agent (she/her) that lives inside Kala. She can answer questions
 about the application, build sounit graphs on the user's behalf, and write music directly
-onto the score canvas. It supports any OpenAI-compatible API (Ollama, OpenAI, Groq,
+onto the score canvas. She supports any OpenAI-compatible API (Ollama, OpenAI, Groq,
 OpenRouter) and the Anthropic API.
 
 ---

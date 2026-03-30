@@ -360,31 +360,104 @@ IR Convolution has `hasTail()=true` — reverb tail renders after note ends. No 
 ---
 
 ### Physics System
-**Ports in:** `targetValue`
+**Ports in:** `targetValue`, `mass`, `springK`, `damping`, `impulseAmount`, `impulse`
 **Ports out:** `currentValue`
 
 ```json
 "parameters": {
-    "damping": 0.94,
-    "impulseAmount": 900,
-    "mass": 9.4,
-    "springK": 0.9
+    "mass": 0.5,          // inertia (0–10); higher = more sluggish
+    "springK": 0.001,     // spring pull toward target (0.0001–1.0); lower = more lag
+    "damping": 0.995,     // energy loss per sample (0.5–0.9999); higher = less oscillation
+    "impulseAmount": 0.05 // velocity kick when impulse port fires (0–1000)
 }
 ```
+
+Per-sample formula: `force = (target − current) × springK` → `velocity += force / mass` → `velocity *= damping` → `current += velocity`
+
+**Impulse port:** rising-edge triggered (signal crosses 0.5 from below). Adds `impulseAmount` directly to velocity — use a sharp-attack Envelope Engine (0→1 within first 2% of note) as the trigger source.
+
+**Port scaling when connected** (source 0–1 is auto-scaled):
+- `mass` port: source × 10 → 0–10
+- `springK` port: source × 0.9999 + 0.0001 → 0.0001–1.0
+- `damping` port: source × 0.4999 + 0.5 → 0.5–0.9999
+- `impulseAmount` port: source × 1000 → 0–1000
+- `impulse` port: raw value, rising-edge only — no scaling
+
+**Two operating modes:**
+
+| Mode | Setup | Use case |
+|------|-------|----------|
+| **Lazy follower** | Connect LFO/Envelope to `targetValue`; no `impulse` | Physics lags behind a moving signal and gently overshoots — organic timbral breathing, "heavy" LFO |
+| **Impulse wobble** | No `targetValue` connection (defaults to 0); sharp-attack Envelope → `impulse` | Velocity kick at note-on, spring decays to zero — physical attack transient, struck-body character |
+
+**Tuning guide:**
+- Slow, organic breathing (lazy follower): `mass=3–5`, `springK=0.0003–0.001`, `damping=0.998–0.9990`
+- Snappy spring recoil (impulse): `mass=1–3`, `springK=0.001–0.005`, `damping=0.993–0.998`
+- Physics state persists across notes — the system glides continuously, which is desirable for the lazy-follower mode
+
+**Physics vs Easing vs Envelope:**
+- **Physics**: reacts to a live, moving target with inertia — use when the input is a signal you want to feel "heavy" or "springy"
+- **Easing**: deterministic one-shot A→B with a precise mathematical curve shape — use when the timing is known
+- **Envelope**: multi-stage, can reverse or plateau — use for ADSR-like shapes
 
 ---
 
 ### Easing Applicator
-**Ports in:** `startValue`
+**Ports in:** `startValue`, `endValue`, `progress`, `easingSelect`
 **Ports out:** `easedValue`
 
 ```json
 "parameters": {
-    "easingSelect": 24,
-    "endValue": 1,
-    "startValue": 0
+    "easingSelect": 14,   // easing curve ID (see table below)
+    "startValue": 0.0,    // output value when progress=0
+    "endValue": 1.0       // output value when progress=1
 }
 ```
+
+Formula: `output = startValue + (endValue − startValue) × easing(progress)`
+
+**`progress` is the primary input** (0–1). Feed it a linear 0→1 ramp from an Envelope Engine; the Easing Applicator reshapes that ramp into any mathematical curve. Multiple Easing Applicators can share one Envelope Engine as their progress source, each giving a different shape to a different parameter.
+
+Additional parameters for special easing types (Back/Elastic/Wobble) — set in inspector or as JSON params:
+- `easingOvershoot` (default 1.70158) — Back: how far past the target it overshoots
+- `easingAmplitude` (default 1.0), `easingPeriod` (default 0.3) — Elastic: spring amplitude and cycle length
+- `easingFrequency` (default 3.0), `easingDecay` (default 0.8) — Wobble: oscillation frequency and decay rate
+
+**Easing ID table:**
+
+| ID | Name | Shape | Best use |
+|----|------|-------|----------|
+| 0 | Linear | Straight line | Baseline, testing |
+| 1 | QuadIn | Slow start, accelerates | Gradual build |
+| 2 | QuadOut | Fast start, decelerates | Natural onset then settle |
+| 3 | QuadInOut | S-curve (gentle) | Smooth crossfades |
+| 4 | CubicIn | Slower start than Quad | Deep gradual build |
+| 5 | CubicOut | Faster start than Quad | Physical onset settling |
+| 6 | CubicInOut | S-curve (medium) | Smooth transitions |
+| 7 | QuarticIn | Very slow start | Extreme build-up |
+| 8 | QuarticOut | Very fast start | Bright transient decay |
+| 9 | QuarticInOut | S-curve (steep) | Dramatic crossfades |
+| 10 | SineIn | Gentle slow start | Breath-in, gradual swell |
+| 11 | SineOut | Gentle fast start, plateau | Pluck thump-then-sustain |
+| 12 | SineInOut | Gentle S-curve | Natural timbral shifts |
+| 13 | ExpoIn | Near-zero then explosive | Delayed burst |
+| 14 | ExpoOut | Explosive then near-zero | Physical harmonic decay (pluck, bow onset) |
+| 15 | ExpoInOut | Explosive S-curve | Dramatic morphs |
+| 16 | CircIn | Circular arc, slow start | Smooth acceleration |
+| 17 | CircOut | Circular arc, fast start | Smooth deceleration |
+| 18 | CircInOut | Full circular S | Very smooth transitions |
+| 19 | BackIn | Anticipation (goes wrong direction first) | Wind-up effect |
+| 20 | BackOut | Single overshoot then settle | Pitch snap, one-bounce landing |
+| 21 | BackInOut | Anticipation + overshoot | Dramatic snapping |
+| 22 | ElasticIn | Oscillates before departing | Tension before release |
+| 23 | ElasticOut | Departs then springs back with oscillation | Pluck pitch snap, bow pressure snap |
+| 24 | ElasticInOut | Full spring oscillation | Sympathetic vibration character |
+| 25 | BounceIn | Bounces at start | Pre-bounce |
+| 26 | BounceOut | Bounces at end (ball landing) | Struck object settling |
+| 27 | BounceInOut | Full bounce | Ball physics |
+| 28 | Wobble | Decaying oscillation around start | Tuning fork, sympathetic ring |
+
+**Easing vs Physics System:** Easing is deterministic and progress-driven (you control timing). Physics reacts to a live target with inertia and can overshoot organically without a predetermined endpoint.
 
 ---
 

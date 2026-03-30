@@ -21,8 +21,8 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     m_log->setFont(QFont("Segoe UI", 9));
     m_log->setStyleSheet(
         "QTextBrowser {"
-        "  background: #1e1e2e;"
-        "  color: #cdd6f4;"
+        "  background: #ffffff;"
+        "  color: #1a1a1a;"
         "  border: none;"
         "  padding: 6px;"
         "}"
@@ -30,15 +30,15 @@ CompanionPanel::CompanionPanel(QWidget *parent)
 
     // Welcome message
     m_log->setHtml(
-        "<p style='color:#6c7086; font-style:italic;'>"
-        "Kala Companion is ready. Ask a question or describe the sound you want to build."
+        "<p style='color:#888888; font-style:italic;'>"
+        "Anima is ready. Ask a question or describe the task you want to be done."
         "</p>"
     );
 
     // ── Status label ("Thinking…") ────────────────────────────────────────────
     m_statusLabel = new QLabel(QString("Thinking") + QChar(0x2026), this);
     m_statusLabel->setStyleSheet(
-        "QLabel { color: #89b4fa; font-style: italic; font-size: 9pt; padding: 2px 6px; }"
+        "QLabel { color: #2563eb; font-style: italic; font-size: 9pt; padding: 2px 6px; }"
     );
     m_statusLabel->setVisible(false);
 
@@ -47,15 +47,15 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     m_stopBtn->setFixedHeight(22);
     m_stopBtn->setStyleSheet(
         "QPushButton {"
-        "  background: #f38ba8;"
-        "  color: #1e1e2e;"
+        "  background: #dc2626;"
+        "  color: #ffffff;"
         "  border: none;"
         "  border-radius: 4px;"
         "  font-weight: bold;"
         "  font-size: 8pt;"
         "}"
-        "QPushButton:hover   { background: #eba0ac; }"
-        "QPushButton:pressed { background: #e6647d; }"
+        "QPushButton:hover   { background: #ef4444; }"
+        "QPushButton:pressed { background: #b91c1c; }"
     );
     m_stopBtn->setVisible(false);
     connect(m_stopBtn, &QPushButton::clicked, this, &CompanionPanel::cancelRequested);
@@ -63,17 +63,17 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     // ── Input area ────────────────────────────────────────────────────────────
     m_input = new QPlainTextEdit(this);
     m_input->setMaximumHeight(72);
-    m_input->setPlaceholderText("Ask something or describe a sound…");
+    m_input->setPlaceholderText("Ask something or describe a task…");
     m_input->setFont(QFont("Segoe UI", 9));
     m_input->setStyleSheet(
         "QPlainTextEdit {"
-        "  background: #313244;"
-        "  color: #cdd6f4;"
-        "  border: 1px solid #45475a;"
+        "  background: #f5f5f5;"
+        "  color: #1a1a1a;"
+        "  border: 1px solid #cccccc;"
         "  border-radius: 4px;"
         "  padding: 4px;"
         "}"
-        "QPlainTextEdit:focus { border-color: #89b4fa; }"
+        "QPlainTextEdit:focus { border-color: #2563eb; }"
     );
     m_input->installEventFilter(this);  // Intercept Enter key
 
@@ -82,15 +82,15 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     m_sendBtn->setFixedHeight(28);
     m_sendBtn->setStyleSheet(
         "QPushButton {"
-        "  background: #89b4fa;"
-        "  color: #1e1e2e;"
+        "  background: #2563eb;"
+        "  color: #ffffff;"
         "  border: none;"
         "  border-radius: 4px;"
         "  font-weight: bold;"
         "}"
-        "QPushButton:hover   { background: #b4befe; }"
-        "QPushButton:pressed { background: #74c7ec; }"
-        "QPushButton:disabled { background: #45475a; color: #6c7086; }"
+        "QPushButton:hover   { background: #3b82f6; }"
+        "QPushButton:pressed { background: #1d4ed8; }"
+        "QPushButton:disabled { background: #cccccc; color: #888888; }"
     );
     connect(m_sendBtn, &QPushButton::clicked, this, &CompanionPanel::onSendClicked);
 
@@ -100,14 +100,14 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     m_clearBtn->setToolTip("Clear conversation history");
     m_clearBtn->setStyleSheet(
         "QPushButton {"
-        "  background: #313244;"
-        "  color: #6c7086;"
-        "  border: 1px solid #45475a;"
+        "  background: #f5f5f5;"
+        "  color: #888888;"
+        "  border: 1px solid #cccccc;"
         "  border-radius: 4px;"
         "  font-size: 8pt;"
         "}"
-        "QPushButton:hover   { background: #45475a; color: #cdd6f4; }"
-        "QPushButton:pressed { background: #585b70; }"
+        "QPushButton:hover   { background: #e5e5e5; color: #1a1a1a; }"
+        "QPushButton:pressed { background: #d4d4d4; }"
     );
     connect(m_clearBtn, &QPushButton::clicked, this, [this]() {
         clearLog();
@@ -123,13 +123,13 @@ CompanionPanel::CompanionPanel(QWidget *parent)
 
     m_historyLabel = new QLabel(this);
     m_historyLabel->setStyleSheet(
-        "QLabel { color: #45475a; font-size: 8pt; padding: 2px 4px; }"
+        "QLabel { color: #888888; font-size: 8pt; padding: 2px 4px; }"
     );
     m_historyLabel->setVisible(false);
 
     m_modeLabel = new QLabel(this);
     m_modeLabel->setStyleSheet(
-        "QLabel { color: #89dceb; font-size: 8pt; padding: 2px 4px; }"
+        "QLabel { color: #0891b2; font-size: 8pt; padding: 2px 4px; }"
     );
     m_modeLabel->setToolTip("Current tool mode. Click to cycle: Sounit \342\206\222 Score \342\206\222 Full");
     m_modeLabel->setCursor(Qt::PointingHandCursor);
@@ -179,7 +179,7 @@ static QString markdownToHtml(const QString &md)
             closeList();
             if (!inCode) {
                 html += "<pre style='"
-                        "background:#181825; color:#cba6f7;"
+                        "background:#f3f4f6; color:#7c3aed;"
                         "padding:6px 10px; border-radius:4px;"
                         "font-family:Consolas,monospace; font-size:8.5pt;"
                         "margin:4px 0; white-space:pre-wrap;'>";
@@ -198,21 +198,21 @@ static QString markdownToHtml(const QString &md)
         // ── Headings: ###, ##, # ─────────────────────────────────────────
         if (line.startsWith("### ")) {
             closeList();
-            html += QString("<p style='margin:8px 0 2px 0; color:#89b4fa;"
+            html += QString("<p style='margin:8px 0 2px 0; color:#2563eb;"
                             "font-weight:bold; font-size:9.5pt;'>%1</p>")
                         .arg(line.mid(4).toHtmlEscaped());
             continue;
         }
         if (line.startsWith("## ")) {
             closeList();
-            html += QString("<p style='margin:10px 0 2px 0; color:#cba6f7;"
+            html += QString("<p style='margin:10px 0 2px 0; color:#7c3aed;"
                             "font-weight:bold; font-size:10pt;'>%1</p>")
                         .arg(line.mid(3).toHtmlEscaped());
             continue;
         }
         if (line.startsWith("# ")) {
             closeList();
-            html += QString("<p style='margin:10px 0 4px 0; color:#f5c2e7;"
+            html += QString("<p style='margin:10px 0 4px 0; color:#be185d;"
                             "font-weight:bold; font-size:11pt;'>%1</p>")
                         .arg(line.mid(2).toHtmlEscaped());
             continue;
@@ -226,7 +226,7 @@ static QString markdownToHtml(const QString &md)
             item = item.toHtmlEscaped();
             item.replace(QRegularExpression("\\*\\*(.+?)\\*\\*"), "<b>\\1</b>");
             item.replace(QRegularExpression("`([^`]+)`"),
-                         "<code style='background:#313244; color:#a6e3a1;"
+                         "<code style='background:#f0f0f0; color:#16a34a;"
                          "padding:0 3px; border-radius:2px; font-size:8.5pt;'>\\1</code>");
             html += "<li style='margin:1px 0;'>" + item + "</li>";
             continue;
@@ -248,7 +248,7 @@ static QString markdownToHtml(const QString &md)
         safe.replace(QRegularExpression("\\*([^*]+)\\*"), "<i>\\1</i>");
         // `inline code`
         safe.replace(QRegularExpression("`([^`]+)`"),
-                     "<code style='background:#313244; color:#a6e3a1;"
+                     "<code style='background:#f0f0f0; color:#16a34a;"
                      "padding:0 3px; border-radius:2px; font-size:8.5pt;'>\\1</code>");
         html += "<p style='margin:1px 0;'>" + safe + "</p>";
     }
@@ -270,31 +270,31 @@ void CompanionPanel::appendMessage(const QString &text, const QString &role)
     if (role == "user") {
         html = QString(
             "<p style='margin:6px 0 2px 0;'>"
-            "<span style='color:#a6e3a1; font-weight:bold;'>You</span>"
-            "<span style='color:#6c7086; font-size:8pt;'> %1</span>"
+            "<span style='color:#16a34a; font-weight:bold;'>You</span>"
+            "<span style='color:#888888; font-size:8pt;'> %1</span>"
             "</p>"
-            "<p style='margin:0 0 8px 20px; color:#cdd6f4;'>%2</p>"
+            "<p style='margin:0 0 8px 20px; color:#1a1a1a;'>%2</p>"
         ).arg(QDateTime::currentDateTime().toString("hh:mm"),
               text.toHtmlEscaped().replace("\n", "<br>"));
 
     } else if (role == "assistant") {
         html = QString(
             "<p style='margin:6px 0 4px 0;'>"
-            "<span style='color:#89b4fa; font-weight:bold;'>Kala</span>"
+            "<span style='color:#2563eb; font-weight:bold;'>Anima</span>"
             "</p>"
-            "<div style='margin:0 0 8px 12px; color:#cdd6f4;'>%1</div>"
+            "<div style='margin:0 0 8px 12px; color:#1a1a1a;'>%1</div>"
         ).arg(markdownToHtml(text));
 
     } else if (role == "tool_info") {
         // Compact single-line: tool activity feedback
-        QString color = text.startsWith(QChar(0x26a0)) ? "#fab387" : "#a6e3a1";
+        QString color = text.startsWith(QChar(0x26a0)) ? "#ea580c" : "#16a34a";
         html = QString(
             "<p style='margin:1px 0 1px 20px; color:%1; font-size:8pt;'>%2</p>"
         ).arg(color, text.toHtmlEscaped());
 
     } else { // "error"
         html = QString(
-            "<p style='margin:6px 0 8px 0; color:#f38ba8;'>%1</p>"
+            "<p style='margin:6px 0 8px 0; color:#dc2626;'>%1</p>"
         ).arg(text.toHtmlEscaped().replace("\n", "<br>"));
     }
 

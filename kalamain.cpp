@@ -556,7 +556,7 @@ KalaMain::KalaMain(QWidget *parent)
     // View > AI Companion toggle (Ctrl+Shift+A) — added programmatically
     // (The companion dock is created later in the constructor; the action is
     //  wired via a lambda that references m_companionDock after it's created.)
-    QAction *actionCompanion = new QAction("AI Companion", this);
+    QAction *actionCompanion = new QAction("Anima", this);
     actionCompanion->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
     actionCompanion->setShortcutContext(Qt::ApplicationShortcut);
     actionCompanion->setCheckable(true);
@@ -607,7 +607,7 @@ KalaMain::KalaMain(QWidget *parent)
     m_kalaAgent    = new KalaAgent(m_llmConfig, m_kalaTools, this);
     m_companionPanel = new CompanionPanel(this);
 
-    m_companionDock = new QDockWidget("AI Companion", this);
+    m_companionDock = new QDockWidget("Anima", this);
     m_companionDock->setWidget(m_companionPanel);
     m_companionDock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
     m_companionDock->setMinimumWidth(280);
@@ -7497,12 +7497,12 @@ void KalaMain::populateSettingsTab()
     scrollLayout->addWidget(easingGroup);
 
     // ── AI Companion Settings ─────────────────────────────────────────────────
-    QLabel *aiTitle = new QLabel("AI Companion");
+    QLabel *aiTitle = new QLabel("Anima");
     aiTitle->setStyleSheet("font-size: 16px; font-weight: bold; margin-top: 15px; margin-bottom: 5px;");
     scrollLayout->addWidget(aiTitle);
 
     QLabel *aiDesc = new QLabel(
-        "Connect Kala Companion to any OpenAI-compatible LLM (local Ollama, OpenAI, Groq, OpenRouter) "
+        "Connect Anima to any OpenAI-compatible LLM (local Ollama, OpenAI, Groq, OpenRouter) "
         "or to Anthropic Claude. Changes take effect the next time you send a message.");
     aiDesc->setWordWrap(true);
     aiDesc->setStyleSheet("color: gray; margin-bottom: 10px;");

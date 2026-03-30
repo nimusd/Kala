@@ -7,19 +7,17 @@
     <title>Easing Applicator</title>
   </head>
   <body>
-    <h1 id="easing-applicator-documentation">Easing Applicator
-      Documentation</h1>
+    <h1 id="easing-applicator-documentation">Easing Applicator Documentation</h1>
     <h2 id="overview">Overview</h2>
-    <p>The Easing Applicator is a <strong>stateless mathematical
-        interpolator</strong> that applies easing functions to blend between two
-      values based on a progress input. Unlike a transition engine that
-      manages time internally, the Easing Applicator is a pure function: given
-      a start value, end value, and progress (0-1), it outputs an eased
-      interpolation.</p>
+    <p>The Easing Applicator is a <strong>stateless mathematical interpolator</strong>
+      that applies easing functions to blend between two values based on a
+      progress input. Unlike a transition engine that manages time internally,
+      the Easing Applicator is a pure function: given a start value, end value,
+      and progress (0-1), it outputs an eased interpolation.</p>
     <p>This design makes it highly composable - you control the progress
       externally (from an Envelope Engine, LFO, Physics System, or any other
-      source), and the Easing Applicator shapes how that progress translates
-      to the output value.</p>
+      source), and the Easing Applicator shapes how that progress translates to
+      the output value.</p>
     <h2 id="category">Category</h2>
     <p><strong>Modifiers</strong> (Green) - Shapes how parameter changes are
       interpolated</p>
@@ -27,18 +25,14 @@
         alt=""></p>
     <h2 id="core-concept">Core Concept</h2>
     <pre><code>easedValue = startValue + (endValue - startValue) × easingFunction(progress)</code></pre>
-    <p>The easing function transforms the linear progress (0→1) into a
-      curved progress, creating acceleration, deceleration, overshoot, bounce,
-      or other motion characteristics.</p>
+    <p>The easing function transforms the linear progress (0→1) into a curved
+      progress, creating acceleration, deceleration, overshoot, bounce, or other
+      motion characteristics.</p>
     <h2 id="ports">Ports</h2>
     <h3 id="input-ports">Input Ports</h3>
     <table>
-      <colgroup>
-        <col style="width: 15%">
-        <col style="width: 28%">
-        <col style="width: 23%">
-        <col style="width: 33%">
-      </colgroup>
+      <colgroup> <col style="width: 15%"> <col style="width: 28%"> <col style="width: 23%">
+        <col style="width: 33%"> </colgroup>
       <thead>
         <tr>
           <th>Port</th>
@@ -93,13 +87,8 @@
     </table>
     <h2 id="parameters">Parameters</h2>
     <table>
-      <colgroup>
-        <col style="width: 23%">
-        <col style="width: 13%">
-        <col style="width: 19%">
-        <col style="width: 15%">
-        <col style="width: 28%">
-      </colgroup>
+      <colgroup> <col style="width: 23%"> <col style="width: 13%"> <col style="width: 19%">
+        <col style="width: 15%"> <col style="width: 28%"> </colgroup>
       <thead>
         <tr>
           <th>Parameter</th>
@@ -154,16 +143,14 @@
         </tr>
       </tbody>
     </table>
-    <p>Additional parameters available through the underlying Easing class:
-      - <code>power</code> (0.5-8.0): For Quad/Cubic/Quartic - controls the
-      exponent - <code>sineAmplitude</code> (0.1-3.0): For Sine easings - wave
-      intensity - <code>sineCycles</code> (0.25-4.0): For Sine easings -
-      number of wave cycles - <code>expoStrength</code> (1.0-20.0): For Expo
-      easings - exponential steepness - <code>circStrength</code> (0.1-3.0):
-      For Circ easings - circular curve intensity - <code>bounceCount</code>
-      (1.0-8.0): For Bounce easings - number of bounces -
-      <code>bounceStrength</code> (1.0-20.0): For Bounce easings - bounce
-      intensity</p>
+    <p>Additional parameters available through the underlying Easing class: - <code>power</code>
+      (0.5-8.0): For Quad/Cubic/Quartic - controls the exponent - <code>sineAmplitude</code>
+      (0.1-3.0): For Sine easings - wave intensity - <code>sineCycles</code>
+      (0.25-4.0): For Sine easings - number of wave cycles - <code>expoStrength</code>
+      (1.0-20.0): For Expo easings - exponential steepness - <code>circStrength</code>
+      (0.1-3.0): For Circ easings - circular curve intensity - <code>bounceCount</code>
+      (1.0-8.0): For Bounce easings - number of bounces - <code>bounceStrength</code>
+      (1.0-20.0): For Bounce easings - bounce intensity</p>
     <h2 id="easing-functions-29-types">Easing Functions (29 Types)</h2>
     <h3 id="linear-id-0">Linear (ID: 0)</h3>
     <table>
@@ -358,8 +345,7 @@
         </tr>
       </tbody>
     </table>
-    <h3 id="back-ids-19-21---can-overshoot">Back (IDs: 19-21) - Can
-      Overshoot</h3>
+    <h3 id="back-ids-19-21---can-overshoot">Back (IDs: 19-21) - Can Overshoot</h3>
     <table>
       <thead>
         <tr>
@@ -386,9 +372,8 @@
         </tr>
       </tbody>
     </table>
-    <p><strong>Note:</strong> Back easings produce values outside 0-1 range.
-      The <code>overshoot</code> parameter (default 1.70158) controls how
-      far.</p>
+    <p><strong>Note:</strong> Back easings produce values outside 0-1 range. The
+      <code>overshoot</code> parameter (default 1.70158) controls how far.</p>
     <h3 id="elastic-ids-22-24---can-overshoot">Elastic (IDs: 22-24) - Can
       Overshoot</h3>
     <table>
@@ -418,8 +403,7 @@
       </tbody>
     </table>
     <p><strong>Note:</strong> Elastic easings oscillate outside 0-1 range.
-      Control with <code>amplitude</code> and <code>period</code>
-      parameters.</p>
+      Control with <code>amplitude</code> and <code>period</code> parameters.</p>
     <h3 id="bounce-ids-25-27">Bounce (IDs: 25-27)</h3>
     <table>
       <thead>
@@ -464,19 +448,18 @@
         </tr>
       </tbody>
     </table>
-    <p><strong>Note:</strong> Wobble adds oscillation to base motion.
-      Control with <code>frequency</code> and <code>decay</code>
-      parameters.</p>
+    <p><strong>Note:</strong> Wobble adds oscillation to base motion. Control
+      with <code>frequency</code> and <code>decay</code> parameters.</p>
     <h2 id="usage-patterns">Usage Patterns</h2>
     <h3 id="basic-value-interpolation">Basic Value Interpolation</h3>
-    <p>The simplest use: interpolate between two fixed values based on
-      external progress.</p>
+    <p>The simplest use: interpolate between two fixed values based on external
+      progress.</p>
     <pre><code>LFO (0-1 output) ──→ progress
                               ├──→ Easing Applicator ──→ easedValue
 Constant (0.2) ──→ startValue
 Constant (0.8) ──→ endValue</code></pre>
-    <p>Result: The LFO’s linear 0-1 ramp becomes an eased transition between
-      0.2 and 0.8.</p>
+    <p>Result: The LFO’s linear 0-1 ramp becomes an eased transition between 0.2
+      and 0.8.</p>
     <h3 id="envelope-driven-parameter-morphing">Envelope-Driven Parameter
       Morphing</h3>
     <p>Use an envelope to drive progress while easing shapes the motion.</p>
@@ -484,22 +467,20 @@ Constant (0.8) ──→ endValue</code></pre>
                               ├──→ Easing Applicator ──→ [Filter Cutoff]
 Note Attack (500 Hz) ──→ startValue
 Note Sustain (2000 Hz) ──→ endValue</code></pre>
-    <p>Result: Filter cutoff follows envelope timing but with eased (not
-      linear) motion.</p>
+    <p>Result: Filter cutoff follows envelope timing but with eased (not linear)
+      motion.</p>
     <h3 id="pitch-glide-portamento">Pitch Glide / Portamento</h3>
     <p>Connect pitch values and use progress from a timing source.</p>
     <pre><code>Previous Note Pitch ──→ startValue
                                      ├──→ Easing Applicator ──→ Spectrum to Signal (pitch)
 Current Note Pitch ──→ endValue
 Envelope (glide) ──→ progress</code></pre>
-    <p>Result: Pitch slides between notes with customizable acceleration
-      curve.</p>
+    <p>Result: Pitch slides between notes with customizable acceleration curve.</p>
     <h3 id="physics-controlled-easing">Physics-Controlled Easing</h3>
     <p>Let a Physics System provide the progress for organic motion.</p>
     <pre><code>Physics System ──→ progress
                               ├──→ Easing Applicator ──→ [Parameter]</code></pre>
-    <p>Result: Physics-based acceleration combined with easing
-      character.</p>
+    <p>Result: Physics-based acceleration combined with easing character.</p>
     <h3 id="lfo-shaped-modulation">LFO-Shaped Modulation</h3>
     <p>Apply easing to reshape an LFO’s waveform.</p>
     <pre><code>LFO (sawtooth) ──→ progress
@@ -612,33 +593,28 @@ Envelope (glide) ──→ progress</code></pre>
     <ul>
       <li><strong>Back In</strong>: Output briefly goes below startValue</li>
       <li><strong>Back Out</strong>: Output briefly goes above endValue</li>
-      <li><strong>Elastic</strong>: Output oscillates past both
-        boundaries</li>
+      <li><strong>Elastic</strong>: Output oscillates past both boundaries</li>
     </ul>
     <p>If your target parameter has hard limits, either: 1. Choose
       non-overshooting easings (IDs 0-18, 25-27) 2. Clamp the output in your
       signal chain 3. Use smaller overshoot/amplitude parameters</p>
     <h3 id="progress-clamping">Progress Clamping</h3>
     <p>The <code>progress</code> input is automatically clamped to 0.0-1.0.
-      Values outside this range are brought to the boundaries before the
-      easing function is applied.</p>
+      Values outside this range are brought to the boundaries before the easing
+      function is applied.</p>
     <h3 id="parameter-update-timing">Parameter Update Timing</h3>
     <p>Easing parameters (easingSelect, overshoot, amplitude, etc.) are read
       each processing cycle. You can modulate these in real-time for evolving
       easing behavior.</p>
     <h3 id="stateless-operation">Stateless Operation</h3>
     <p>The Easing Applicator has no internal state or memory. Given the same
-      inputs, it always produces the same output. This makes it: -
-      <strong>Predictable</strong>: Output depends only on current inputs -
-      <strong>Composable</strong>: Chain multiple easings or use in parallel -
-      <strong>Efficient</strong>: No internal buffers or state management</p>
-    <h2 id="comparison-with-other-modifiers">Comparison with Other
-      Modifiers</h2>
+      inputs, it always produces the same output. This makes it: - <strong>Predictable</strong>:
+      Output depends only on current inputs - <strong>Composable</strong>:
+      Chain multiple easings or use in parallel - <strong>Efficient</strong>:
+      No internal buffers or state management</p>
+    <h2 id="comparison-with-other-modifiers">Comparison with Other Modifiers</h2>
     <table>
-      <colgroup>
-        <col style="width: 40%">
-        <col style="width: 33%">
-        <col style="width: 25%">
+      <colgroup> <col style="width: 40%"> <col style="width: 33%"> <col style="width: 25%">
       </colgroup>
       <thead>
         <tr>
@@ -698,13 +674,163 @@ class="co">// Interpolate</span></span></code></pre>
       <li>Single function call per sample</li>
       <li>Negligible CPU impact even with many instances</li>
     </ul>
-    <h3 id="serialization">Serialization</h3>
-    <p>Easing configurations are saved/loaded as part of the Sounit graph.
-      The <code>Easing</code> class supports JSON serialization including all
-      custom parameters.</p>
+    <h3 id="serialization">SerializationIt has three ports:<br>
+      &nbsp; - startValue — lower bound of interpolation<br>
+      &nbsp; - endValue — upper bound<br>
+      &nbsp; - progress — the 0–1 driver (this is the key port)<br>
+      <br>
+      &nbsp; Formula: output = startValue + (endValue - startValue) ×
+      easing(progress)<br>
+      <br>
+      &nbsp; The Easing Applicator doesn't generate time. It reshapes a signal
+      you give it. It's a curve transformer, not a source.<br>
+      <br>
+      &nbsp; ---<br>
+      <br>
+    </h3>
+    <table style="width: 100%" border="1">
+      <tbody>
+        <tr>
+          <td>
+            <h3 id="serialization">&nbsp; The core distinction&nbsp;&nbsp; </h3>
+          </td>
+          <td>
+            <h3 id="serialization">&nbsp;Envelope Engine&nbsp;&nbsp;</h3>
+          </td>
+          <td>
+            <h3 id="serialization">Easing Applicator</h3>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <h3 id="serialization"> Time source</h3>
+          </td>
+          <td>
+            <h3 id="serialization">Yes — generates its own 0–1 over note
+              duration</h3>
+          </td>
+          <td>
+            <h3 id="serialization"> No — needs a progress signal fed
+              in&nbsp;&nbsp;</h3>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <h3 id="serialization">Arbitrary breakpoints&nbsp;&nbsp;</h3>
+          </td>
+          <td>
+            <h3 id="serialization">Curve shape&nbsp;&nbsp;</h3>
+          </td>
+          <td>
+            <h3 id="serialization">Mathematically precise single-stage curve</h3>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <h3 id="serialization"> Multi-stage&nbsp;&nbsp;</h3>
+          </td>
+          <td>
+            <h3 id="serialization">Yes (ADSR, plateau, reverse)</h3>
+          </td>
+          <td>
+            <h3 id="serialization">No — always a single sweep A→B&nbsp;&nbsp;</h3>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <h3 id="serialization">Overshoot/spring</h3>
+          </td>
+          <td>
+            <h3 id="serialization">No&nbsp;</h3>
+          </td>
+          <td>
+            <h3 id="serialization">Yes (Elastic, Back, Bounce, Wobble)&nbsp;</h3>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="serialization"><br>
+      &nbsp; <br>
+      <br>
+      &nbsp; Use Easing when: a single sweep with a physically precise shape.
+      Especially ExpoOut (fast-then-slow physical decay), ElasticOut/BackOut
+      (spring settling,<br>
+      &nbsp; pluck intonation snap), Wobble (decaying oscillation).<br>
+      <br>
+      &nbsp; Use Envelope when: the curve changes direction, has a plateau
+      (sustain), or needs precise stage timing that doesn't fit a standard math
+      curve.<br>
+      <br>
+      &nbsp; ---<br>
+      &nbsp; The demo sounit — three easers, one shared ramp<br>
+      <br>
+      &nbsp; One Envelope Engine (a flat 0→1 linear ramp) drives all three
+      Easing Applicators through their progress port. Same source, three
+      completely different<br>
+      &nbsp; shapes:<br>
+      <br>
+      &nbsp; Easing 1 — ExpoOut (id=14) → Rolloff:highRolloff (0.0 → 0.90)<br>
+      <br>
+      &nbsp; A plucked string loses 90% of its brightness in the first fraction
+      of the note, then the remaining warmth fades slowly. ExpoOut gives exactly
+      this:<br>
+      &nbsp; extremely fast initial change, then decelerates into a long slow
+      tail. Drawing this as a custom Envelope would need 6+ points and still
+      wouldn't be<br>
+      &nbsp; mathematically clean.<br>
+      <br>
+      &nbsp; Easing 2 — ElasticOut (id=23) → StoS:pitchMultiplier (1.018 → 1.0)<br>
+      <br>
+      &nbsp; The string is plucked under tension (~30 cents sharp) and springs
+      to pitch with a brief undershoot before settling. This is physically real
+      and completely<br>
+      &nbsp;&nbsp; impossible to draw as a breakpoint envelope. Try changing
+      easingSelect to 20 (BackOut) for a simpler single-overshoot version.<br>
+      <br>
+      &nbsp; Easing 3 — SineOut (id=11) → Rolloff:lowRolloff (0.45 → 0.04)<br>
+      <br>
+      &nbsp; The fundamental opens up quickly then plateaus — the "thump then
+      sustain" of a real plucked body. SineOut starts fast, decelerates, which
+      perfectly<br>
+      &nbsp; matches this physical character.<br>
+      <br>
+      &nbsp; ---<br>
+      &nbsp; Easing ID reference (the full list)<br>
+      <br>
+      &nbsp; 0=Linear<br>
+      &nbsp; 1=QuadIn&nbsp;&nbsp;&nbsp; 2=QuadOut&nbsp;&nbsp;&nbsp; 3=QuadInOut<br>
+      &nbsp; 4=CubicIn&nbsp;&nbsp; 5=CubicOut&nbsp;&nbsp; 6=CubicInOut<br>
+      &nbsp; 7=QuarticIn 8=QuarticOut 9=QuarticInOut<br>
+      &nbsp; 10=SineIn&nbsp;&nbsp; 11=SineOut&nbsp;&nbsp; 12=SineInOut<br>
+      &nbsp; 13=ExpoIn&nbsp;&nbsp; 14=ExpoOut&nbsp;&nbsp; 15=ExpoInOut<br>
+      &nbsp; 16=CircIn&nbsp;&nbsp; 17=CircOut&nbsp;&nbsp; 18=CircInOut<br>
+      &nbsp; 19=BackIn&nbsp;&nbsp; 20=BackOut&nbsp;&nbsp; 21=BackInOut<br>
+      &nbsp; 22=ElasticIn&nbsp; 23=ElasticOut&nbsp; 24=ElasticInOut<br>
+      &nbsp; 25=BounceIn&nbsp;&nbsp; 26=BounceOut&nbsp;&nbsp; 27=BounceInOut<br>
+      &nbsp; 28=Wobble<br>
+      <br>
+      &nbsp; Back/Elastic/Bounce/Wobble are the ones that can overshoot — these
+      are the shapes where Easing is genuinely irreplaceable. Expo/Circ/Quartic
+      are the<br>
+      &nbsp; extreme curves (steeper than Cubic) good for physical decay and
+      onset modeling.<br>
+      <br>
+      &nbsp; ---<br>
+      &nbsp; The sounit also has experiment suggestions in its comment: try
+      easingSelect=28 (Wobble) on Easing 1 for a shimmer on the brightness
+      decay, and<br>
+      &nbsp; easingSelect=20 (BackOut) on Easing 2 for a cleaner single
+      overshoot instead of spring oscillation.<br>
+      <br>
+    </h3>
+    <p>Easing configurations are saved/loaded as part of the Sounit graph. The <code>Easing</code>
+      class supports JSON serialization including all custom parameters.</p>
+    <p><br>
+    </p>
+    <p><br>
+    </p>
     <hr>
-    <p><em>Documentation accurate as of Kala v1.4. Source files:
-        <code>easingapplicator.h</code>, <code>easingapplicator.cpp</code>,
-        <code>easing.h</code>, <code>easing.cpp</code></em></p>
+    <p><em>Documentation accurate as of Kala v1.4. Source files: <code>easingapplicator.h</code>,
+        <code>easingapplicator.cpp</code>, <code>easing.h</code>, <code>easing.cpp</code></em></p>
   </body>
 </html>

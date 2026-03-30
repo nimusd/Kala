@@ -9,10 +9,10 @@
   <body>
     <h1 id="physics-system-documentation">Physics System Documentation</h1>
     <h2 id="overview">Overview</h2>
-    <p>The Physics System is a <strong>stateful mass-spring-damper
-        simulator</strong> that creates organic, physically-plausible parameter
-      movement. It smooths abrupt changes and adds natural inertia, momentum,
-      and settling behavior to any control signal.</p>
+    <p>The Physics System is a <strong>stateful mass-spring-damper simulator</strong>
+      that creates organic, physically-plausible parameter movement. It smooths
+      abrupt changes and adds natural inertia, momentum, and settling behavior
+      to any control signal.</p>
     <p>This is a core “organic without random” mechanism - the output moves
       naturally toward targets without artificial randomness, creating smooth
       transitions and preventing clicks from abrupt parameter changes.</p>
@@ -26,19 +26,14 @@
 velocity += force / mass
 velocity *= damping
 currentValue += velocity</code></pre>
-    <p>The system simulates a mass on a spring being pulled toward the
-      target value, with damping that dissipates energy over time. This
-      creates smooth, natural motion with overshoot, settling, and
-      momentum.</p>
+    <p>The system simulates a mass on a spring being pulled toward the target
+      value, with damping that dissipates energy over time. This creates smooth,
+      natural motion with overshoot, settling, and momentum.</p>
     <h2 id="ports">Ports</h2>
     <h3 id="input-ports">Input Ports</h3>
     <table>
-      <colgroup>
-        <col style="width: 15%">
-        <col style="width: 28%">
-        <col style="width: 23%">
-        <col style="width: 33%">
-      </colgroup>
+      <colgroup> <col style="width: 15%"> <col style="width: 28%"> <col style="width: 23%">
+        <col style="width: 33%"> </colgroup>
       <thead>
         <tr>
           <th>Port</th>
@@ -105,13 +100,8 @@ currentValue += velocity</code></pre>
     </table>
     <h2 id="parameters">Parameters</h2>
     <table>
-      <colgroup>
-        <col style="width: 23%">
-        <col style="width: 13%">
-        <col style="width: 19%">
-        <col style="width: 15%">
-        <col style="width: 28%">
-      </colgroup>
+      <colgroup> <col style="width: 23%"> <col style="width: 13%"> <col style="width: 19%">
+        <col style="width: 15%"> <col style="width: 28%"> </colgroup>
       <thead>
         <tr>
           <th>Parameter</th>
@@ -181,8 +171,8 @@ currentValue += velocity</code></pre>
         </tr>
       </tbody>
     </table>
-    <p>Low mass = quick response but potentially jittery. High mass = smooth
-      but sluggish.</p>
+    <p>Low mass = quick response but potentially jittery. High mass = smooth but
+      sluggish.</p>
     <h3 id="spring-constant-springk">Spring Constant (springK)</h3>
     <p>Controls how strongly the system pulls toward the target.</p>
     <table>
@@ -214,8 +204,7 @@ currentValue += velocity</code></pre>
     <p>Higher springK with lower damping can cause oscillation around the
       target.</p>
     <h3 id="damping">Damping</h3>
-    <p>Controls energy loss per sample. Values close to 1.0 retain more
-      energy.</p>
+    <p>Controls energy loss per sample. Values close to 1.0 retain more energy.</p>
     <table>
       <thead>
         <tr>
@@ -242,12 +231,12 @@ currentValue += velocity</code></pre>
         </tr>
       </tbody>
     </table>
-    <p><strong>Note:</strong> Damping &lt; 1.0 means energy is always lost.
-      The system will eventually settle at the target.</p>
+    <p><strong>Note:</strong> Damping &lt; 1.0 means energy is always lost. The
+      system will eventually settle at the target.</p>
     <h3 id="impulse">Impulse</h3>
-    <p>When the <code>impulse</code> input crosses 0.5 (rising edge), the
-      <code>impulseAmount</code> is added to velocity. This creates sudden
-      “kicks” that the system then naturally recovers from.</p>
+    <p>When the <code>impulse</code> input crosses 0.5 (rising edge), the <code>impulseAmount</code>
+      is added to velocity. This creates sudden “kicks” that the system then
+      naturally recovers from.</p>
     <h2 id="physics-characteristics">Physics Characteristics</h2>
     <h3 id="underdamped-oscillation">Underdamped (Oscillation)</h3>
     <p>When springK is high relative to damping, the system overshoots and
@@ -260,8 +249,7 @@ Output:    ╭────╯  ╰──╮
       (0.9-0.95)</p>
     <h3 id="critically-damped-fastest-settling">Critically Damped (Fastest
       Settling)</h3>
-    <p>The system reaches the target as fast as possible without
-      overshooting.</p>
+    <p>The system reaches the target as fast as possible without overshooting.</p>
     <pre><code>Target: ─────────────────────────
                     ╭────────────
 Output:       ╭────╯
@@ -273,8 +261,7 @@ Output:       ╭────╯
                          ╭───────
 Output:           ╭─────╯
           ───────╯</code></pre>
-    <p><strong>Settings:</strong> Low springK (0.001), high damping
-      (0.99+)</p>
+    <p><strong>Settings:</strong> Low springK (0.001), high damping (0.99+)</p>
     <h2 id="usage-patterns">Usage Patterns</h2>
     <h3 id="parameter-smoothing">Parameter Smoothing</h3>
     <p>Eliminate clicks from abrupt parameter changes.</p>
@@ -306,13 +293,9 @@ Output:           ╭─────╯
 [Target value] ──→ targetValue ──→ Physics System ──→ currentValue ──→ [Target]
                                         │
                                         └── impulseAmount: 200</code></pre>
-    <h2 id="comparison-with-other-modifiers">Comparison with Other
-      Modifiers</h2>
+    <h2 id="comparison-with-other-modifiers">Comparison with Other Modifiers</h2>
     <table>
-      <colgroup>
-        <col style="width: 39%">
-        <col style="width: 35%">
-        <col style="width: 25%">
+      <colgroup> <col style="width: 39%"> <col style="width: 35%"> <col style="width: 25%">
       </colgroup>
       <thead>
         <tr>
@@ -349,28 +332,25 @@ Output:           ╭─────╯
         </tr>
       </tbody>
     </table>
-    <p>The Physics System is unique in having <strong>two state
-        variables</strong> (position and velocity), which allows for momentum
-      and overshoot - something the other modifiers cannot produce.</p>
+    <p>The Physics System is unique in having <strong>two state variables</strong>
+      (position and velocity), which allows for momentum and overshoot -
+      something the other modifiers cannot produce.</p>
     <h2 id="important-behaviors">Important Behaviors</h2>
     <h3 id="velocity-clamping">Velocity Clamping</h3>
     <p>Velocity is clamped to ±10,000 units/sample to prevent numerical
       instability with extreme parameter combinations.</p>
     <h3 id="mass-near-zero">Mass Near Zero</h3>
-    <p>When mass &lt; 0.0001, the force is applied directly to velocity
-      without division (preventing division by near-zero). This gives instant
-      response.</p>
+    <p>When mass &lt; 0.0001, the force is applied directly to velocity without
+      division (preventing division by near-zero). This gives instant response.</p>
     <h3 id="reset-behavior">Reset Behavior</h3>
-    <p><code>reset()</code> sets currentValue and velocity to 0.
-      <code>reset(initialValue)</code> sets currentValue to the specified
-      value and velocity to 0.</p>
+    <p><code>reset()</code> sets currentValue and velocity to 0. <code>reset(initialValue)</code>
+      sets currentValue to the specified value and velocity to 0.</p>
     <h3 id="impulse-detection">Impulse Detection</h3>
     <p>Impulse triggers on <strong>rising edge</strong> - when the impulse
       input crosses from below 0.5 to above 0.5. Holding the trigger high does
       not re-trigger.</p>
     <h2 id="preset-suggestions">Preset Suggestions</h2>
-    <h3 id="smooth-filter-click-prevention">Smooth Filter (Click
-      Prevention)</h3>
+    <h3 id="smooth-filter-click-prevention">Smooth Filter (Click Prevention)</h3>
     <pre><code>mass: 0.3, springK: 0.01, damping: 0.99</code></pre>
     <p>Fast enough to track, smooth enough to prevent artifacts.</p>
     <h3 id="heavy-inertia">Heavy Inertia</h3>
@@ -385,11 +365,70 @@ Output:           ╭─────╯
     <h3 id="slow-drift">Slow Drift</h3>
     <pre><code>mass: 1.0, springK: 0.001, damping: 0.999</code></pre>
     <p>Very gradual movement toward target.</p>
+    <p><br>
+    </p>
+    <p>&nbsp; Physics System — the key insight<br>
+      <br>
+      &nbsp; The formula per audio sample: force = (target − current) × springK
+      → velocity += force/mass → velocity *= damping → current += velocity<br>
+      <br>
+      &nbsp; It runs at audio rate (44100 times/second) and never arrives — it
+      perpetually approaches but fights inertia. This is fundamentally different
+      from both<br>
+      &nbsp; Envelope and Easing.<br>
+      <br>
+      &nbsp; The two demos in the sounit<br>
+      <br>
+      &nbsp; Physics System 1 — Lazy follower (LFO → targetValue →
+      Rolloff:highRolloff)<br>
+      &nbsp; The LFO drives the target; Physics lags behind it with inertia and
+      gently overshoots. The result is timbral breathing that's never quite in
+      sync with the<br>
+      &nbsp; LFO — always just behind, softly overshooting. A direct LFO→Rolloff
+      connection feels mechanical; Physics makes it feel like a resonating body.
+      mass<br>
+      &nbsp; controls how sluggish, springK how strongly it's pulled back,
+      damping how quickly overshoots die.<br>
+      <br>
+      &nbsp; Physics System 2 — Impulse wobble (Envelope → impulse →
+      Rolloff:lowRolloff)<br>
+      &nbsp; A sharp-attack envelope crosses 0.5 within the first 2% of the
+      note, triggering the rising-edge detector. impulseAmount of velocity is
+      added instantly.<br>
+      &nbsp; The system overshoots from target=0, springs back, decays — giving
+      the lowRolloff a physical attack surge that settles naturally. The decay
+      curve is the<br>
+      &nbsp; spring-mass-damper impulse response: no breakpoints could draw it
+      accurately.<br>
+      <br>
+      &nbsp; The three-way distinction<br>
+      <br>
+      &nbsp; When to use&nbsp;&nbsp;&nbsp;&nbsp; <br>
+    </p>
+    <table style="width: 100%" border="1">
+      <tbody>
+        <tr>
+          <td> Envelope</td>
+          <td>You need multi-stage shapes, plateaus, reversals (ADSR)&nbsp; <br>
+          </td>
+        </tr>
+        <tr>
+          <td> Easing</td>
+          <td> You have a 0→1 progress signal and want a mathematically precise
+            one-shot curve shape</td>
+        </tr>
+        <tr>
+          <td> Physics</td>
+          <td> Your input is a live moving signal and you want it to feel heavy,
+            springy, or reactive — the output is never fully "done" </td>
+        </tr>
+      </tbody>
+    </table>
+    <p></p>
     <h2 id="technical-notes">Technical Notes</h2>
     <h3 id="state-variables">State Variables</h3>
-    <p>The Physics System maintains two state variables: -
-      <code>currentValue</code>: Current position (output) -
-      <code>velocity</code>: Rate of change</p>
+    <p>The Physics System maintains two state variables: - <code>currentValue</code>:
+      Current position (output) - <code>velocity</code>: Rate of change</p>
     <h3 id="processing-per-sample">Processing Per Sample</h3>
     <div class="sourceCode" id="cb15">
       <pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a
@@ -416,15 +455,15 @@ class="dv">10000</span><span class="op">);</span></span>
 class="op">+=</span> velocity<span class="op">;</span></span></code></pre>
     </div>
     <h3 id="mathematical-model">Mathematical Model</h3>
-    <p>This implements a discrete approximation of the second-order
-      differential equation:</p>
+    <p>This implements a discrete approximation of the second-order differential
+      equation:</p>
     <pre><code>m × d²x/dt² + c × dx/dt + k × x = k × target</code></pre>
     <p>Where: - <code>m</code> = mass - <code>c</code> = damping coefficient
       (derived from damping parameter) - <code>k</code> = spring constant
       (springK) - <code>x</code> = current position - <code>target</code> =
       target position</p>
     <hr>
-    <p><em>Documentation accurate as of Kala v1.4. Source files:
-        <code>physicssystem.h</code>, <code>physicssystem.cpp</code></em></p>
+    <p><em>Documentation accurate as of Kala v1.4. Source files: <code>physicssystem.h</code>,
+        <code>physicssystem.cpp</code></em></p>
   </body>
 </html>

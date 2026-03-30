@@ -30,8 +30,8 @@ static QString getScaleDescription(int scaleId)
         return "<b>Equal Temperament</b> &mdash; 12 notes &mdash; Western<br><br>"
                "Modern standard tuning. Each semitone = 2\u207f where n = 1/12. Perfectly even spacing; "
                "compromise tuning allowing all keys to sound equally acceptable.<br><br>"
-               "<b>Diatonic notes</b> (coloured): C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B<br>"
-               "<b>Accidentals</b> (light grey): C&#9839; &middot; D&#9839; &middot; F&#9839; &middot; G&#9839; &middot; A&#9839;<br>"
+               "<b>Diatonic notes</b> (white): C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B<br>"
+               "<b>Accidentals</b> (black2): C&#9839; &middot; D&#9839; &middot; F&#9839; &middot; G&#9839; &middot; A&#9839;<br>"
                "Use the <b>Key</b> buttons above to set concert pitch (A\u202f=\u202f440\u202fHz).";
 
     case 3:
