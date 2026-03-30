@@ -487,6 +487,22 @@ NoteRender (new struct):
 
 └─ uint64\_t noteHash             ← Hash of note properties when rendered
 
+## Anima — Tool Design for Local LLMs
+
+The KalaAgent uses LLM tool calls for AI-assisted composition. For local models (Ollama, Qwen, etc.), round-trips are the bottleneck.
+
+**Optimization principles:**
+
+- **Range strings beat arrays.** `select_notes(indices="0-29")` is one call instead of 5-6 with array chunks.
+- **Dedicated tools beat special-cased parameters.** Batch operations (`set_parameters`) are preferred.
+- **"Prefer X" in descriptions.** Local models follow explicit instructions better than schema shape.
+- **Compact input formats.** Use `"all"` to select all notes, range strings for index ranges.
+
+**Key optimized tools:**
+- `select_notes(indices="0-29")` — range string or "all"
+- `set_parameters` — batch multiple param changes in one call
+- `resolveNoteIndices` — empty array = all notes (implicit shortcut)
+
 ## Related Documentation
 
 All design specifications are in `docs/md format/`. Key documents:

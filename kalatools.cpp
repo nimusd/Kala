@@ -1774,20 +1774,46 @@ QJsonObject KalaTools::toolSelectNotes(const QJsonObject &args)
 
     QVector<int> indices;
     QJsonArray ids;
-    for (int i = 0; i < notes.size(); ++i) {
-        const Note &n = notes[i];
-        if (hasTrk && n.getTrackIndex() != trackIdx) continue;
-        if (n.getPitchHz() < minHz || n.getPitchHz() > maxHz) continue;
-        indices.append(i);
-        ids.append(n.getId());
+
+    const QString indicesStr = args.value("indices").toString();
+    if (!indicesStr.isEmpty()) {
+        QString s = indicesStr.trimmed();
+        if (s.compare("all", Qt::CaseInsensitive) == 0) {
+            for (int i = 0; i < notes.size(); ++i) indices.append(i);
+        } else {
+            QChar sep = s.contains(':') ? ':' : '-';
+            QStringList parts = s.split(sep);
+            if (parts.size() == 2) {
+                bool ok1, ok2;
+                int from = parts[0].trimmed().toInt(&ok1);
+                int to   = parts[1].trimmed().toInt(&ok2);
+                if (ok1 && ok2) {
+                    if (from > to) qSwap(from, to);
+                    from = qMax(0, from);
+                    to   = qMin(notes.size() - 1, to);
+                    for (int i = from; i <= to; ++i) indices.append(i);
+                }
+            }
+        }
+    } else {
+        for (int i = 0; i < notes.size(); ++i) {
+            const Note &n = notes[i];
+            if (hasTrk && n.getTrackIndex() != trackIdx) continue;
+            if (n.getPitchHz() < minHz || n.getPitchHz() > maxHz) continue;
+            indices.append(i);
+            ids.append(n.getId());
+        }
     }
+
+    if (indices.isEmpty() && !indicesStr.isEmpty())
+        return error("No notes match the indices range.");
 
     sc->selectNotes(indices);
     sc->update();
 
     QJsonObject result;
     result["matchedCount"] = indices.size();
-    result["noteIds"]      = ids;
+    result["noteIds"]      = ids.isEmpty() ? QJsonArray() : ids;
     result["message"]      = QString("%1 note(s) selected.").arg(indices.size());
     return QJsonObject{ {"result", result} };
 }
@@ -3530,10 +3556,11 @@ static QJsonArray compositionSchemas()
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "select_notes"},
-            {"description", "Selects notes by pitch range and/or track. Returns ids."},
+            {"description", "Selects notes by pitch range and/or track. Returns ids. indices: a range string like '0-29' to select notes by index, 'all' to select all notes, or omit for pitch-based selection."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
+                    {"indices",     QJsonObject{{"type","string"},{"description","Range like '0-29' or 'all'"}}},
                     {"pitchMinHz",  numProp("Lower Hz bound")},
                     {"pitchMaxHz",  numProp("Upper Hz bound")},
                     {"trackIndex",  QJsonObject{{"type","integer"},{"description","Track filter"}}}
