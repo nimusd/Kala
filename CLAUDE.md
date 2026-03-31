@@ -502,6 +502,7 @@ The KalaAgent uses LLM tool calls for AI-assisted composition. For local models 
 - `select_notes(indices="0-29")` — range string or "all"
 - `set_parameters` — batch multiple param changes in one call
 - `resolveNoteIndices` — empty array = all notes (implicit shortcut)
+- **Text-format tool calls.** Local models emit `<function=name><parameter=p>v</parameter></function>` when they can't produce JSON. LLMClient::normalizeTextToolCalls() handles this transparently.
 
 ## Related Documentation
 

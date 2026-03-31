@@ -39,6 +39,11 @@ private:
     QJsonObject adaptRequestForAnthropic(const QJsonObject &openAiRequest) const;
     QJsonObject adaptResponseFromAnthropic(const QJsonObject &anthropicResponse) const;
 
+    // Text-format tool call parser — local models (Ollama, etc.) emit
+    // <function=name><parameter=p>v</parameter></function> when they can't
+    // produce structured JSON. This normalizes them to the standard tool_calls format.
+    QJsonObject normalizeTextToolCalls(const QJsonObject &raw) const;
+
     void handleReply(QNetworkReply *reply, bool isAnthropic,
                      ResponseCallback callback);
 

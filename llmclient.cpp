@@ -1,5 +1,6 @@
 #include "llmclient.h"
 
+#include <QRegularExpression>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -139,7 +140,10 @@ void LLMClient::handleReply(QNetworkReply *reply, bool isAnthropic,
     if (isAnthropic)
         response = adaptResponseFromAnthropic(response);
 
-    callback(response, {});
+    if (isAnthropic)
+        callback(response, {});
+    else
+        callback(normalizeTextToolCalls(response), {});
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -244,4 +248,127 @@ QJsonObject LLMClient::adaptResponseFromAnthropic(const QJsonObject &anthropicRe
     QJsonObject result;
     result["choices"] = QJsonArray{ choice };
     return result;
+}
+
+QJsonObject LLMClient::normalizeTextToolCalls(const QJsonObject &raw) const
+{
+    QJsonArray choices = raw["choices"].toArray();
+    if (choices.isEmpty()) return raw;
+
+    QJsonObject choice = choices[0].toObject();
+    QJsonObject message = choice["message"].toObject();
+    if (message.isEmpty()) return raw;
+
+    if (choice["finish_reason"].toString() == "tool_calls") return raw;
+
+    QString content = message["content"].toString();
+    if (content.isEmpty()) return raw;
+
+    // Check for tool call markup
+    if (!content.contains("<function=", Qt::CaseInsensitive) &&
+        !content.contains("<tool_call", Qt::CaseInsensitive))
+        return raw;
+
+    // Strip the markup from content using simple string operations
+    QString cleaned = content;
+    cleaned.remove(QRegularExpression("<tool_calls?>.*?</tool_calls?>", QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption));
+    cleaned.remove(QRegularExpression("<function[= ][^>]*>.*?</function>", QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption));
+    cleaned = cleaned.trimmed();
+    message["content"] = cleaned.isEmpty() ? QJsonValue() : QJsonValue(cleaned);
+
+    // Parse text-format tool calls
+    QJsonArray toolCalls;
+    int callId = 1;
+    int pos = 0;
+
+    QRegularExpression nameAttrRe("name\\s*=\\s*[\"']([^\"']+)[\"']", QRegularExpression::CaseInsensitiveOption);
+
+    while (pos < content.size()) {
+        // Find <function= or <function name=
+        int funcStart = content.indexOf("<function=", pos, Qt::CaseInsensitive);
+        int funcStart2 = content.indexOf("<function ", pos, Qt::CaseInsensitive);
+
+        if (funcStart < 0 && funcStart2 < 0) break;
+
+        int tagOpen;
+        QString funcName;
+
+        if (funcStart >= 0 && (funcStart2 < 0 || funcStart <= funcStart2)) {
+            // <function=NAME> format
+            tagOpen = content.indexOf('>', funcStart);
+            if (tagOpen < 0) break;
+            funcName = content.mid(funcStart + 10, tagOpen - funcStart - 10).trimmed();
+        } else {
+            // <function name="..."> format
+            tagOpen = content.indexOf('>', funcStart2);
+            if (tagOpen < 0) break;
+            QString tagBody = content.mid(funcStart2 + 10, tagOpen - funcStart2 - 10);
+            QRegularExpressionMatch match = nameAttrRe.match(tagBody);
+            if (!match.hasMatch()) {
+                pos = funcStart2 + 1;
+                continue;
+            }
+            funcName = match.captured(1);
+        }
+
+        int funcClose = content.indexOf("</function>", tagOpen, Qt::CaseInsensitive);
+        if (funcClose < 0) break;
+
+        QString inner = content.mid(tagOpen + 1, funcClose - tagOpen - 1);
+
+        // Parse parameters
+        QJsonObject args;
+        int pPos = 0;
+        while (pPos < inner.size()) {
+            int paramStart = inner.indexOf("<parameter", pPos, Qt::CaseInsensitive);
+            if (paramStart < 0) break;
+
+            int tagClose = inner.indexOf('>', paramStart);
+            if (tagClose < 0) break;
+
+            QString tagBody = inner.mid(paramStart + 10, tagClose - paramStart - 10);
+            QString paramName;
+
+            if (tagBody.trimmed().startsWith("=")) {
+                paramName = tagBody.trimmed().mid(1).trimmed();
+            } else {
+                QRegularExpressionMatch match = nameAttrRe.match(tagBody);
+                if (!match.hasMatch()) {
+                    pPos = tagClose + 1;
+                    continue;
+                }
+                paramName = match.captured(1);
+            }
+
+            int paramClose = inner.indexOf("</parameter>", tagClose, Qt::CaseInsensitive);
+            if (paramClose < 0) break;
+
+            QString value = inner.mid(tagClose + 1, paramClose - tagClose - 1).trimmed();
+
+            // Try to parse as JSON, fall back to string
+            QJsonParseError err;
+            QJsonDocument doc = QJsonDocument::fromJson(value.toUtf8(), &err);
+            args[paramName] = (err.error == QJsonParseError::NoError) ? doc.object() : QJsonValue(value);
+
+            pPos = paramClose + 12;
+        }
+
+        QJsonObject toolCall;
+        toolCall["id"] = QString("call_%1").arg(callId++);
+        toolCall["type"] = "function";
+        QJsonObject fn;
+        fn["name"] = funcName;
+        fn["arguments"] = QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact));
+        toolCall["function"] = fn;
+        toolCalls.append(toolCall);
+
+        pos = funcClose + 11;
+    }
+
+    if (!toolCalls.isEmpty()) {
+        message["tool_calls"] = toolCalls;
+        choice["finish_reason"] = "tool_calls";
+    }
+
+    return raw;
 }
