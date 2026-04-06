@@ -5,6 +5,13 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 
+static const char *NOTE_NAMES[12] = {
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+};
+static const bool NOTE_IS_ACC[12] = {
+    false, true, false, true, false, false, true, false, true, false, true, false
+};
+
 // Returns an HTML description for the given scale ID.
 static QString getScaleDescription(int scaleId)
 {
@@ -32,7 +39,7 @@ static QString getScaleDescription(int scaleId)
                "compromise tuning allowing all keys to sound equally acceptable.<br><br>"
                "<b>Diatonic notes</b> (white): C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B<br>"
                "<b>Accidentals</b> (black2): C&#9839; &middot; D&#9839; &middot; F&#9839; &middot; G&#9839; &middot; A&#9839;<br>"
-               "Use the <b>Key</b> buttons above to set concert pitch (A\u202f=\u202f440\u202fHz).";
+               "Use the <b>Key</b> buttons above to set the tonic. If you want concert pitch (A\u202f=\u202f440\u202fHz). put the base frequency at 32.7Hz";
 
     case 3:
         return "<b>Quarter-Comma Meantone</b> &mdash; 7 notes &mdash; Western<br><br>"
@@ -285,6 +292,7 @@ static QString getScaleDescription(int scaleId)
 ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool isAtTimeZero, QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::ScaleDialog)
+    , currentScaleId(currentScale.getScaleId())
 {
     ui->setupUi(this);
 
@@ -303,23 +311,17 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     // Set current base frequency
     ui->spinBaseFreq->setValue(currentBaseFreq);
 
+    // Get the current tonic index from the scale
+    selectedTonicIndex = currentScale.getTonicIndex();
+    if (selectedTonicIndex < 0) selectedTonicIndex = 0;  // Default to C for ET
+
     // Configure delete button
     ui->btnDelete->setEnabled(!isAtTimeZero);
     connect(ui->btnDelete, &QPushButton::clicked, this, &ScaleDialog::onDeleteClicked);
 
-    // --- Key selector (concert pitch A = 440 Hz) ---
-    // Base frequencies for C1..B1 in standard ET tuning (A1=55 Hz → A4=440 Hz)
-    static const char *NOTE_NAMES[12] = {
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
-    };
-    static const bool NOTE_IS_ACC[12] = {
-        false, true, false, true, false, false, true, false, true, false, true, false
-    };
-    // C1 = 32.703 Hz (A4 = 440 Hz standard tuning)
-    static const double KEY_FREQS[12] = {
-        32.703, 34.648, 36.708, 38.891, 41.203, 43.654,
-        46.249, 48.999, 51.913, 55.000, 58.270, 61.735
-    };
+    // --- Key selector (for ET: changes tonic, NOT base frequency) ---
+    // When ET is selected, key buttons rotate the scale (change which note is tonic)
+    // Base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
 
     QGroupBox *keyGroup = new QGroupBox("Key  (A\u202f=\u202f440\u202fHz)", this);
     QHBoxLayout *keyLayout = new QHBoxLayout(keyGroup);
@@ -328,17 +330,20 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     for (int i = 0; i < 12; ++i) {
         QPushButton *btn = new QPushButton(NOTE_NAMES[i], keyGroup);
         btn->setFixedWidth(38);
-        btn->setToolTip(QString("%1 = %2 Hz").arg(NOTE_NAMES[i]).arg(KEY_FREQS[i], 0, 'f', 3));
+        btn->setToolTip(QString("Set %1 as tonic (color change only)").arg(NOTE_NAMES[i]));
         if (NOTE_IS_ACC[i])
             btn->setStyleSheet("background-color:#555;color:white;font-size:9px;");
         else
             btn->setStyleSheet("font-size:9px;");
-        double freq = KEY_FREQS[i];
-        connect(btn, &QPushButton::clicked, this, [this, freq]() {
-            ui->spinBaseFreq->setValue(freq);
+        // For ET: key buttons change the tonic index, NOT base frequency
+        connect(btn, &QPushButton::clicked, this, [this, i]() {
+            onKeyButtonClicked(i);
         });
         keyLayout->addWidget(btn);
+        keyButtons.append(btn);
     }
+
+    updateKeyButtonStyles();
 
     // Insert between the scale group box and the description label
     QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(layout());
@@ -376,5 +381,50 @@ void ScaleDialog::onScaleChanged(int index)
 {
     if (index < 0) return;
     int scaleId = ui->comboScale->itemData(index).toInt();
+    currentScaleId = scaleId;
+
+    // Reset tonic index when scale changes (only for non-ET scales)
+    if (scaleId != 2) {
+        selectedTonicIndex = 0;  // Default to C
+    }
+    updateKeyButtonStyles();
+
+    // For Equal Temperament, base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
+
+    // Update description
     ui->textScaleInfo->setHtml(getScaleDescription(scaleId));
+}
+
+void ScaleDialog::onKeyButtonClicked(int tonicIndex)
+{
+    selectedTonicIndex = tonicIndex;
+    updateKeyButtonStyles();
+
+    // If ET is selected, update the scale to use this tonic
+    int scaleId = ui->comboScale->currentData().toInt();
+    if (scaleId == 2) {  // Equal Temperament
+        Scale rotatedScale = Scale::equalTemperamentWithTonic(tonicIndex);
+        // Update the dropdown to reflect the rotated scale
+        // For ET, we keep scaleId=2 but use tonicIndex to determine coloring
+    }
+
+    // Base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
+}
+
+void ScaleDialog::updateKeyButtonStyles()
+{
+    for (int i = 0; i < keyButtons.size(); ++i) {
+        QPushButton* btn = keyButtons[i];
+        bool isAccidental = NOTE_IS_ACC[i];
+        if (i == selectedTonicIndex) {
+            // Selected tonic: green background
+            btn->setStyleSheet("background-color:#4CAF50;color:white;font-size:9px;");
+        } else if (isAccidental) {
+            // Accidental (dark)
+            btn->setStyleSheet("background-color:#555;color:white;font-size:9px;");
+        } else {
+            // Natural (default)
+            btn->setStyleSheet("font-size:9px;");
+        }
+    }
 }

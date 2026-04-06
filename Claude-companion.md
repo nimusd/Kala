@@ -782,6 +782,13 @@ Selects notes by pitch range and/or track. At least one filter should be provide
 Calls `sc->selectNotes()` — notes are visually highlighted on the canvas.
 Returns `{ matchedCount, noteIds[], message }` so IDs can be piped into other tools.
 
+#### `select_flat_dynamics_notes`
+Parameters: `trackIndex` (optional).
+
+Selects notes with flat/constant dynamics curves (from mouse input). Mouse input creates dynamics curves with constant value throughout the note, while pen pressure creates varying curves. Returns `{ matchedCount, noteIds[], message }`.
+
+Detection: a dynamics curve is considered flat if all its points have the same value (within 0.0001 tolerance). Empty or single-point curves are also considered flat.
+
 #### `shift_notes`
 Parameters: `offsetMs` (required), `pitchHz` (optional), `pitchToleranceCents` (optional, default 50), `noteIds` (optional).
 

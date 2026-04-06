@@ -6141,6 +6141,13 @@ void KalaMain::onScaleEditClicked()
         } else {
             Scale newScale = dialog.getSelectedScale();
             double newBaseFreq = dialog.getBaseFrequency();
+            int tonicIndex = dialog.getTonicIndex();
+
+            // For ET: if user selected a different key (tonic), rotate the scale
+            // (base frequency stays as selected by the user)
+            if (newScale.getScaleId() == 2 && tonicIndex > 0) {
+                newScale = Scale::equalTemperamentWithTonic(tonicIndex);
+            }
 
             if (isEditingDefault) {
                 // At time 0, update the default scale via undo command
@@ -6195,6 +6202,13 @@ void KalaMain::onScaleAddClicked()
     if (dialog.exec() == QDialog::Accepted) {
         Scale newScale = dialog.getSelectedScale();
         double newBaseFreq = dialog.getBaseFrequency();
+        int tonicIndex = dialog.getTonicIndex();
+
+        // For ET: if user selected a different key (tonic), rotate the scale
+        // (base frequency stays as selected by the user)
+        if (newScale.getScaleId() == 2 && tonicIndex > 0) {
+            newScale = Scale::equalTemperamentWithTonic(tonicIndex);
+        }
 
         // Create the new modulation at the timeline position via undo command
         scoreCanvas->getUndoStack()->push(

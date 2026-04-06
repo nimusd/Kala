@@ -4,7 +4,7 @@
 
 // Default constructor
 Scale::Scale(const QString &name, int scaleId)
-    : name(name), scaleId(scaleId)
+    : name(name), scaleId(scaleId), tonicIndex(-1)
 {
     // Default to Just Intonation
     ratios = {1.0, 9.0/8.0, 5.0/4.0, 4.0/3.0, 3.0/2.0, 5.0/3.0, 15.0/8.0};
@@ -13,8 +13,8 @@ Scale::Scale(const QString &name, int scaleId)
 
 // Private constructor with custom ratios and names
 Scale::Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames,
-             const QVector<bool> &accidentals)
-    : name(name), scaleId(scaleId), ratios(ratios), noteNames(noteNames), accidentals(accidentals)
+             const QVector<bool> &accidentals, int tonicIdx)
+    : name(name), scaleId(scaleId), ratios(ratios), noteNames(noteNames), accidentals(accidentals), tonicIndex(tonicIdx)
 {
 }
 
@@ -96,7 +96,36 @@ Scale Scale::equalTemperament()
     };
     QVector<QString> names = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     QVector<bool> acc      = { false, true, false, true, false, false, true, false, true, false, true, false };
-    return Scale("Equal Temperament", 2, ratios, names, acc);
+    return Scale("Equal Temperament", 2, ratios, names, acc, 0);  // tonicIndex=0 means C is default tonic
+}
+
+Scale Scale::equalTemperamentWithTonic(int tonicIndex)
+{
+    if (tonicIndex < 0 || tonicIndex > 11) {
+        tonicIndex = 0;  // Default to C
+    }
+
+    // Full 12-tone equal temperament - keep original ratios (C=1/1, C#=2^(1/12), etc.)
+    // The tonicIndex only affects which degree gets the "tonic" color
+    // Frequencies stay the same regardless of tonic - only colors change
+    QVector<double> ratios = {
+        1.0,
+        std::pow(2.0, 1.0/12),
+        std::pow(2.0, 2.0/12),
+        std::pow(2.0, 3.0/12),
+        std::pow(2.0, 4.0/12),
+        std::pow(2.0, 5.0/12),
+        std::pow(2.0, 6.0/12),
+        std::pow(2.0, 7.0/12),
+        std::pow(2.0, 8.0/12),
+        std::pow(2.0, 9.0/12),
+        std::pow(2.0, 10.0/12),
+        std::pow(2.0, 11.0/12)
+    };
+    QVector<QString> names = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    QVector<bool> acc = { false, true, false, true, false, false, true, false, true, false, true, false };
+
+    return Scale("Equal Temperament", 2, ratios, names, acc, tonicIndex);
 }
 
 Scale Scale::quarterCommaMeantone()
@@ -1104,11 +1133,25 @@ QJsonObject Scale::toJson() const
     QJsonObject json;
     json["scaleId"] = scaleId;
     json["name"] = name;  // For human readability in the file
+    json["tonicIndex"] = tonicIndex;
     return json;
 }
 
 Scale Scale::fromJson(const QJsonObject &json)
 {
     int id = json["scaleId"].toInt(0);
+    // Check if tonicIndex is stored (for ET scales with rotated tonic)
+    if (json.contains("tonicIndex")) {
+        int tonicIdx = json["tonicIndex"].toInt(-1);
+        // Only apply tonic rotation for Equal Temperament (scaleId == 2)
+        if (id == 2) {
+            if (tonicIdx >= 0 && tonicIdx <= 11) {
+                return equalTemperamentWithTonic(tonicIdx);
+            }
+            // tonicIdx == -1 means default C (tonicIndex = 0)
+            // fall through to getScaleById which returns ET with tonicIndex=0
+        }
+        // For non-ET scales, tonicIdx is ignored (scale's tonicIndex remains -1)
+    }
     return getScaleById(id);
 }

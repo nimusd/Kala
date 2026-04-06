@@ -275,15 +275,70 @@ void ScoreCanvas::generateScaleLines()
                 line.frequencyHz = freq;
                 line.scaleDegree = degree + 1;  // 1-based
                 line.isAccidental = activeScale.getIsAccidental(degree);
-                // Color by diatonic rank so C=Red, D=Orange... regardless of chromatic position
-                int diatonicRank = 0;
-                for (int d = 0; d < degree; ++d)
-                    if (!activeScale.getIsAccidental(d)) diatonicRank++;
-                line.color = line.isAccidental ? QColor(210, 210, 210) : getScaleDegreeColor(diatonicRank + 1);
+
+                // Special handling for whole tone scale: all lines dark grey, no thick lines
+                if (activeScale.getScaleId() == 20) { // Whole Tone
+                    line.color = QColor(210, 210, 210);
+                    line.isThicker = false;
+                    line.noteName = activeScale.getNoteName(degree) + QString::number(octave);
+                    scaleLines.append(line);
+                    continue;
+                }
+
+                // For Equal Temperament with custom tonic, shift the color assignment
+                // The tonicIndex tells us which note in the 12-note scale should be colored as tonic (red)
+                int tonicIndex = activeScale.getTonicIndex();
+                bool isET = (activeScale.getScaleId() == 2);
+
+                if (isET && tonicIndex > 0) {
+                    // ET with non-C tonic: determine if this degree is diatonic in the major scale
+                    // Major scale pattern: whole, whole, half, whole, whole, whole, half (2,2,1,2,2,2,1 semitones)
+                    // Diatonic degrees relative to tonic: 0,2,4,5,7,9,11
+                    int rel = (degree - tonicIndex + 12) % 12;
+                    bool isDiatonic = false;
+                    int diatonicRank = 0; // 1-7
+                    switch (rel) {
+                        case 0: isDiatonic = true; diatonicRank = 1; break; // tonic
+                        case 2: isDiatonic = true; diatonicRank = 2; break; // second
+                        case 4: isDiatonic = true; diatonicRank = 3; break; // third
+                        case 5: isDiatonic = true; diatonicRank = 4; break; // fourth
+                        case 7: isDiatonic = true; diatonicRank = 5; break; // fifth
+                        case 9: isDiatonic = true; diatonicRank = 6; break; // sixth
+                        case 11: isDiatonic = true; diatonicRank = 7; break; // seventh
+                        default: isDiatonic = false; break;
+                    }
+
+                    if (isDiatonic) {
+                        line.color = getScaleDegreeColor(diatonicRank);
+                    } else {
+                        line.color = QColor(210, 210, 210); // gray for non-diatonic
+                    }
+
+                    // Tonic and fifth thick lines
+                    bool isTonic = (degree == tonicIndex);
+                    bool isFifth = (degree == (tonicIndex + 7) % 12);
+                    line.isThicker = (isTonic || isFifth);
+                } else {
+                    // Normal coloring (C tonic or non-ET)
+                    int diatonicRank = 0;
+                    for (int d = 0; d < degree; ++d)
+                        if (!activeScale.getIsAccidental(d)) diatonicRank++;
+                    line.color = line.isAccidental ? QColor(210, 210, 210) : getScaleDegreeColor(diatonicRank + 1);
+
+                    // Tonic always thick
+                    bool isTonic = (degree == 0);
+                    bool isFifth = false;
+                    if (isET) {
+                        // ET with C tonic: fifth is degree 7 (G)
+                        isFifth = (degree == 7);
+                    } else {
+                        // For 7-note scales, fifth is degree 4 (if scale has at least 5 degrees)
+                        isFifth = (degreeCount >= 5 && degree == 4);
+                    }
+                    line.isThicker = (isTonic || isFifth);
+                }
+
                 line.noteName = activeScale.getNoteName(degree) + QString::number(octave);
-                // Tonic always thick; Fifth = degree 4 in 7-note scales, degree 7 in 12-note (semitone 7 = G)
-                bool isFifth = (degreeCount == 12) ? (degree == 7) : (degreeCount >= 5 && degree == 4);
-                line.isThicker = (degree == 0 || isFifth);
 
                 scaleLines.append(line);
             }
@@ -445,15 +500,69 @@ QVector<ScoreCanvas::ScaleLine> ScoreCanvas::generateScaleLinesForScale(const Sc
                 line.frequencyHz = freq;
                 line.scaleDegree = degree + 1;  // 1-based
                 line.isAccidental = scale.getIsAccidental(degree);
-                // Color by diatonic rank so C=Red, D=Orange... regardless of chromatic position
-                int diatonicRank = 0;
-                for (int d = 0; d < degree; ++d)
-                    if (!scale.getIsAccidental(d)) diatonicRank++;
-                line.color = line.isAccidental ? QColor(210, 210, 210) : getScaleDegreeColor(diatonicRank + 1);
+
+                // Special handling for whole tone scale: all lines dark grey, no thick lines
+                if (scale.getScaleId() == 20) { // Whole Tone
+                    line.color = QColor(210, 210, 210);
+                    line.isThicker = false;
+                    line.noteName = scale.getNoteName(degree) + QString::number(octave);
+                    lines.append(line);
+                    continue;
+                }
+
+                // For Equal Temperament with custom tonic, shift the color assignment
+                int tonicIndex = scale.getTonicIndex();
+                bool isET = (scale.getScaleId() == 2);
+
+                if (isET && tonicIndex > 0) {
+                    // ET with non-C tonic: determine if this degree is diatonic in the major scale
+                    // Major scale pattern: whole, whole, half, whole, whole, whole, half (2,2,1,2,2,2,1 semitones)
+                    // Diatonic degrees relative to tonic: 0,2,4,5,7,9,11
+                    int rel = (degree - tonicIndex + 12) % 12;
+                    bool isDiatonic = false;
+                    int diatonicRank = 0; // 1-7
+                    switch (rel) {
+                        case 0: isDiatonic = true; diatonicRank = 1; break; // tonic
+                        case 2: isDiatonic = true; diatonicRank = 2; break; // second
+                        case 4: isDiatonic = true; diatonicRank = 3; break; // third
+                        case 5: isDiatonic = true; diatonicRank = 4; break; // fourth
+                        case 7: isDiatonic = true; diatonicRank = 5; break; // fifth
+                        case 9: isDiatonic = true; diatonicRank = 6; break; // sixth
+                        case 11: isDiatonic = true; diatonicRank = 7; break; // seventh
+                        default: isDiatonic = false; break;
+                    }
+
+                    if (isDiatonic) {
+                        line.color = getScaleDegreeColor(diatonicRank);
+                    } else {
+                        line.color = QColor(210, 210, 210); // gray for non-diatonic
+                    }
+
+                    // Tonic and fifth thick lines
+                    bool isTonic = (degree == tonicIndex);
+                    bool isFifth = (degree == (tonicIndex + 7) % 12);
+                    line.isThicker = (isTonic || isFifth);
+                } else {
+                    // Normal coloring (C tonic or non-ET)
+                    int diatonicRank = 0;
+                    for (int d = 0; d < degree; ++d)
+                        if (!scale.getIsAccidental(d)) diatonicRank++;
+                    line.color = line.isAccidental ? QColor(210, 210, 210) : getScaleDegreeColor(diatonicRank + 1);
+
+                    // Tonic always thick
+                    bool isTonic = (degree == 0);
+                    bool isFifth = false;
+                    if (isET) {
+                        // ET with C tonic: fifth is degree 7 (G)
+                        isFifth = (degree == 7);
+                    } else {
+                        // For 7-note scales, fifth is degree 4 (if scale has at least 5 degrees)
+                        isFifth = (degreeCount >= 5 && degree == 4);
+                    }
+                    line.isThicker = (isTonic || isFifth);
+                }
+
                 line.noteName = scale.getNoteName(degree) + QString::number(octave);
-                // Tonic always thick; Fifth = degree 4 in 7-note scales, degree 7 in 12-note (semitone 7 = G)
-                bool isFifth = (degreeCount == 12) ? (degree == 7) : (degreeCount >= 5 && degree == 4);
-                line.isThicker = (degree == 0 || isFifth);
 
                 lines.append(line);
             }

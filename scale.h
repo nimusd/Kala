@@ -18,6 +18,7 @@ public:
     int getDegreeCount() const { return ratios.size(); }
     QString getNoteName(int degree) const;  // Get note name for this degree
     bool getIsAccidental(int degree) const; // True for chromatic degrees not in the diatonic core
+    int getTonicIndex() const { return tonicIndex; }  // For ET: which degree is tonic (0-11, -1 = C)
 
     // Static factory methods for predefined scales
     static Scale justIntonation();
@@ -97,6 +98,9 @@ public:
     // Get scale by ID
     static Scale getScaleById(int id);
 
+    // Create an ET scale rotated to a different tonic (base frequency stays A=440Hz, only colors change)
+    static Scale equalTemperamentWithTonic(int tonicIndex);  // 0=C, 1=C#, ..., 9=A, 10=A#, 11=B
+
     // Serialization
     QJsonObject toJson() const;
     static Scale fromJson(const QJsonObject &json);
@@ -107,10 +111,11 @@ private:
     QVector<double> ratios;      // Ratios for scale degrees (variable count)
     QVector<QString> noteNames;  // Note names for each degree
     QVector<bool> accidentals;   // True for degrees that are chromatic/accidental (drawn dark grey)
+    int tonicIndex;             // For ET: which degree is the tonic (0-11, -1 = C)
 
     // Private constructor for setting custom ratios and names
     Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames,
-          const QVector<bool> &accidentals = {});
+          const QVector<bool> &accidentals = {}, int tonicIdx = -1);
 };
 
 #endif // SCALE_H

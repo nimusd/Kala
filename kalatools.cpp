@@ -168,6 +168,7 @@ QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &
     if (toolName == "apply_beat_dynamics")        return toolApplyBeatDynamics(args);
     if (toolName == "set_note_dynamics")          return toolSetNoteDynamics(args);
     if (toolName == "select_notes")              return toolSelectNotes(args);
+    if (toolName == "select_flat_dynamics_notes") return toolSelectFlatDynamicsNotes(args);
     if (toolName == "get_selected_notes")        return toolGetSelectedNotes();
     if (toolName == "apply_dynamics_curve")  return toolApplyDynamicsCurve(args);
     if (toolName == "scale_dynamics")        return toolScaleDynamics(args);
@@ -1815,6 +1816,51 @@ QJsonObject KalaTools::toolSelectNotes(const QJsonObject &args)
     result["matchedCount"] = indices.size();
     result["noteIds"]      = ids.isEmpty() ? QJsonArray() : ids;
     result["message"]      = QString("%1 note(s) selected.").arg(indices.size());
+    return QJsonObject{ {"result", result} };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool: select_flat_dynamics_notes
+// ─────────────────────────────────────────────────────────────────────────────
+
+QJsonObject KalaTools::toolSelectFlatDynamicsNotes(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    const QVector<Note> &notes = sc->getPhrase().getNotes();
+
+    const bool hasTrk = args.contains("trackIndex");
+    const int trackIdx = hasTrk ? args["trackIndex"].toInt() : -1;
+
+    auto isFlatCurve = [](const Curve& curve) -> bool {
+        const auto& points = curve.getPoints();
+        if (points.size() <= 1) return true; // empty or single point is flat
+        const double firstValue = points[0].value;
+        for (const auto& p : points) {
+            if (std::abs(p.value - firstValue) > 0.0001) return false;
+        }
+        return true;
+    };
+
+    QVector<int> indices;
+    QJsonArray ids;
+
+    for (int i = 0; i < notes.size(); ++i) {
+        const Note &n = notes[i];
+        if (hasTrk && n.getTrackIndex() != trackIdx) continue;
+        if (!isFlatCurve(n.getDynamicsCurve())) continue;
+        indices.append(i);
+        ids.append(n.getId());
+    }
+
+    sc->selectNotes(indices);
+    sc->update();
+
+    QJsonObject result;
+    result["matchedCount"] = indices.size();
+    result["noteIds"]      = ids.isEmpty() ? QJsonArray() : ids;
+    result["message"]      = QString("Selected %1 note(s) with flat dynamics curves.").arg(indices.size());
     return QJsonObject{ {"result", result} };
 }
 
@@ -3833,6 +3879,7 @@ static QJsonArray compositionSchemas()
             }}
         }}
     });
+    schemas.append(QJsonObject{{"type","function"},{"function",QJsonObject{{"name","select_flat_dynamics_notes"},{"description","Selects notes with flat/constant dynamics curves (from mouse input). Returns ids. Optional trackIndex filter."},{"parameters",QJsonObject{{"type","object"},{"properties",QJsonObject{{"trackIndex",QJsonObject{{"type","integer"},{"description","Track filter"}}}}},{"required",QJsonArray{}}}}}}});
     return schemas;
 }
 

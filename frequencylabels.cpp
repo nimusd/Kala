@@ -115,7 +115,7 @@ void FrequencyLabels::paintEvent(QPaintEvent *event)
 
     for (const ScaleLine &line : scaleLines) {
         // Skip Hz labels for accidental degrees (sharps/flats) — too many to be readable
-        if (line.isAccidental) continue;
+        // if (line.isAccidental) continue;
 
         int y = frequencyToPixel(line.frequencyHz);
 

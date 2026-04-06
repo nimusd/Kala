@@ -109,6 +109,7 @@ private:
     QJsonObject toolApplyBeatDynamics  (const QJsonObject &args);
     QJsonObject toolSetNoteDynamics    (const QJsonObject &args);
     QJsonObject toolSelectNotes        (const QJsonObject &args);
+    QJsonObject toolSelectFlatDynamicsNotes(const QJsonObject &args);
     QJsonObject toolGetSelectedNotes   ();
 
     // ── Note editing ─────────────────────────────────────────────────────────

@@ -22,16 +22,25 @@ public:
     // Get the selected base frequency
     double getBaseFrequency() const;
 
+    // Get the selected tonic index for ET (0-11, -1 if not ET or C)
+    int getTonicIndex() const { return selectedTonicIndex; }
+
     // Check if delete was requested
     bool isDeleteRequested() const { return deleteRequested; }
 
 private slots:
     void onDeleteClicked();
     void onScaleChanged(int index);
+    void onKeyButtonClicked(int tonicIndex);
 
 private:
     Ui::ScaleDialog *ui;
     bool deleteRequested = false;
+    int selectedTonicIndex = -1;  // -1 = default (C for non-ET, or use scale's default)
+    int currentScaleId = -1;
+    QVector<QPushButton*> keyButtons;
+
+    void updateKeyButtonStyles();
 };
 
 #endif // SCALEDIALOG_H
