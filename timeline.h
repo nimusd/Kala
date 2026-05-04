@@ -77,6 +77,7 @@ private:
     int mouseCursorX;         // Mouse cursor X position
 
     // Helper methods
+    void calcBarBeatDurations(double &barMs, double &beatMs) const;
     QString formatTime(double timeMs) const;
     double pixelToTime(int x) const;
     int timeToPixel(double timeMs) const;

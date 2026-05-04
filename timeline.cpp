@@ -112,6 +112,19 @@ void Timeline::setTempoChanges(const QMap<double, QString> &changes)
     update();
 }
 
+void Timeline::calcBarBeatDurations(double &barMs, double &beatMs) const
+{
+    // Matches ScoreCanvas/CompositionSettings bar-duration formula so labels
+    // align with the canvas bar lines and playback.
+    if (timeSigDenominator == 0) {
+        beatMs = 60000.0 / tempo;
+        barMs = beatMs * timeSigNumerator;
+    } else {
+        barMs = (60000.0 / tempo) * (static_cast<double>(timeSigNumerator) / timeSigDenominator);
+        beatMs = (timeSigNumerator > 0) ? (barMs / timeSigNumerator) : barMs;
+    }
+}
+
 QString Timeline::formatTime(double timeMs) const
 {
     if (timeMode == Absolute) {
@@ -128,16 +141,13 @@ QString Timeline::formatTime(double timeMs) const
             .arg(ms, 3, 10, QChar('0'));
     } else {
         // Format: Bars:Beats:Ms (e.g., "4:2:240")
-        double beatsPerMs = tempo / 60000.0;  // BPM to beats per millisecond
-        double totalBeats = timeMs * beatsPerMs;
+        double barMs, beatMs;
+        calcBarBeatDurations(barMs, beatMs);
 
-        int beatsPerBar = timeSigNumerator;
-        int bar = static_cast<int>(totalBeats / beatsPerBar) + 1;  // 1-indexed
-        int beat = static_cast<int>(std::fmod(totalBeats, beatsPerBar)) + 1;  // 1-indexed
-
-        // Calculate milliseconds within current beat
-        double beatFraction = std::fmod(totalBeats, 1.0);
-        int ms = static_cast<int>(beatFraction * (60000.0 / tempo));
+        int bar = static_cast<int>(timeMs / barMs) + 1;  // 1-indexed
+        double msInBar = std::fmod(timeMs, barMs);
+        int beat = static_cast<int>(msInBar / beatMs) + 1;  // 1-indexed
+        int ms = static_cast<int>(std::fmod(msInBar, beatMs));
 
         return QString("%1:%2:%3")
             .arg(bar)
@@ -240,10 +250,10 @@ void Timeline::drawTickMarks(QPainter &painter)
             intervalSeconds = 60.0;  // 1 minute
         }
     } else {
-        // For musical mode, use bar intervals
-        double secondsPerBeat = 60.0 / tempo;
-        double secondsPerBar = secondsPerBeat * timeSigNumerator;
-        intervalSeconds = secondsPerBar;
+        // For musical mode, use bar intervals matching ScoreCanvas formula
+        double barMs, beatMs;
+        calcBarBeatDurations(barMs, beatMs);
+        intervalSeconds = barMs / 1000.0;
     }
 
     // Draw ticks across visible area
@@ -257,8 +267,8 @@ void Timeline::drawTickMarks(QPainter &painter)
 
     // In musical mode, also draw beat subdivision markers
     if (timeMode == Musical) {
-        double secondsPerBeat = 60.0 / tempo;
-        double beatIntervalMs = secondsPerBeat * 1000.0;
+        double barMs, beatIntervalMs;
+        calcBarBeatDurations(barMs, beatIntervalMs);
         double firstBeatTime = std::floor(startTime / beatIntervalMs) * beatIntervalMs;
 
         // Draw beat markers (smaller ticks)

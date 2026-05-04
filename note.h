@@ -3,11 +3,13 @@
 
 #include "curve.h"
 #include "vibrato.h"
+#include "envelopelibraryDialog.h"
 #include <QString>
 #include <QUuid>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVector>
+#include <QMap>
 
 /**
  * Segment - A constant-pitch section within a quantized continuous note
@@ -120,6 +122,22 @@ public:
     void removeExpressiveCurve(int index);  // index >= 1 only
     void renameExpressiveCurve(int index, const QString &name);
 
+    // Upsert by name: replace the curve if a NamedCurve with this name exists, else append.
+    // Returns the index (>=1) of the resulting entry.
+    int upsertExpressiveCurve(const QString &name, const Curve &curve);
+    // Returns index (>=1) of the named curve, or -1 if not found.
+    int findExpressiveCurveIndexByName(const QString &name) const;
+    // Removes the named curve if present. Returns true if removed.
+    bool removeExpressiveCurveByName(const QString &name);
+
+    // Envelope control points — original editor shape for each curve.
+    // Key: "Dynamics" for the dynamics curve, curve name for expressive curves.
+    // Stored alongside the sampled Curve so the editor can reload exact control points.
+    void setEnvelopeControlPoints(const QString &curveName, const QVector<EnvelopePoint> &points);
+    QVector<EnvelopePoint> getEnvelopeControlPoints(const QString &curveName) const;
+    bool hasEnvelopeControlPoints(const QString &curveName) const;
+    void removeEnvelopeControlPoints(const QString &curveName);
+
     // Setters
     void setStartTime(double time) { startTime = time; }
     void setDuration(double dur) { duration = dur; }
@@ -174,6 +192,11 @@ private:
         Curve curve;
     };
     QVector<NamedCurve> m_additionalExpressiveCurves;
+
+    // Original envelope editor control points, keyed by curve name.
+    // Preserved so the curve editor can reload the exact shape the user drew,
+    // rather than the densely-sampled Curve used for audio rendering.
+    QMap<QString, QVector<EnvelopePoint>> m_envelopeControlPoints;
 };
 
 #endif // NOTE_H

@@ -91,11 +91,27 @@ public:
     void setActiveTrack(int trackIndex);
     int getActiveTrack() const { return activeTrackIndex; }
     void setTrackSelector(TrackSelector *selector) { trackSelector = selector; }
-    void setCurrentTrack(Track *track) { m_currentTrack = track; }
+    void setCurrentTrack(Track *track) {
+        if (track != m_currentTrack) {
+            m_currentTrack = track;
+            m_activeVariationIndex = 0;  // Reset to base on track switch
+        }
+    }
     Track* getCurrentTrack() const { return m_currentTrack; }
 
     // Variation assignment
     void applyVariationToSelection(int variationIndex);
+
+    // Active variation for newly-created notes (driven by VariationToolbar).
+    // Also acts as the display filter: notes whose variationIndex matches
+    // get a digit-bearing indicator circle.
+    void setActiveVariationForNewNotes(int index) {
+        if (m_activeVariationIndex != index) {
+            m_activeVariationIndex = index;
+            update();
+        }
+    }
+    int  getActiveVariationForNewNotes() const { return m_activeVariationIndex; }
 
     // Musical mode settings (for bar lines)
     void setMusicalMode(bool enabled, int tempo = 120, int timeSigTop = 4, int timeSigBottom = 4);
@@ -140,22 +156,39 @@ public:
     // Edit operations (called from menu)
     void performCut();
     void performCopy();
-    void performPaste();
+    void performPaste(bool atEndOfTrack = false);
     void performDelete();
     void performSelectAll();
     void performSelectToEnd();   // E: extend selection to last note on active track
+    void performRetrograde();    // R: copy selection in reverse temporal order at now marker
     void deselectAll();
 
     // Dynamics curve dialog
     void showDynamicsCurveDialog();
     void showScaleDynamicsDialog();
     void showExpressiveCurveApplyDialog();
+    void showEqCurveDialog();
+
+    // Double-click curve editing: opens the appropriate curve dialog
+    // pre-loaded with the note's current curve data
+    void editNoteCurve(int noteIndex);
+
+    // Intersection of expressive-curve names across every variation used by
+    // the currently-selected notes (0 = base sounit canvas). Returned in the
+    // order they appear on the first note's variation so the UI is stable.
+    // Empty selection → empty list.
+    QStringList selectionCommonExpressiveCurveNames() const;
+
+    // Returns the 10 actual curve names (in band order 1->10) if every
+    // variation under the selection exposes "band 1".."band 10" as expressive
+    // curves (case-insensitive, flexible whitespace). Returns an empty list
+    // if any band is missing — used to gate the "Apply EQ Curve..." menu.
+    QStringList selectionMatchingBandCurveNames() const;
 
     // Expressive curve management
     void setActiveExpressiveCurveIndex(int index, const QString &name = QString());
     int getActiveExpressiveCurveIndex() const { return m_activeExpressiveCurveIndex; }
     QString getActiveExpressiveCurveName() const { return m_activeExpressiveCurveName; }
-    void addExpressiveCurveToSelection(const QString &name, const QVector<EnvelopePoint> &curve, double weight, bool perNote);
     void removeExpressiveCurveFromSelection(int curveIndex);
     void removeExpressiveCurveByName(const QString &name);
     void applyNamedCurveToSelection(const QString &name, const Curve &curve);
@@ -178,9 +211,16 @@ public:
     void toggleSlideMode();
     bool isSlideMode() const { return slideMode; }
 
+    // Transform mode: swaps per-point selection-rect handles for perimeter handles
+    // that scale/rotate/time-stretch the pitch curve. Single-note only.
+    void toggleTransformMode();
+    void setTransformMode(bool active);
+    bool isTransformMode() const { return transformMode; }
+
 signals:
     void zoomChanged(double pixelsPerHz);
     void slideModeChanged(bool active);  // Emitted when slide mode is toggled
+    void transformModeChanged(bool active);  // Emitted when transform mode is toggled
     void frequencyRangeChanged(double minHz, double maxHz);
     void pressureChanged(double pressure, bool active);  // Emits pressure updates during drawing
     void cursorPositionChanged(double timeMs, double pitchHz);  // Emits cursor position for status bar
@@ -189,6 +229,7 @@ signals:
     void scaleSettingsChanged();  // Emitted when scale or modulations change
     void noteSelectionChanged();  // Emitted when note selection changes
     void tempoSettingsChanged();  // Emitted when tempo or time signature changes
+    void expressiveCurveApplied(const QString &curveName);  // After Apply Expressive Curve dialog; KalaMain refreshes the note-inspector dropdown
     void requestAutoScroll(int dx, int dy);  // Ask ScoreCanvasWindow to scroll during lasso
 
 protected:
@@ -208,8 +249,8 @@ private:
     QMap<double, QPair<Scale, double>> scaleChanges;  // Time (ms) -> (Scale, BaseFreq) for modulation
 
     // Tempo/time signature map
-    double defaultTempo = 120.0;        // Default tempo at time 0
-    int defaultTimeSigNum = 4;          // Default time signature numerator
+    double defaultTempo = 60.0;        // Default tempo at time 0
+    int defaultTimeSigNum = 5;          // Default time signature numerator
     int defaultTimeSigDenom = 4;        // Default time signature denominator
     QMap<double, TempoTimeSignature> tempoChanges;  // Time (ms) -> tempo/timesig for changes
 
@@ -223,6 +264,7 @@ private:
     int activeTrackIndex;   // Which track new notes will use (default 0)
     TrackSelector *trackSelector;  // Reference to track selector for querying track states
     Track *m_currentTrack = nullptr;  // Current track for variation access
+    int m_activeVariationIndex = 0;   // Variation stamped on newly-created notes
 
     // Frequency mapping (must match TrackSelector)
     double visibleMinHz;
@@ -287,11 +329,14 @@ private:
         ResizingLeft,          // Dragging left resize handle
         ResizingRight,         // Dragging right resize handle
         EditingTopCurve,       // Dragging top edge dot to edit dynamics curve
-        EditingBottomCurve,    // Dragging bottom edge dot to edit bottom curve
+        EditingPitchCurve,     // Dragging bottom edge dot to edit pitch curve
         EditingTopCurveStart,  // Dragging left-top dot to edit dynamics curve start
         EditingTopCurveEnd,    // Dragging right-top dot to edit dynamics curve end
-        EditingBottomCurveStart, // Dragging left-bottom dot to edit bottom curve start
-        EditingBottomCurveEnd    // Dragging right-bottom dot to edit bottom curve end
+        EditingPitchCurveStart, // Dragging left-bottom dot to edit pitch curve start
+        EditingPitchCurveEnd,   // Dragging right-bottom dot to edit pitch curve end
+        TransformStretchTop,    // Transform mode: top-mid handle, vertical pitch stretch
+        TransformStretchBottom, // Transform mode: bottom-mid handle, vertical pitch stretch
+        TransformRotate         // Transform mode: any corner handle, twist around rect center
     };
     DragMode currentDragMode;
     DragMode pendingDragMode;      // Drag mode waiting for threshold to be exceeded
@@ -304,9 +349,13 @@ private:
     int editingDotIndex;       // Which dot is being edited (-1 if none)
     double editingDotTimePos;  // Normalized time position of the dot being edited
     Curve dragStartCurve;      // Original curve state when drag started
+    QRect transformModeRect;   // Note rect captured when entering transform mode (stable frame)
+    QPointF transformRotateAnchor;  // Opposite corner of the corner being rotated around
     QVector<QPair<int, double>> multiDragStartTimes;  // Original times for multi-selection drag
     QVector<QPair<int, double>> multiDragStartPitches;  // Original pitches for multi-selection drag
     QVector<QPair<int, Curve>> multiDragStartCurves;  // Original curves for multi-selection drag
+    QVector<QPair<int, double>> multiResizeStartTimes;     // Original start times for multi-resize
+    QVector<QPair<int, double>> multiResizeStartDurations;  // Original durations for multi-resize
 
     // Segment editing mode state
     bool segmentEditingMode = false;
@@ -317,6 +366,8 @@ private:
 
     // Slide mode: time-only dragging (Y axis locked)
     bool slideMode = false;
+    // Transform mode: pitch-curve perimeter handles
+    bool transformMode = false;
     int segmentEditingNoteIndex = -1;   // Which note is being segment-edited
     int selectedSegmentIndex = -1;      // Which segment is selected (-1 = none)
 
@@ -325,6 +376,10 @@ private:
     static constexpr int NORMAL_LINE_WIDTH = 1;
     static constexpr int THICK_LINE_WIDTH = 2;
     static constexpr int PIXELS_PER_OCTAVE = 100;       // Fixed vertical size for each octave
+
+    // Full scrollable frequency range (hard limits for vertical zoom/scroll)
+    static constexpr double FULL_MIN_HZ = 20.0;
+    static constexpr double FULL_MAX_HZ = 8000.0;
 
     // Extended color system for scale degrees (supports up to 10 notes)
     static const QColor SCALE_COLORS[10];

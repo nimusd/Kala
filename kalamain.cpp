@@ -3,6 +3,9 @@
 #include "kalatools.h"
 #include "kalaagent.h"
 #include "companionpanel.h"
+#include "variationtoolbar.h"
+#include "trackmanager.h"
+#include "scorecanvas.h"
 #include <QDockWidget>
 #include <QSettings>
 #include "scorecanvaswindow.h"
@@ -54,6 +57,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QInputDialog>
+#include <QMenu>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -312,18 +316,12 @@ KalaMain::KalaMain(QWidget *parent)
     // Expressive curves controls
     connect(ui->comboExpressiveCurve, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &KalaMain::onExpressiveCurveChanged);
-    connect(ui->btnExpressiveCurveAdd, &QPushButton::clicked,
-            this, &KalaMain::onExpressiveCurveAdd);
     connect(ui->btnExpressiveCurveDelete, &QPushButton::clicked,
             this, &KalaMain::onExpressiveCurveDelete);
-    connect(ui->btnExpressiveCurveApply, &QPushButton::clicked,
-            this, &KalaMain::onExpressiveCurveApply);
 
     // Initial state for expressive curves
     ui->comboExpressiveCurve->setEnabled(false);
-    ui->btnExpressiveCurveAdd->setEnabled(false);
     ui->btnExpressiveCurveDelete->setEnabled(false);
-    ui->btnExpressiveCurveApply->setEnabled(false);
 
     // Configure note inspector spinboxes
     ui->spinNoteStart->setRange(0.0, 3600000.0);  // 0 to 1 hour in ms
@@ -395,6 +393,14 @@ KalaMain::KalaMain(QWidget *parent)
     });
     connect(scoreCanvasWindow->getScoreCanvas(), &ScoreCanvas::undoRedoPerformed,
             this, &KalaMain::updateNoteInspector);
+
+    // After the right-click Apply Expressive Curve dialog runs, refresh the note-inspector
+    // dropdown so the newly-applied curve appears and stays selected. Without this, the
+    // user has to deselect/reselect before the inspector picks up the change.
+    connect(scoreCanvasWindow->getScoreCanvas(), &ScoreCanvas::expressiveCurveApplied,
+            this, [this](const QString &) {
+        updateNoteInspector();
+    });
 
     connect(ui->actionCut_Ctrl_X, &QAction::triggered, this, [this]() {
         if (ui->MainTab->currentIndex() == 1) {
@@ -575,6 +581,35 @@ KalaMain::KalaMain(QWidget *parent)
     ui->actionDocumentation_F1->setShortcut(QKeySequence(Qt::Key_F1));
     ui->actionDocumentation_F1->setShortcutContext(Qt::ApplicationShortcut);
 
+    // ── AI Companion ─────────────────────────────────────────────────────────
+    // Load persisted LLM config (falls back to Ollama defaults if never saved).
+    // Must happen before populateSettingsTab() so the Anima section's URL/key/
+    // model fields show the saved values rather than the LLMConfig struct defaults.
+    {
+        QSettings s;
+        int providerInt = s.value("llm/provider", 0).toInt();
+        if (providerInt == (int)LLMProvider::Anthropic)
+            m_llmConfig.provider = LLMProvider::Anthropic;
+        else if (providerInt == (int)LLMProvider::Ollama)
+            m_llmConfig.provider = LLMProvider::Ollama;
+        else
+            m_llmConfig.provider = LLMProvider::OpenAICompatible;
+        m_llmConfig.baseUrl   = s.value("llm/baseUrl",  "http://localhost:11434/v1").toString();
+        m_llmConfig.apiKey    = s.value("llm/apiKey",   "ollama").toString();
+        m_llmConfig.model     = s.value("llm/model",    "qwen3-coder:30b").toString();
+        m_llmConfig.maxTokens = s.value("llm/maxTokens", 4096).toInt();
+
+        // Auto-promote legacy OpenAICompatible config to Ollama when the URL
+        // points at a local Ollama server. Users with existing settings get
+        // think:false automatically on next launch.
+        if (m_llmConfig.provider == LLMProvider::OpenAICompatible
+            && (m_llmConfig.baseUrl.contains("localhost")
+                || m_llmConfig.baseUrl.contains("127.0.0.1"))
+            && m_llmConfig.baseUrl.contains("11434")) {
+            m_llmConfig.provider = LLMProvider::Ollama;
+        }
+    }
+
     // Initialize settings tab
     populateSettingsTab();
 
@@ -588,19 +623,6 @@ KalaMain::KalaMain(QWidget *parent)
 
     // Install event filter to catch Tab key from all widgets
     qApp->installEventFilter(this);
-
-    // ── AI Companion ─────────────────────────────────────────────────────────
-    // Load persisted LLM config (falls back to Ollama defaults if never saved)
-    {
-        QSettings s;
-        int providerInt = s.value("llm/provider", 0).toInt();
-        m_llmConfig.provider  = (providerInt == 1) ? LLMProvider::Anthropic
-                                                    : LLMProvider::OpenAICompatible;
-        m_llmConfig.baseUrl   = s.value("llm/baseUrl",  "http://localhost:11434/v1").toString();
-        m_llmConfig.apiKey    = s.value("llm/apiKey",   "ollama").toString();
-        m_llmConfig.model     = s.value("llm/model",    "qwen3-coder:30b").toString();
-        m_llmConfig.maxTokens = s.value("llm/maxTokens", 4096).toInt();
-    }
 
     m_kalaTools    = new KalaTools(sounitBuilder, trackManager, scoreCanvasWindow, this);
     m_kalaTools->setMainWindow(this);
@@ -631,6 +653,8 @@ KalaMain::KalaMain(QWidget *parent)
             m_companionPanel,  &CompanionPanel::setMessageCount);
     connect(m_companionPanel, &CompanionPanel::toolModeToggleRequested,
             this,              &KalaMain::onToolModeToggle);
+    connect(m_companionPanel, &CompanionPanel::saveSessionRequested,
+            this,              [this](const QString &rating) { saveAnimaSession(rating); });
 
     // Auto-detect tool mode from which window is focused
     connect(qApp, &QApplication::focusWindowChanged, this, [this](QWindow *w) {
@@ -643,6 +667,109 @@ KalaMain::KalaMain(QWidget *parent)
 
     // Initialise companion tool mode label
     setCompanionToolMode(ToolMode::Sounit);
+
+    // ── Variation Toolbar (floating) ──────────────────────────────────────────
+    m_variationToolbar = new VariationToolbar(scoreCanvasWindow);
+    m_variationToolbar->hide();
+
+    m_actionVariationToolbar = new QAction(tr("Variation Toolbar"), this);
+    m_actionVariationToolbar->setShortcut(QKeySequence(Qt::Key_V));
+    m_actionVariationToolbar->setShortcutContext(Qt::ApplicationShortcut);
+    m_actionVariationToolbar->setCheckable(true);
+    ui->menuView->addAction(m_actionVariationToolbar);
+    connect(m_actionVariationToolbar, &QAction::triggered, this, [this](bool checked) {
+        if (!m_variationToolbar) return;
+        m_variationToolbar->setVisible(checked);
+        if (checked) {
+            m_variationToolbar->raise();
+            m_variationToolbar->activateWindow();
+        }
+    });
+    connect(m_variationToolbar, &VariationToolbar::visibilityChanged,
+            this, [this](bool visible) {
+        if (m_actionVariationToolbar)
+            m_actionVariationToolbar->setChecked(visible);
+    });
+
+    // Seed toolbar with the current track immediately, then track-change events.
+    if (trackManager) {
+        m_variationToolbar->setCurrentTrack(trackManager->getCurrentTrack());
+        connect(trackManager, &TrackManager::currentTrackChanged,
+                this, [this](Track *track, int) {
+            if (m_variationToolbar) m_variationToolbar->setCurrentTrack(track);
+        });
+    }
+
+    // Toolbar button click → score canvas dispatcher.
+    // The active index is always updated (it drives both the display filter
+    // and the variation stamped on new notes); any current selection is
+    // additionally reassigned.
+    connect(m_variationToolbar, &VariationToolbar::activeVariationChanged,
+            this, [this](int idx) {
+        if (!scoreCanvasWindow) return;
+        ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
+        if (!sc) return;
+        sc->setActiveVariationForNewNotes(idx);
+        const QVector<int> &sel = sc->getSelectedNoteIndices();
+        if (!sel.isEmpty())
+            sc->applyVariationToSelection(idx);
+    });
+
+    // Right-click on a variation button → small management menu.
+    // Base (idx 0) has no menu — variations are created through the existing
+    // track/variation menu workflow.
+    connect(m_variationToolbar, &VariationToolbar::variationButtonRightClicked,
+            this, [this](int idx, const QPoint &globalPos) {
+        if (idx == 0) return;
+        if (!trackManager) return;
+        Track *t = trackManager->getCurrentTrack();
+        if (!t) return;
+
+        QMenu menu;
+        QAction *aRename = menu.addAction(tr("Rename…"));
+        QAction *aDelete = menu.addAction(tr("Delete"));
+        QAction *aLoad   = menu.addAction(tr("Load to Sounit Builder"));
+        connect(aRename, &QAction::triggered, this, [this, t, idx]() {
+            bool ok = false;
+            const QString cur = t->getVariationName(idx);
+            const QString name = QInputDialog::getText(
+                this, tr("Rename Variation"), tr("Name:"),
+                QLineEdit::Normal, cur, &ok);
+            if (!ok || name.trimmed().isEmpty()) return;
+            t->setVariationName(idx, name.trimmed());
+        });
+        connect(aDelete, &QAction::triggered, this, [this, t, idx]() {
+            if (QMessageBox::question(this, tr("Delete Variation"),
+                    tr("Delete variation %1 (%2)?").arg(idx).arg(t->getVariationName(idx)))
+                == QMessageBox::Yes) {
+                t->deleteVariation(idx);
+            }
+        });
+        connect(aLoad, &QAction::triggered, this, [t, idx]() {
+            t->loadVariationToCanvas(idx);
+        });
+        menu.exec(globalPos);
+    });
+
+    // Selection feedback: canvas → toolbar
+    if (scoreCanvasWindow) {
+        if (ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas()) {
+            auto refresh = [this, sc]() {
+                if (!m_variationToolbar) return;
+                const QVector<int> &sel = sc->getSelectedNoteIndices();
+                QVector<int> selVar;
+                selVar.reserve(sel.size());
+                const QVector<Note> &notes = sc->getPhrase().getNotes();
+                for (int i : sel) {
+                    if (i >= 0 && i < notes.size())
+                        selVar.append(notes[i].getVariationIndex());
+                }
+                m_variationToolbar->refreshFromSelection(
+                    selVar, sc->getActiveVariationForNewNotes());
+            };
+            connect(sc, &ScoreCanvas::noteSelectionChanged, this, refresh);
+        }
+    }
 
     // ── Initialize window title
     updateWindowTitle();
@@ -674,6 +801,39 @@ void KalaMain::onToolModeToggle()
     else if (current == ToolMode::Composition) next = ToolMode::Full;
     else                                        next = ToolMode::Sounit;
     setCompanionToolMode(next);
+}
+
+void KalaMain::saveAnimaSession(const QString &rating)
+{
+    if (!m_kalaAgent) return;
+
+    QJsonObject session = m_kalaAgent->exportSession(rating);
+
+    // Ensure the messages array is non-empty
+    if (session["messages"].toArray().isEmpty()) {
+        if (m_companionPanel)
+            m_companionPanel->appendMessage("Nothing to save — the conversation is empty.", "error");
+        return;
+    }
+
+    // Save to ~/Music/kala/training/
+    const QString dir = QDir::homePath() + "/Music/kala/training";
+    QDir().mkpath(dir);
+
+    const QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss");
+    const QString fileName = QString("%1/%2_%3.json").arg(dir, timestamp, rating);
+
+    QFile f(fileName);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        f.write(QJsonDocument(session).toJson(QJsonDocument::Indented));
+        f.close();
+        if (m_companionPanel)
+            m_companionPanel->appendMessage(
+                QString("Session saved (%1) → %2").arg(rating, fileName), "tool_info");
+    } else {
+        if (m_companionPanel)
+            m_companionPanel->appendMessage("Failed to save session: " + f.errorString(), "error");
+    }
 }
 
 void KalaMain::onTabChanged(int index)
@@ -889,6 +1049,8 @@ void KalaMain::onContainerSelected(Container *container)
         populateSaxophoneInspector();
     } else if (container->getName() == "Percussion") {
         populatePercussionInspector();
+    } else if (container->getName() == "Pan") {
+        populatePanInspector();
     }
 }
 
@@ -1106,6 +1268,9 @@ QString KalaMain::getContainerDescription(const QString &containerType)
         return "Extends note rendering with a smooth cosine fade-out after the note ends, "
                "preventing click artifacts caused by abrupt signal cutoffs. "
                "Place at the end of the signal chain. Set tail length in milliseconds.";
+    } else if (containerType == "Pan") {
+        return "Stereo pan position controller. Outputs a pan value from -1.0 (left) to +1.0 (right). "
+               "Connect a Frequency Mapper to controlIn for pitch-dependent panning (low notes left, high notes right).";
     }
     return "";
 }
@@ -1554,14 +1719,17 @@ void KalaMain::addParameterSlider(QFormLayout *layout, const QString &label,
     paramLayout->addWidget(slider);
     paramLayout->addWidget(spinBox);
 
-    // Connect slider and spinbox
-    connect(slider, &QSlider::valueChanged, this, [this, spinBox, paramName, step](int value) {
+    // Connect slider and spinbox.
+    // Using defaultVal (not newVal) as the getParameter fallback is critical:
+    // if the container has no stored value yet, falling back to newVal would make
+    // oldVal == newVal and silently drop the first change. See Bowed/Recorder bug.
+    connect(slider, &QSlider::valueChanged, this, [this, spinBox, paramName, step, defaultVal](int value) {
         double newVal = value * step;
         spinBox->blockSignals(true);
         spinBox->setValue(newVal);
         spinBox->blockSignals(false);
         if (currentContainer) {
-            double oldVal = currentContainer->getParameter(paramName, newVal);
+            double oldVal = currentContainer->getParameter(paramName, defaultVal);
             if (oldVal != newVal) {
                 Canvas *c = sounitBuilder->getCanvas();
                 if (c) c->getUndoStack()->push(
@@ -1571,12 +1739,12 @@ void KalaMain::addParameterSlider(QFormLayout *layout, const QString &label,
     });
 
     connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, [this, slider, paramName, step](double newVal) {
+            this, [this, slider, paramName, step, defaultVal](double newVal) {
         slider->blockSignals(true);
         slider->setValue(static_cast<int>(newVal / step));
         slider->blockSignals(false);
         if (currentContainer) {
-            double oldVal = currentContainer->getParameter(paramName, newVal);
+            double oldVal = currentContainer->getParameter(paramName, defaultVal);
             if (oldVal != newVal) {
                 Canvas *c = sounitBuilder->getCanvas();
                 if (c) c->getUndoStack()->push(
@@ -1626,7 +1794,7 @@ void KalaMain::populateSpectrumToSignalInspector()
 
     addParameterSlider(formLayout, "Normalize", "normalize", 0.0, 1.0, 1.0, 0.01, 2);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescStoS = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescStoS->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescStoS);
@@ -1861,45 +2029,59 @@ void KalaMain::populateEnvelopeEngineInspector()
     formLayout->addRow("Envelope Shape:", comboEnvelopeSelect);
 
     // Score Curve dropdown: which expressive curve from the note to use when followDynamics is on.
-    // "Dynamics" (index 0) is always available; additional named curves are collected from the
-    // score canvas phrase (where the actual expressive curves are stored and edited).
+    // "Dynamics" is always index 0 and always available; additional entries come from the
+    // sounit's declared expressive curve names (Canvas::getExpressiveCurveNames()). Names are
+    // added below via the line-edit + "+" control; notes supply the shapes keyed by name.
     comboScoreCurve = new QComboBox();
-    comboScoreCurve->addItem("Dynamics", 0);
-
-    {
-        QSet<QString> seenNames;
-        seenNames.insert("Dynamics");
-        const QVector<Note> &canvasNotes = scoreCanvasWindow->getScoreCanvas()->getPhrase().getNotes();
-        for (const Note &note : canvasNotes) {
-            for (int ci = 1; ci < note.getExpressiveCurveCount(); ++ci) {
-                QString name = note.getExpressiveCurveName(ci);
-                if (!name.isEmpty() && !seenNames.contains(name)) {
-                    seenNames.insert(name);
-                    comboScoreCurve->addItem(name, ci);
-                }
-            }
-        }
-    }
-
-    int currentScoreIdx = static_cast<int>(currentContainer->getParameter("scoreCurveIndex", 0.0));
-    // Select the combo item whose stored data matches currentScoreIdx
-    for (int i = 0; i < comboScoreCurve->count(); ++i) {
-        if (comboScoreCurve->itemData(i).toInt() == currentScoreIdx) {
-            comboScoreCurve->setCurrentIndex(i);
-            break;
-        }
-    }
+    repopulateScoreCurveCombo();
 
     connect(comboScoreCurve, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int comboIndex) {
-        if (!currentContainer) return;
-        int curveIndex = comboScoreCurve->itemData(comboIndex).toInt();
-        currentContainer->setParameter("scoreCurveIndex", static_cast<double>(curveIndex));
+        if (!currentContainer || !comboScoreCurve) return;
+        QString curveName = comboScoreCurve->itemData(comboIndex).toString();
+        currentContainer->setStringParameter("scoreCurveName", curveName);
         int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
         sounitBuilder->rebuildGraph(trackIndex);
         updateEnvelopePreview();
     });
     formLayout->addRow("Score Curve:", comboScoreCurve);
+
+    // Refresh the dropdown when curve names are added/removed externally
+    // (e.g. via AI tool calls that set scoreCurveName). The connection lives
+    // as long as comboScoreCurve does — auto-disconnects on inspector rebuild.
+    if (Canvas *canvas = sounitBuilder ? sounitBuilder->getCanvas() : nullptr) {
+        connect(canvas, &Canvas::expressiveCurveNamesChanged,
+                comboScoreCurve, [this]() { repopulateScoreCurveCombo(); });
+    }
+
+    // Add-name row: line edit + "+" button to register a new expressive curve name on the sounit.
+    QWidget *addNameWidget = new QWidget();
+    QHBoxLayout *addNameLayout = new QHBoxLayout(addNameWidget);
+    addNameLayout->setContentsMargins(0, 0, 0, 0);
+    QLineEdit *newNameEdit = new QLineEdit();
+    newNameEdit->setPlaceholderText("e.g. brightness");
+    QPushButton *addNameBtn = new QPushButton("+");
+    addNameBtn->setFixedWidth(28);
+    addNameLayout->addWidget(newNameEdit);
+    addNameLayout->addWidget(addNameBtn);
+
+    auto addName = [this, newNameEdit]() {
+        Canvas *c = sounitBuilder ? sounitBuilder->getCanvas() : nullptr;
+        if (!c) return;
+        QString name = newNameEdit->text().trimmed();
+        if (name.isEmpty()) return;
+        if (c->addExpressiveCurveName(name)) {
+            newNameEdit->clear();
+            // Select the new name on the current container so the user sees it stick.
+            if (currentContainer) {
+                currentContainer->setStringParameter("scoreCurveName", name);
+            }
+            repopulateScoreCurveCombo();
+        }
+    };
+    connect(addNameBtn, &QPushButton::clicked, this, addName);
+    connect(newNameEdit, &QLineEdit::returnPressed, this, addName);
+    formLayout->addRow("", addNameWidget);
 
     mainLayout->addWidget(formWidget);
 
@@ -2553,7 +2735,7 @@ void KalaMain::populateKarplusStrongInspector()
     dampingDescLabel->setWordWrap(true);
     formLayout->addRow("", dampingDescLabel);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescKS = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescKS->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescKS);
@@ -2802,7 +2984,7 @@ void KalaMain::populateFrequencyMapperInspector()
     descLabel->setWordWrap(true);
     formLayout->addRow("", descLabel);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescFM = new QLabel("Scales input pitch before mapping · 2.0 = octave up");
     pitchMultDescFM->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescFM);
@@ -2979,7 +3161,7 @@ void KalaMain::populateWavetableSynthInspector()
     });
     formLayout->addRow("Output Mode:", comboOutputMode);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescWT = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescWT->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescWT);
@@ -3257,7 +3439,7 @@ void KalaMain::populateRecorderInspector()
     addParameterSlider(formLayout, "Jet Reflection", "jetReflection",
                        rec.jetReflectionMin, rec.jetReflectionMax, 0.59, 0.01, 2);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescRec = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescRec->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescRec);
@@ -3300,7 +3482,7 @@ void KalaMain::populateBowedInspector()
     addParameterSlider(formLayout, "NL Attack (s)", "nlAttack",
                        b.nlAttackMin, b.nlAttackMax, 0.1, 0.01, 2);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescBow = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescBow->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescBow);
@@ -3355,7 +3537,7 @@ void KalaMain::populateReedInspector()
     addParameterSlider(formLayout, "NL Attack (s)", "nlAttack",
                        s.nlAttackMin, s.nlAttackMax, 0.1, 0.01, 2);
 
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescReed = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescReed->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDescReed);
@@ -3475,7 +3657,7 @@ void KalaMain::populateSaxophoneInspector()
     formLayout->addRow("", bellDesc);
 
     addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier",
-                       0.25, 4.0, 1.0, 0.01, 2);
+                       0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchDesc->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchDesc);
@@ -3556,10 +3738,35 @@ void KalaMain::populatePercussionInspector()
     formLayout->addRow("", noiseDesc);
 
     // --- Pitch ---
-    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.01, 2);
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchDesc->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Pan Inspector
+void KalaMain::populatePanInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    addParameterSlider(formLayout, "Pan", "pan", -1.0, 1.0, 0.0, 0.01, 2);
+    QLabel *panDesc = new QLabel("-1.0 = full left  ·  0.0 = center  ·  +1.0 = full right");
+    panDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", panDesc);
+
+    QLabel *hint = new QLabel("Connect a Frequency Mapper to controlIn\nfor pitch-dependent panning.");
+    hint->setStyleSheet("color: gray; font-size: 10px;");
+    hint->setWordWrap(true);
+    formLayout->addRow("", hint);
 
     mainLayout->addWidget(formWidget);
     mainLayout->addStretch();
@@ -3717,6 +3924,27 @@ void KalaMain::updateEnvelopeParameters(int envelopeType)
     }
 }
 
+void KalaMain::repopulateScoreCurveCombo()
+{
+    if (!comboScoreCurve) return;
+    Canvas *c = sounitBuilder ? sounitBuilder->getCanvas() : nullptr;
+    QStringList names = c ? c->getExpressiveCurveNames() : QStringList();
+
+    QString currentName = currentContainer
+        ? currentContainer->getStringParameter("scoreCurveName", QStringLiteral("Dynamics"))
+        : QStringLiteral("Dynamics");
+
+    comboScoreCurve->blockSignals(true);
+    comboScoreCurve->clear();
+    comboScoreCurve->addItem("Dynamics", "Dynamics");
+    for (const QString &n : names) {
+        comboScoreCurve->addItem(n, n);
+    }
+    int idx = comboScoreCurve->findData(currentName);
+    comboScoreCurve->setCurrentIndex(idx >= 0 ? idx : 0);
+    comboScoreCurve->blockSignals(false);
+}
+
 // Update envelope preview visualization
 void KalaMain::updateEnvelopePreview()
 {
@@ -3724,16 +3952,25 @@ void KalaMain::updateEnvelopePreview()
 
     // When followDynamics is on, show the selected score curve instead of the envelope shape.
     if (currentContainer->getParameter("followDynamics", 0.0) > 0.5) {
-        int scoreIdx = static_cast<int>(currentContainer->getParameter("scoreCurveIndex", 0.0));
+        QString scoreName = currentContainer->getStringParameter("scoreCurveName", QStringLiteral("Dynamics"));
         const QVector<Note> &canvasNotes = scoreCanvasWindow->getScoreCanvas()->getPhrase().getNotes();
 
-        // Find the first note that has a curve at the requested index
+        // Find the first note that has a curve matching the name ("Dynamics" = index 0)
         const Curve *sourceCurve = nullptr;
         for (const Note &note : canvasNotes) {
-            if (scoreIdx < note.getExpressiveCurveCount()) {
-                sourceCurve = &note.getExpressiveCurve(scoreIdx);
-                break;
+            if (scoreName == QStringLiteral("Dynamics")) {
+                sourceCurve = &note.getDynamicsCurve();
+                if (!sourceCurve->isEmpty()) break;
+                sourceCurve = nullptr;
+                continue;
             }
+            for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
+                if (note.getExpressiveCurveName(i) == scoreName) {
+                    sourceCurve = &note.getExpressiveCurve(i);
+                    break;
+                }
+            }
+            if (sourceCurve) break;
         }
 
         if (sourceCurve && !sourceCurve->isEmpty()) {
@@ -3983,7 +4220,7 @@ void KalaMain::newProject()
     // Reset tempo/time signature to defaults
     ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
     sc->clearTempoChanges();
-    sc->setDefaultTempo(120.0);
+    sc->setDefaultTempo(6.0);
     sc->setDefaultTimeSignature(4, 4);
 
     // Clear timeline tempo markers
@@ -4214,25 +4451,15 @@ void KalaMain::onExportAudio()
     }
     double exportLengthMs = std::max(lengthMs, renderedEndMs);
 
-    // Calculate total mono samples needed
-    size_t monoSamples = static_cast<size_t>((exportLengthMs / 1000.0) * sampleRate);
+    // Calculate total samples needed (stereo interleaved)
+    size_t numSamples = static_cast<size_t>((exportLengthMs / 1000.0) * sampleRate);
 
     bool success = true;
     QStringList exportedFiles;
 
-    // Helper lambda to convert mono buffer to interleaved stereo
-    auto monoToStereo = [](const std::vector<float> &mono) -> std::vector<float> {
-        std::vector<float> stereo(mono.size() * 2);
-        for (size_t i = 0; i < mono.size(); ++i) {
-            stereo[i * 2] = mono[i];      // Left channel
-            stereo[i * 2 + 1] = mono[i];  // Right channel (same as left)
-        }
-        return stereo;
-    };
-
     if (mode == ExportAudioDialog::SingleFile) {
-        // Single file mode: Mix all unmuted tracks together (mono first)
-        std::vector<float> masterBuffer(monoSamples, 0.0f);
+        // Single file mode: Mix all unmuted tracks together (stereo interleaved)
+        std::vector<float> masterBuffer(numSamples * 2, 0.0f);
 
         // Check for solo tracks
         bool hasSolo = false;
@@ -4253,13 +4480,19 @@ void KalaMain::onExportAudio()
             if (track->isMuted()) continue;
             if (hasSolo && !track->isSolo()) continue;
 
+            // getMixedBuffer returns stereo interleaved (L0,R0,L1,R1,...)
             std::vector<float> trackBuffer = track->getMixedBuffer(0, exportLengthMs);
-            float trackVolume = track->getVolume() * track->getGain();
 
-            // Mix into master buffer
+            // Apply track-level pan on top of per-note pan
+            float pan = track->getPan();
+            float leftGain = std::min(1.0f, 1.0f - pan);
+            float rightGain = std::min(1.0f, 1.0f + pan);
+
+            // Mix stereo track buffer into master
             size_t samplesToMix = std::min(masterBuffer.size(), trackBuffer.size());
-            for (size_t s = 0; s < samplesToMix; ++s) {
-                masterBuffer[s] += trackBuffer[s] * trackVolume;
+            for (size_t s = 0; s < samplesToMix; s += 2) {
+                masterBuffer[s]     += trackBuffer[s]     * leftGain;
+                masterBuffer[s + 1] += trackBuffer[s + 1] * rightGain;
             }
         }
 
@@ -4268,17 +4501,14 @@ void KalaMain::onExportAudio()
             masterBuffer[s] = std::clamp(masterBuffer[s], -1.0f, 1.0f);
         }
 
-        // Convert mono to stereo for WAV output
-        std::vector<float> stereoBuffer = monoToStereo(masterBuffer);
-
         // Ensure .wav extension
         QString filePath = exportPath;
         if (!filePath.endsWith(".wav", Qt::CaseInsensitive)) {
             filePath += ".wav";
         }
 
-        // Write WAV file (stereo)
-        if (writeWavFile(filePath, stereoBuffer, sampleRate, 2, bitDepth)) {
+        // Write WAV file (stereo interleaved)
+        if (writeWavFile(filePath, masterBuffer, sampleRate, 2, bitDepth)) {
             exportedFiles << filePath;
         } else {
             success = false;
@@ -4289,16 +4519,19 @@ void KalaMain::onExportAudio()
             Track *track = trackManager->getTrack(i);
             if (!track) continue;
 
+            // getMixedBuffer returns stereo interleaved (L0,R0,L1,R1,...)
             std::vector<float> trackBuffer = track->getMixedBuffer(0, exportLengthMs);
-            float trackVolume = track->getVolume() * track->getGain();
 
-            // Apply volume and clamp
-            for (size_t s = 0; s < trackBuffer.size(); ++s) {
-                trackBuffer[s] = std::clamp(trackBuffer[s] * trackVolume, -1.0f, 1.0f);
+            // Apply track-level pan on top of per-note pan, and clamp
+            float pan = track->getPan();
+            float leftGain = std::min(1.0f, 1.0f - pan);
+            float rightGain = std::min(1.0f, 1.0f + pan);
+            for (size_t s = 0; s + 1 < trackBuffer.size(); s += 2) {
+                trackBuffer[s]     = std::clamp(trackBuffer[s]     * leftGain,  -1.0f, 1.0f);
+                trackBuffer[s + 1] = std::clamp(trackBuffer[s + 1] * rightGain, -1.0f, 1.0f);
             }
 
-            // Convert mono to stereo for WAV output
-            std::vector<float> stereoBuffer = monoToStereo(trackBuffer);
+            const std::vector<float> &stereoBuffer = trackBuffer;
 
             // Generate filename: ProjectName_TrackNumber_TrackName.wav
             QString trackName = track->getName();
@@ -4600,7 +4833,7 @@ bool KalaMain::loadProject(const QString &filePath)
         ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
 
         // Load default tempo/time signature
-        double defaultTempo = tempoJson["defaultTempo"].toDouble(120.0);
+        double defaultTempo = tempoJson["2defaultTempo"].toDouble(60.0);
         int defaultTimeSigNum = tempoJson["defaultTimeSigNum"].toInt(4);
         int defaultTimeSigDenom = tempoJson["defaultTimeSigDenom"].toInt(4);
         sc->setDefaultTempo(defaultTempo);
@@ -4615,7 +4848,7 @@ bool KalaMain::loadProject(const QString &filePath)
             sc->addTempoChange(timeMs, tts);
         }
 
-        // Update timeline tempo markers
+        //  Update timeline tempo markers
         Timeline *timeline = scoreCanvasWindow->getTimeline();
         QMap<double, TempoTimeSignature> tempoChangesMap = sc->getTempoChanges();
         QMap<double, QString> tempoDescsForTimeline;
@@ -4749,6 +4982,12 @@ bool KalaMain::loadProject(const QString &filePath)
     updateVariationSelector();
     refreshVariationsList();
     updateWindowTitle();
+
+    // The variation toolbar bound to the current track when it was first
+    // created (empty); Track::fromJson populates m_variations directly without
+    // emitting variationCreated, so force a rebuild now that variations exist.
+    if (m_variationToolbar)
+        m_variationToolbar->setCurrentTrack(trackManager->getCurrentTrack());
 
     // CRITICAL: Reset sounit dirty flag for all tracks after loading
     // This is needed because loadCanvasStateForTrack can trigger canvas signals
@@ -5223,7 +5462,13 @@ void KalaMain::onSounitSelectorChanged(int index)
 
 KalaMain::~KalaMain()
 {
-    // Clean up in reverse order
+    // Tracks own their canvases; SounitBuilder holds the active one as its
+    // centralWidget (Qt reparents it on setCentralWidget). Destroy tracks
+    // first so ~Track can delete its canvas before ~SounitBuilder would
+    // otherwise auto-delete it via QObject child cleanup (double-free).
+    delete trackManager;
+    trackManager = nullptr;
+
     delete scoreCanvasWindow;
     delete sounitBuilder;
 
@@ -5387,6 +5632,8 @@ void KalaMain::onLoadSounit()
             QJsonObject graphData;
             graphData["containers"] = root["containers"];
             graphData["connections"] = root["connections"];
+            graphData["expressiveCurveNames"] =
+                root["sounit"].toObject()["expressiveCurveNames"].toArray();
 
             // Suggest a name; avoid collisions
             QString defaultName = fileSounitName;
@@ -6774,9 +7021,7 @@ void KalaMain::updateNoteInspector()
         ui->checkNoteVibrato->setEnabled(false);
         ui->btnNoteVibratoEdit->setEnabled(false);
         ui->comboExpressiveCurve->setEnabled(false);
-        ui->btnExpressiveCurveAdd->setEnabled(false);
         ui->btnExpressiveCurveDelete->setEnabled(false);
-        ui->btnExpressiveCurveApply->setEnabled(false);
 
         // Clear values
         m_updatingNoteInspector = true;
@@ -6798,7 +7043,6 @@ void KalaMain::updateNoteInspector()
     ui->checkNoteVibrato->setEnabled(true);
     ui->btnNoteVibratoEdit->setEnabled(true);
     ui->comboExpressiveCurve->setEnabled(true);
-    ui->btnExpressiveCurveAdd->setEnabled(true);
 
     // Get the first selected note (for single selection display)
     const QVector<Note> &notes = canvas->getPhrase().getNotes();
@@ -6991,10 +7235,24 @@ void KalaMain::onNoteVibratoToggled(bool checked)
     }
 
     QVector<Note> &notes = canvas->getPhrase().getNotes();
+
+    // When toggling ON, apply the user's default vibrato preset if one is set
+    Vibrato defaultPreset;
+    bool useDefault = false;
+    if (checked) {
+        useDefault = VibratoEditorDialog::getDefaultPreset(defaultPreset);
+    }
+
     QUndoCommand *macro = new QUndoCommand("Toggle Vibrato Active");
     for (int noteIndex : selectedIndices) {
         if (noteIndex >= 0 && noteIndex < notes.size()) {
-            Vibrato newVibrato = notes[noteIndex].getVibrato();
+            Vibrato newVibrato;
+            if (useDefault && !notes[noteIndex].getVibrato().active) {
+                // Fresh toggle-on: apply default preset values
+                newVibrato = defaultPreset;
+            } else {
+                newVibrato = notes[noteIndex].getVibrato();
+            }
             newVibrato.active = checked;
             new SetVibratoCommand(&canvas->getPhrase(), {noteIndex}, newVibrato, canvas, macro);
         }
@@ -7059,117 +7317,26 @@ void KalaMain::updateExpressiveCurvesDropdown()
         ui->comboExpressiveCurve->addItem(firstNote.getExpressiveCurveName(i));
     }
 
-    // If the active named curve is not present on the newly selected note, fall back to Dynamics.
-    // This keeps the dropdown and canvas consistent: you never silently end up showing a curve
-    // name in the dropdown that doesn't match what the canvas is actually drawing.
-    int activeIdx = canvas->getActiveExpressiveCurveIndex();
-    const QString activeName = canvas->getActiveExpressiveCurveName();
-    if (activeIdx > 0 && activeName != QStringLiteral("Dynamics") && !activeName.isEmpty()) {
-        bool noteHasActiveCurve = false;
-        for (int i = 1; i < firstNote.getExpressiveCurveCount(); ++i) {
-            if (firstNote.getExpressiveCurveName(i) == activeName) {
-                noteHasActiveCurve = true;
-                break;
-            }
-        }
-        if (!noteHasActiveCurve) {
-            activeIdx = 0;
-            canvas->setActiveExpressiveCurveIndex(0, QStringLiteral("Dynamics"));
-        }
-    }
-    if (activeIdx >= count) activeIdx = 0;
-    ui->comboExpressiveCurve->setCurrentIndex(activeIdx);
+    // Default the inspector combo to index 0 (the note's dynamics). This combo is scoped to
+    // the selected note and only governs which curve the Delete button removes — the score's
+    // displayed curve is driven by the toolbar's "Show curve" dropdown, independent of selection.
+    ui->comboExpressiveCurve->setCurrentIndex(0);
 
     ui->comboExpressiveCurve->blockSignals(false);
 
     // Delete enabled whenever a non-Dynamics curve is selected (deletes from all notes)
-    bool canDelete = (activeIdx > 0);
+    bool canDelete = (ui->comboExpressiveCurve->currentIndex() > 0);
     ui->btnExpressiveCurveDelete->setEnabled(canDelete);
-
-    // Apply enabled when there is at least one named curve anywhere in the phrase
-    const QVector<Note> &allNotes = canvas->getPhrase().getNotes();
-    bool hasNamedCurves = false;
-    for (const Note &n : allNotes) {
-        if (n.getExpressiveCurveCount() > 1) {
-            hasNamedCurves = true;
-            break;
-        }
-    }
-    ui->btnExpressiveCurveApply->setEnabled(hasNamedCurves);
 }
 
 void KalaMain::onExpressiveCurveChanged(int index)
 {
     if (m_updatingNoteInspector) return;
-    ScoreCanvas *canvas = scoreCanvasWindow->getScoreCanvas();
-    const QString curveName = ui->comboExpressiveCurve->itemText(index);
-    canvas->setActiveExpressiveCurveIndex(index, curveName);
+    // The note-inspector combo is scoped to the selected note(s) — it picks which curve
+    // the Delete button removes from the selection. Score rendering is driven by the
+    // toolbar's "Show curve" dropdown, independently of what's selected here.
     bool canDelete = (index > 0);
     ui->btnExpressiveCurveDelete->setEnabled(canDelete);
-}
-
-void KalaMain::onExpressiveCurveAdd()
-{
-    ScoreCanvas *canvas = scoreCanvasWindow->getScoreCanvas();
-    if (canvas->getSelectedNoteIndices().isEmpty()) return;
-
-    // Collect existing named curve names across ALL notes in the phrase
-    QSet<QString> existingNames;
-    const QVector<Note> &allNotes = canvas->getPhrase().getNotes();
-    for (const Note &n : allNotes) {
-        for (int i = 1; i < n.getExpressiveCurveCount(); ++i)
-            existingNames.insert(n.getExpressiveCurveName(i));
-    }
-
-    // Ask for a name, re-prompting on duplicate
-    int curveN = ui->comboExpressiveCurve->count();
-    QString defaultName = QString("Curve %1").arg(curveN);
-    bool ok = false;
-    QString name;
-    while (true) {
-        name = QInputDialog::getText(this, "Add Expressive Curve",
-                                     "Curve name:", QLineEdit::Normal,
-                                     defaultName, &ok);
-        if (!ok || name.trimmed().isEmpty()) return;
-        if (!existingNames.contains(name.trimmed())) break;
-        QMessageBox::warning(this, "Duplicate Curve Name",
-                             QString("A curve named \"%1\" already exists in this track.\n"
-                                     "Please choose a unique name.").arg(name.trimmed()));
-        defaultName = name;  // Keep what the user typed as the next default
-    }
-
-    // Show DynamicsCurveDialog to define the curve shape
-    const QVector<int> &sel = canvas->getSelectedNoteIndices();
-    const QVector<Note> &notes = canvas->getPhrase().getNotes();
-    double startTime = std::numeric_limits<double>::max();
-    double endTime   = std::numeric_limits<double>::lowest();
-    for (int idx : sel) {
-        if (idx >= 0 && idx < notes.size()) {
-            startTime = qMin(startTime, notes[idx].getStartTime());
-            endTime   = qMax(endTime,   notes[idx].getStartTime() + notes[idx].getDuration());
-        }
-    }
-    double timeSpanMs = (endTime > startTime) ? (endTime - startTime) : 1000.0;
-
-    DynamicsCurveDialog dialog(sel.size(), timeSpanMs, this);
-    if (dialog.exec() != QDialog::Accepted) return;
-
-    QVector<EnvelopePoint> curve = dialog.getCurve();
-    double weight = dialog.getWeight();
-    bool perNote = dialog.getPerNoteMode();
-
-    canvas->addExpressiveCurveToSelection(name.trimmed(), curve, weight, perNote);
-
-    // Select the newly added curve
-    updateExpressiveCurvesDropdown();
-    int newIdx = ui->comboExpressiveCurve->count() - 1;
-    if (newIdx > 0) {
-        ui->comboExpressiveCurve->setCurrentIndex(newIdx);
-        canvas->setActiveExpressiveCurveIndex(newIdx, name.trimmed());
-        ui->btnExpressiveCurveDelete->setEnabled(newIdx > 0);
-    }
-
-    markProjectDirty();
 }
 
 void KalaMain::onExpressiveCurveDelete()
@@ -7183,68 +7350,7 @@ void KalaMain::onExpressiveCurveDelete()
 
     updateExpressiveCurvesDropdown();
     ui->comboExpressiveCurve->setCurrentIndex(0);
-    canvas->setActiveExpressiveCurveIndex(0, QStringLiteral("Dynamics"));
     ui->btnExpressiveCurveDelete->setEnabled(false);
-
-    markProjectDirty();
-}
-
-void KalaMain::onExpressiveCurveApply()
-{
-    ScoreCanvas *canvas = scoreCanvasWindow->getScoreCanvas();
-    if (canvas->getSelectedNoteIndices().isEmpty()) return;
-
-    // Collect unique named curves from all notes in the phrase (name -> first Curve found)
-    QMap<QString, Curve> namedCurves;
-    const QVector<Note> &allNotes = canvas->getPhrase().getNotes();
-    for (const Note &note : allNotes) {
-        for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
-            const QString &curveName = note.getExpressiveCurveName(i);
-            if (!namedCurves.contains(curveName))
-                namedCurves[curveName] = note.getExpressiveCurve(i);
-        }
-    }
-    if (namedCurves.isEmpty()) return;
-
-    // Build a simple dialog with a combo box
-    QDialog dialog(this);
-    dialog.setWindowTitle("Apply Named Curve");
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-
-    QLabel *label = new QLabel("Select curve to apply to selection:", &dialog);
-    QComboBox *combo = new QComboBox(&dialog);
-    for (const QString &curveName : namedCurves.keys())
-        combo->addItem(curveName);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    layout->addWidget(label);
-    layout->addWidget(combo);
-    layout->addWidget(buttons);
-
-    if (dialog.exec() != QDialog::Accepted) return;
-
-    const QString selectedName = combo->currentText();
-    canvas->applyNamedCurveToSelection(selectedName, namedCurves[selectedName]);
-
-    // Refresh the dropdown and activate the applied curve so the canvas draws it
-    updateExpressiveCurvesDropdown();
-    const QVector<int> &sel = canvas->getSelectedNoteIndices();
-    const QVector<Note> &updatedNotes = canvas->getPhrase().getNotes();
-    if (!sel.isEmpty() && sel.first() < updatedNotes.size()) {
-        const Note &firstNote = updatedNotes[sel.first()];
-        for (int i = 1; i < firstNote.getExpressiveCurveCount(); ++i) {
-            if (firstNote.getExpressiveCurveName(i) == selectedName) {
-                ui->comboExpressiveCurve->setCurrentIndex(i);
-                canvas->setActiveExpressiveCurveIndex(i, selectedName);
-                ui->btnExpressiveCurveDelete->setEnabled(true);
-                break;
-            }
-        }
-    }
 
     markProjectDirty();
 }
@@ -7594,9 +7700,10 @@ void KalaMain::populateSettingsTab()
     QPushButton *applyAiBtn = new QPushButton("Apply");
     applyAiBtn->setFixedWidth(80);
     connect(applyAiBtn, &QPushButton::clicked, this, [this, providerCombo, urlEdit, keyEdit, modelEdit]() {
-        m_llmConfig.provider = (providerCombo->currentIndex() == 4)
-                                   ? LLMProvider::Anthropic
-                                   : LLMProvider::OpenAICompatible;
+        const int idx = providerCombo->currentIndex();
+        if (idx == 4)       m_llmConfig.provider = LLMProvider::Anthropic;
+        else if (idx == 0)  m_llmConfig.provider = LLMProvider::Ollama;
+        else                m_llmConfig.provider = LLMProvider::OpenAICompatible;
         m_llmConfig.baseUrl  = urlEdit->text().trimmed();
         m_llmConfig.apiKey   = keyEdit->text().trimmed();
         m_llmConfig.model    = modelEdit->text().trimmed();

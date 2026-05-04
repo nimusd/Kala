@@ -26,8 +26,15 @@ DynamicsCurveDialog::DynamicsCurveDialog(int noteCount, double timeSpanMs, QWidg
     setupPresets();
     setupUi();
 
-    // Load first preset (Crescendo) by default
-    loadPreset(0);
+    int swellIndex = -1;
+    for (int i = 0; i < presets.size(); ++i) {
+        if (presets[i].name == "Swell") { swellIndex = i; break; }
+    }
+    if (swellIndex >= 0) {
+        presetCombo->setCurrentIndex(swellIndex);
+    } else {
+        loadPreset(0);
+    }
 }
 
 void DynamicsCurveDialog::setupUi()
@@ -183,12 +190,12 @@ void DynamicsCurveDialog::setupPresets()
         presets.append(p);
     }
 
-    // Swell (< >) - Rise to middle, fall back
+    // Swell (< >) - Smooth rise to middle, smooth fall back
     {
         Preset p;
         p.name = "Swell";
-        p.curve.append(EnvelopePoint(0.0, 0.4, 0));
-        p.curve.append(EnvelopePoint(0.5, 1.0, 0));
+        p.curve.append(EnvelopePoint(0.0, 0.4, 1));
+        p.curve.append(EnvelopePoint(0.5, 1.0, 1));
         p.curve.append(EnvelopePoint(1.0, 0.4, 0));
         presets.append(p);
     }
@@ -268,6 +275,18 @@ double DynamicsCurveDialog::getWeight() const
 bool DynamicsCurveDialog::getPerNoteMode() const
 {
     return perNoteToggle->isChecked();
+}
+
+void DynamicsCurveDialog::setInitialCurve(const QVector<EnvelopePoint> &points)
+{
+    curveCanvas->setPoints(points);
+
+    int customIndex = presetCombo->findText("Custom");
+    if (customIndex >= 0) {
+        presetCombo->blockSignals(true);
+        presetCombo->setCurrentIndex(customIndex);
+        presetCombo->blockSignals(false);
+    }
 }
 
 void DynamicsCurveDialog::onWeightChanged(int value)

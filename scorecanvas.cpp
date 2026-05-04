@@ -3,9 +3,11 @@
 #include "curve.h"
 #include "trackselect.h"
 #include "track.h"
+#include "canvas.h"
 #include "easingdialog.h"
 #include "dynamicscurvedialog.h"
 #include "expressivecurveapplydialog.h"
+#include "eqcurvedialog.h"
 #include "tempochangedialog.h"
 #include <QPainter>
 #include <QDialog>
@@ -23,6 +25,7 @@
 #include <QMessageBox>
 #include <QSet>
 #include <QDateTime>
+#include <QTimer>
 #include <cmath>
 #include <algorithm>
 
@@ -131,6 +134,14 @@ ScoreCanvas::ScoreCanvas(QWidget *parent)
 
     // Generate default C major scale
     generateScaleLines();
+
+    // Auto-exit transform mode when the selection is no longer a single note
+    // (clicking outside, lasso-selecting multiple, deselecting, etc.).
+    connect(this, &ScoreCanvas::noteSelectionChanged, this, [this]() {
+        if (transformMode && selectedNoteIndices.size() != 1) {
+            setTransformMode(false);
+        }
+    });
 }
 
 void ScoreCanvas::setFrequencyRange(double minHz, double maxHz)
@@ -394,32 +405,24 @@ void ScoreCanvas::resizeEvent(QResizeEvent *event)
 
 int ScoreCanvas::frequencyToPixel(double hz) const
 {
-    // Convert Hz to pixel position using logarithmic spacing
-    // Each octave = PIXELS_PER_OCTAVE (100 pixels)
-    // Higher frequencies = lower Y values (top of screen)
+    // Convert Hz to pixel position using logarithmic spacing.
+    // Maps the FULL frequency range (FULL_MIN_HZ..FULL_MAX_HZ) to the widget height.
+    // The QScrollArea viewport shows the portion corresponding to the current zoom.
+    // Higher frequencies = lower Y values (top of widget).
 
     if (hz <= 0 || baseFrequency <= 0) {
         return 0;
     }
 
-    // Calculate octave number from base frequency (logarithmic)
     double octaveNumber = std::log2(hz / baseFrequency);
+    double fullMinOctave = std::log2(FULL_MIN_HZ / baseFrequency);
+    double fullMaxOctave = std::log2(FULL_MAX_HZ / baseFrequency);
+    double fullOctaveRange = fullMaxOctave - fullMinOctave;
 
-    // Convert to pixels from bottom
-    double pixelsFromBottom = octaveNumber * PIXELS_PER_OCTAVE;
-
-    // Calculate visible octave range
-    double minOctave = std::log2(visibleMinHz / baseFrequency);
-    double maxOctave = std::log2(visibleMaxHz / baseFrequency);
-    double visibleOctaveRange = maxOctave - minOctave;
-
-    // Normalize position within visible range
-    double normalizedPos = (octaveNumber - minOctave) / visibleOctaveRange;
-    // Don't clamp - allow frequencies outside visible range to be positioned off-screen
-    // The paintEvent will filter them out
+    // Normalize position within the full scrollable range
+    double normalizedPos = (octaveNumber - fullMinOctave) / fullOctaveRange;
 
     // Convert to pixel position (flip for top-down coordinate system)
-    // Return canvas-widget coordinates; the QScrollArea handles physical scrolling.
     int pixel = height() - static_cast<int>(normalizedPos * height());
     return pixel;
 }
@@ -427,20 +430,16 @@ int ScoreCanvas::frequencyToPixel(double hz) const
 double ScoreCanvas::pixelToFrequency(int pixel) const
 {
     // Convert pixel position to Hz using logarithmic spacing.
-    // 'pixel' is already in canvas-widget coordinates (from mouse events),
-    // so no scroll offset adjustment is needed here.
+    // Maps the widget height to the FULL frequency range (FULL_MIN_HZ..FULL_MAX_HZ).
     double normalizedPos = 1.0 - (static_cast<double>(pixel) / height());
     normalizedPos = qBound(0.0, normalizedPos, 1.0);
 
-    // Calculate visible octave range
-    double minOctave = std::log2(visibleMinHz / baseFrequency);
-    double maxOctave = std::log2(visibleMaxHz / baseFrequency);
-    double visibleOctaveRange = maxOctave - minOctave;
+    double fullMinOctave = std::log2(FULL_MIN_HZ / baseFrequency);
+    double fullMaxOctave = std::log2(FULL_MAX_HZ / baseFrequency);
+    double fullOctaveRange = fullMaxOctave - fullMinOctave;
 
-    // Calculate octave number at this position
-    double octaveNumber = minOctave + (normalizedPos * visibleOctaveRange);
+    double octaveNumber = fullMinOctave + (normalizedPos * fullOctaveRange);
 
-    // Convert back to Hz
     return baseFrequency * std::pow(2.0, octaveNumber);
 }
 
@@ -565,6 +564,20 @@ QVector<ScoreCanvas::ScaleLine> ScoreCanvas::generateScaleLinesForScale(const Sc
                 line.noteName = scale.getNoteName(degree) + QString::number(octave);
 
                 lines.append(line);
+            }
+        }
+    }
+
+    // DEBUG: Print scale lines for equal temperament with base ~32.7
+    if (scale.getScaleId() == 2 && fabs(baseFreq - 32.7) < 0.1) {
+        qDebug() << "DEBUG generateScaleLinesForScale: ET baseFreq=" << baseFreq;
+        for (int octave = 2; octave <= 4; ++octave) {
+            for (int degree = 0; degree < scale.getDegreeCount(); ++degree) {
+                double freq = baseFreq * std::pow(2.0, octave) * scale.getRatio(degree);
+                if (freq >= 20.0 && freq <= 8000.0) {
+                    qDebug() << "  octave" << octave << "degree" << degree
+                             << "freq" << freq << "name" << (scale.getNoteName(degree) + QString::number(octave));
+                }
             }
         }
     }
@@ -707,6 +720,14 @@ double ScoreCanvas::snapToNearestScaleLineAtTime(double hz, double timeMs) const
 
     // Generate scale lines for this specific time's scale
     QVector<ScaleLine> timeScaleLines = generateScaleLinesForScale(activeScale, activeBaseFreq);
+    qDebug() << "snapToNearestScaleLineAtTime: hz=" << hz << "timeMs=" << timeMs
+             << "activeScale=" << activeScale.getName() << "activeBaseFreq=" << activeBaseFreq
+             << "scaleLines count=" << timeScaleLines.size();
+    if (timeScaleLines.size() <= 10) {
+        for (const ScaleLine &line : timeScaleLines) {
+            qDebug() << "  line: degree" << line.scaleDegree << "freq" << line.frequencyHz << "name" << line.noteName;
+        }
+    }
 
     if (timeScaleLines.isEmpty()) return hz;
 
@@ -721,7 +742,7 @@ double ScoreCanvas::snapToNearestScaleLineAtTime(double hz, double timeMs) const
             closestHz = line.frequencyHz;
         }
     }
-
+    qDebug() << "snapToNearestScaleLineAtTime: closestHz=" << closestHz << "minDistance=" << minDistance;
     return closestHz;
 }
 
@@ -1408,12 +1429,41 @@ void ScoreCanvas::drawNote(QPainter &painter, const Note &note, bool isSelected)
         drawSelectionRectangle(painter, note);
     }
 
-    // Draw pitch indicator (small circle on left at starting pitch)
+    // Pitch / variation indicator at the note's start.
+    // Default: small dot. When the toolbar's active variation matches this
+    // note's variation (and isn't Base), the dot expands into a circle that
+    // displays the variation's digit — so clicking "1" reveals every
+    // variation-1 note at a glance, and clicking "Base" leaves the canvas
+    // clean.
     double startPitch = note.getPitchAt(0.0);
     int startCenterY = frequencyToPixel(startPitch);
-    painter.setBrush(noteColor.darker(140));
-    painter.setPen(Qt::NoPen);
-    painter.drawEllipse(x - 3, startCenterY - 3, 6, 6);
+
+    const int varIdx = note.getVariationIndex();
+    const bool showIndicator = (varIdx > 0 && varIdx == m_activeVariationIndex);
+
+    if (showIndicator) {
+        const int circleD = 16;
+        const int circleX = x - circleD / 2;            // centred on the start
+        const int circleY = startCenterY - circleD / 2;
+
+        painter.setBrush(noteColor.darker(150));
+        painter.setPen(QPen(noteColor.darker(220), 1));
+        painter.drawEllipse(circleX, circleY, circleD, circleD);
+
+        QFont prevFont = painter.font();
+        QFont font = prevFont;
+        font.setPointSizeF(qMax(9.0, prevFont.pointSizeF()));
+        font.setBold(true);
+        painter.setFont(font);
+        painter.setPen(QColor(255, 255, 255, 240));
+        painter.drawText(QRect(circleX, circleY, circleD, circleD),
+                         Qt::AlignCenter, QString::number(varIdx));
+        painter.setFont(prevFont);
+    } else {
+        painter.setBrush(noteColor.darker(140));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(x - 3, startCenterY - 3, 6, 6);
+    }
 
     // Draw segment overlay if this note is in segment editing mode
     if (segmentEditingMode && segmentEditingNoteIndex >= 0) {
@@ -1478,7 +1528,7 @@ void ScoreCanvas::mouseDoubleClickEvent(QMouseEvent *event)
         if (clickedNoteIndex >= 0) {
             const Note &note = phrase.getNotes()[clickedNoteIndex];
 
-            // Only enter segment mode for quantized continuous notes
+            // Quantized continuous notes: enter segment editing mode
             if (note.isQuantized() && note.hasPitchCurve()) {
                 enterSegmentEditingMode(clickedNoteIndex);
 
@@ -1488,6 +1538,13 @@ void ScoreCanvas::mouseDoubleClickEvent(QMouseEvent *event)
                     selectedSegmentIndex = segIndex;
                 }
                 update();
+                event->accept();
+                return;
+            }
+
+            // Selected note: open curve editor for the active curve
+            if (selectedNoteIndices.contains(clickedNoteIndex)) {
+                editNoteCurve(clickedNoteIndex);
                 event->accept();
                 return;
             }
@@ -1519,6 +1576,17 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
         if (currentInputMode == SelectionMode) {
             const QVector<Note> &notes = phrase.getNotes();
 
+            // Ctrl+click on the body of an already-selected note toggles it off
+            if (event->modifiers() & Qt::ControlModifier) {
+                int toggleIndex = findNoteAtPosition(event->pos());
+                if (toggleIndex >= 0 && selectedNoteIndices.contains(toggleIndex)) {
+                    selectedNoteIndices.removeAll(toggleIndex);
+                    emit noteSelectionChanged();
+                    update();
+                    return;
+                }
+            }
+
             // FIRST: Check if clicking on handles/dots of selected note (these are outside note rect)
             if (selectedNoteIndices.size() == 1) {
                 int selectedIndex = selectedNoteIndices.first();
@@ -1549,16 +1617,81 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
                             } else {
                                 dragStartCurve = selectedNote.getDynamicsCurve();
                             }
-                        } else if (pendingDragMode == EditingBottomCurve ||
-                                   pendingDragMode == EditingBottomCurveStart ||
-                                   pendingDragMode == EditingBottomCurveEnd) {
-                            dragStartCurve = selectedNote.getBottomCurve();
+                        } else if (pendingDragMode == EditingPitchCurve ||
+                                   pendingDragMode == EditingPitchCurveStart ||
+                                   pendingDragMode == EditingPitchCurveEnd) {
+                            dragStartCurve = selectedNote.getPitchCurve();
+                            if (dragStartCurve.isEmpty()) {
+                                // Discrete note: seed with nominal pitch so valueAt() returns nominal
+                                // for unedited points. First drag will auto-promote to continuous.
+                                double nominal = selectedNote.getPitchHz();
+                                dragStartCurve.addPoint(0.0, nominal);
+                                dragStartCurve.addPoint(1.0, nominal);
+                            }
+                        } else if (pendingDragMode == TransformStretchTop ||
+                                   pendingDragMode == TransformStretchBottom ||
+                                   pendingDragMode == TransformRotate) {
+                            dragStartCurve = selectedNote.getPitchCurve();
+                            if (dragStartCurve.isEmpty()) {
+                                // Discrete note: seed with N uniformly-spaced points at nominal
+                                // pitch so transforms have material to act on (rotation tilts,
+                                // and the note auto-promotes to continuous).
+                                int n = calculateCurveDotCount(selectedNote) + 2;
+                                double nominal = selectedNote.getPitchHz();
+                                for (int i = 0; i < n; ++i) {
+                                    double t = (n == 1) ? 0.0 : double(i) / (n - 1);
+                                    dragStartCurve.addPoint(t, nominal);
+                                }
+                            }
                         } else if (pendingDragMode == DraggingNote && selectedNote.hasPitchCurve()) {
                             // Save pitch curve for continuous notes
                             dragStartCurve = selectedNote.getPitchCurve();
                         }
 
                         return;  // Don't proceed with other selection logic
+                    }
+                }
+            }
+
+            // Check resize handles on any selected note (multi-selection resize)
+            if (selectedNoteIndices.size() > 1) {
+                for (int selIdx : selectedNoteIndices) {
+                    if (selIdx >= 0 && selIdx < notes.size()) {
+                        const Note &selNote = notes[selIdx];
+                        if (getLeftResizeHandle(selNote).contains(event->pos())) {
+                            pendingDragMode = ResizingLeft;
+                            currentDragMode = NoDrag;
+                            dragThresholdExceeded = false;
+                            dragStartPos = event->pos();
+
+                            multiResizeStartTimes.clear();
+                            multiResizeStartDurations.clear();
+                            for (int index : selectedNoteIndices) {
+                                if (index >= 0 && index < notes.size()) {
+                                    const Note &note = notes[index];
+                                    multiResizeStartTimes.append(qMakePair(index, note.getStartTime()));
+                                    multiResizeStartDurations.append(qMakePair(index, note.getDuration()));
+                                }
+                            }
+                            return;
+                        }
+                        if (getRightResizeHandle(selNote).contains(event->pos())) {
+                            pendingDragMode = ResizingRight;
+                            currentDragMode = NoDrag;
+                            dragThresholdExceeded = false;
+                            dragStartPos = event->pos();
+
+                            multiResizeStartTimes.clear();
+                            multiResizeStartDurations.clear();
+                            for (int index : selectedNoteIndices) {
+                                if (index >= 0 && index < notes.size()) {
+                                    const Note &note = notes[index];
+                                    multiResizeStartTimes.append(qMakePair(index, note.getStartTime()));
+                                    multiResizeStartDurations.append(qMakePair(index, note.getDuration()));
+                                }
+                            }
+                            return;
+                        }
                     }
                 }
             }
@@ -1572,8 +1705,7 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
                     // Already handled above with detectDragMode
                     return;
                 } else {
-                    // Multi-selection - only allow dragging the group (no resize/curve edit)
-                    // Use pending mode with threshold to avoid accidental drags from pen barrel buttons
+                    // Multi-selection - allow dragging the group
                     pendingDragMode = DraggingNote;
                     currentDragMode = NoDrag;  // Don't start dragging yet
                     dragThresholdExceeded = false;
@@ -1653,7 +1785,7 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::RightButton) {
         // Handle segment editing mode
         if (segmentEditingMode && selectedSegmentIndex >= 0) {
-            showSegmentContextMenu(event->globalPos());
+            showSegmentContextMenu(event->globalPosition().toPoint());
             return;
         }
 
@@ -1666,7 +1798,7 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
 
         // Only show menu if we have selection
         if (!selectedNoteIndices.isEmpty()) {
-            showNoteContextMenu(event->globalPos());
+            showNoteContextMenu(event->globalPosition().toPoint());
         }
     }
 }
@@ -1808,16 +1940,14 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
             break;
         }
 
-        case EditingBottomCurve: {
-            // Edit bottom curve by dragging dot vertically
-            double curveChange = delta.y() / 50.0;  // Positive because down = more for bottom
+        case EditingPitchCurve: {
+            // Edit pitch curve by dragging dot vertically (Hz, log-y via canvas mapping)
+            double startHz = dragStartCurve.valueAt(editingDotTimePos);
+            int startPixelY = frequencyToPixel(startHz);
+            double newHz = pixelToFrequency(startPixelY + delta.y());
 
-            double originalValue = dragStartCurve.valueAt(editingDotTimePos);
-            double newValue = qBound(0.0, originalValue + curveChange, 1.0);
-
-            // Get current bottom curve
-            Curve &bottomCurve = note.getBottomCurve();
-            bottomCurve.clearPoints();
+            Curve &pitchCurve = note.getPitchCurve();
+            pitchCurve.clearPoints();
 
             // Rebuild curve with adaptive number of control points
             int numDots = calculateCurveDotCount(note);
@@ -1826,15 +1956,15 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
                 double value;
 
                 if (i == editingDotIndex + 1) {
-                    value = newValue;
+                    value = newHz;
                 } else {
                     value = dragStartCurve.valueAt(t);
                 }
 
-                bottomCurve.addPoint(t, value);
+                pitchCurve.addPoint(t, value);
             }
 
-            bottomCurve.sortPoints();
+            pitchCurve.sortPoints();
             break;
         }
 
@@ -1880,43 +2010,91 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
             break;
         }
 
-        case EditingBottomCurveStart: {
-            // Edit bottom curve start value (t=0.0)
-            double curveChange = delta.y() / 50.0;
-            double originalValue = dragStartCurve.valueAt(0.0);
-            double newValue = qBound(0.0, originalValue + curveChange, 1.0);
+        case EditingPitchCurveStart: {
+            // Edit pitch curve start value (t=0.0)
+            double startHz = dragStartCurve.valueAt(0.0);
+            int startPixelY = frequencyToPixel(startHz);
+            double newHz = pixelToFrequency(startPixelY + delta.y());
 
-            Curve &bottomCurve = note.getBottomCurve();
-            bottomCurve.clearPoints();
+            Curve &pitchCurve = note.getPitchCurve();
+            pitchCurve.clearPoints();
 
-            // Rebuild curve, changing only the start point
             int numDots = calculateCurveDotCount(note);
             for (int i = 0; i <= numDots + 1; ++i) {
                 double t = i / (numDots + 1.0);
-                double value = (i == 0) ? newValue : dragStartCurve.valueAt(t);
-                bottomCurve.addPoint(t, value);
+                double value = (i == 0) ? newHz : dragStartCurve.valueAt(t);
+                pitchCurve.addPoint(t, value);
             }
-            bottomCurve.sortPoints();
+            pitchCurve.sortPoints();
             break;
         }
 
-        case EditingBottomCurveEnd: {
-            // Edit bottom curve end value (t=1.0)
-            double curveChange = delta.y() / 50.0;
-            double originalValue = dragStartCurve.valueAt(1.0);
-            double newValue = qBound(0.0, originalValue + curveChange, 1.0);
+        case EditingPitchCurveEnd: {
+            // Edit pitch curve end value (t=1.0)
+            double startHz = dragStartCurve.valueAt(1.0);
+            int startPixelY = frequencyToPixel(startHz);
+            double newHz = pixelToFrequency(startPixelY + delta.y());
 
-            Curve &bottomCurve = note.getBottomCurve();
-            bottomCurve.clearPoints();
+            Curve &pitchCurve = note.getPitchCurve();
+            pitchCurve.clearPoints();
 
-            // Rebuild curve, changing only the end point
             int numDots = calculateCurveDotCount(note);
             for (int i = 0; i <= numDots + 1; ++i) {
                 double t = i / (numDots + 1.0);
-                double value = (i == numDots + 1) ? newValue : dragStartCurve.valueAt(t);
-                bottomCurve.addPoint(t, value);
+                double value = (i == numDots + 1) ? newHz : dragStartCurve.valueAt(t);
+                pitchCurve.addPoint(t, value);
             }
-            bottomCurve.sortPoints();
+            pitchCurve.sortPoints();
+            break;
+        }
+
+        case TransformStretchTop:
+        case TransformStretchBottom: {
+            // Vertical pitch stretch: scale each curve point's deviation from nominal
+            // by a factor derived from how far the handle has moved relative to the pivot.
+            int pivotY = frequencyToPixel(note.getPitchHz());
+            int origHandleY = (currentDragMode == TransformStretchTop)
+                ? transformModeRect.top()
+                : transformModeRect.bottom();
+            int origOffset = origHandleY - pivotY;
+            if (origOffset == 0) break;  // Degenerate — skip
+            double scale = double(origOffset + delta.y()) / double(origOffset);
+
+            Curve &pitchCurve = note.getPitchCurve();
+            pitchCurve.clearPoints();
+            for (const auto &p : dragStartCurve.getPoints()) {
+                int origPixelY = frequencyToPixel(p.value);
+                int newPixelY  = pivotY + static_cast<int>((origPixelY - pivotY) * scale);
+                pitchCurve.addPoint(p.time, pixelToFrequency(newPixelY));
+            }
+            pitchCurve.sortPoints();
+            break;
+        }
+
+        case TransformRotate: {
+            // Anchored rotation: pivot at the corner OPPOSITE to the one being dragged
+            // so the grabbed corner moves with the cursor and the other side stays put.
+            // Implemented as a pitch shear around t_pivot (anchor's normalised time).
+            const QPointF &anchor = transformRotateAnchor;
+            double dx0 = dragStartPos.x() - anchor.x();
+            double dy0 = dragStartPos.y() - anchor.y();
+            double dx1 = (dragStartPos.x() + delta.x()) - anchor.x();
+            double dy1 = (dragStartPos.y() + delta.y()) - anchor.y();
+            double angle = std::atan2(dy1, dx1) - std::atan2(dy0, dx0);
+            double tanA = std::tan(angle);
+            int width = transformModeRect.width();
+            double tPivot = (width > 0)
+                ? double(anchor.x() - transformModeRect.left()) / double(width)
+                : 0.5;
+
+            Curve &pitchCurve = note.getPitchCurve();
+            pitchCurve.clearPoints();
+            for (const auto &p : dragStartCurve.getPoints()) {
+                int origPixelY = frequencyToPixel(p.value);
+                int newPixelY  = origPixelY + static_cast<int>(tanA * (p.time - tPivot) * width);
+                pitchCurve.addPoint(p.time, pixelToFrequency(newPixelY));
+            }
+            pitchCurve.sortPoints();
             break;
         }
 
@@ -1924,8 +2102,37 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
                 break;
             }
         } else {
-            // Multi-selection - only allow dragging the group
-            if (currentDragMode == DraggingNote) {
+            // Multi-selection resize or drag
+            if (currentDragMode == ResizingLeft) {
+                double timeDelta = pixelToTime(delta.x()) - pixelToTime(0);
+                for (int i = 0; i < multiResizeStartTimes.size(); ++i) {
+                    int index = multiResizeStartTimes[i].first;
+                    double origStart = multiResizeStartTimes[i].second;
+                    double origDur = multiResizeStartDurations[i].second;
+                    if (index >= 0 && index < notes.size()) {
+                        double newStart = origStart + timeDelta;
+                        double newDur = origDur - timeDelta;
+                        if (newDur < 1.0) {
+                            newDur = 1.0;
+                            newStart = origStart + origDur - 1.0;
+                        }
+                        if (newStart < 0.0) newStart = 0.0;
+                        notes[index].setStartTime(newStart);
+                        notes[index].setDuration(newDur);
+                    }
+                }
+            } else if (currentDragMode == ResizingRight) {
+                double timeDelta = pixelToTime(delta.x()) - pixelToTime(0);
+                for (int i = 0; i < multiResizeStartDurations.size(); ++i) {
+                    int index = multiResizeStartDurations[i].first;
+                    double origDur = multiResizeStartDurations[i].second;
+                    if (index >= 0 && index < notes.size()) {
+                        double newDur = origDur + timeDelta;
+                        if (newDur < 1.0) newDur = 1.0;
+                        notes[index].setDuration(newDur);
+                    }
+                }
+            } else if (currentDragMode == DraggingNote) {
                 // Calculate time delta from original position
                 double timeDelta = pixelToTime(delta.x()) - pixelToTime(0);
 
@@ -2000,7 +2207,7 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
         return;
     }
 
-    // Update cursor based on hover position over selected note (only for single selection)
+    // Update cursor based on hover position over selected notes
     if (selectedNoteIndices.size() == 1 && currentDragMode == NoDrag && !isDrawingNote) {
         const QVector<Note> &notes = phrase.getNotes();
         int selectedIndex = selectedNoteIndices.first();
@@ -2011,28 +2218,57 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
             switch (hoverMode) {
             case ResizingLeft:
             case ResizingRight:
-                setCursor(Qt::SizeHorCursor);  // Horizontal resize cursor
+                setCursor(Qt::SizeHorCursor);
                 break;
             case EditingTopCurve:
-            case EditingBottomCurve:
+            case EditingPitchCurve:
             case EditingTopCurveStart:
             case EditingTopCurveEnd:
-            case EditingBottomCurveStart:
-            case EditingBottomCurveEnd:
-                setCursor(Qt::SizeVerCursor);  // Vertical resize cursor for curve editing
+            case EditingPitchCurveStart:
+            case EditingPitchCurveEnd:
+            case TransformStretchTop:
+            case TransformStretchBottom:
+                setCursor(Qt::SizeVerCursor);
+                break;
+            case TransformRotate:
+                setCursor(Qt::CrossCursor);
                 break;
             case DraggingNote:
-                setCursor(Qt::SizeAllCursor);  // Move cursor
+                setCursor(Qt::SizeAllCursor);
                 break;
             case NoDrag:
-                setCursor(Qt::ArrowCursor);  // Default cursor
+                setCursor(Qt::ArrowCursor);
                 break;
             default:
                 break;
             }
         }
+    } else if (selectedNoteIndices.size() > 1 && currentDragMode == NoDrag && !isDrawingNote) {
+        // Multi-selection: show resize cursor when hovering over any selected note's handles
+        const QVector<Note> &notes = phrase.getNotes();
+        bool foundHandle = false;
+        for (int selIdx : selectedNoteIndices) {
+            if (selIdx >= 0 && selIdx < notes.size()) {
+                const Note &selNote = notes[selIdx];
+                if (getLeftResizeHandle(selNote).contains(event->pos()) ||
+                    getRightResizeHandle(selNote).contains(event->pos())) {
+                    setCursor(Qt::SizeHorCursor);
+                    foundHandle = true;
+                    break;
+                }
+            }
+        }
+        if (!foundHandle) {
+            // Check if hovering over any selected note body
+            int hoverIndex = findNoteAtPosition(event->pos());
+            if (selectedNoteIndices.contains(hoverIndex)) {
+                setCursor(Qt::SizeAllCursor);
+            } else {
+                setCursor(Qt::ArrowCursor);
+            }
+        }
     } else if (!isDrawingNote) {
-        setCursor(Qt::ArrowCursor);  // Default cursor when not over note
+        setCursor(Qt::ArrowCursor);
     }
 
     // Handle lasso selection dragging
@@ -2129,22 +2365,34 @@ void ScoreCanvas::mouseReleaseEvent(QMouseEvent *event)
                     break;
                 }
 
-                case EditingBottomCurve: {
-                    // Push curve edit command for bottom curve
-                    Curve newCurve = note.getBottomCurve();
+                case EditingPitchCurve: {
+                    // Push curve edit command for pitch curve
+                    Curve newCurve = note.getPitchCurve();
                     undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
-                                                         EditCurveCommand::BottomCurve,
+                                                         EditCurveCommand::PitchCurve,
                                                          dragStartCurve, newCurve,
                                                          this));
                     break;
                 }
 
-                case EditingBottomCurveStart:
-                case EditingBottomCurveEnd: {
-                    // Push curve edit command for bottom curve (start/end)
-                    Curve newCurve = note.getBottomCurve();
+                case EditingPitchCurveStart:
+                case EditingPitchCurveEnd: {
+                    // Push curve edit command for pitch curve (start/end)
+                    Curve newCurve = note.getPitchCurve();
                     undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
-                                                         EditCurveCommand::BottomCurve,
+                                                         EditCurveCommand::PitchCurve,
+                                                         dragStartCurve, newCurve,
+                                                         this));
+                    break;
+                }
+
+                case TransformStretchTop:
+                case TransformStretchBottom:
+                case TransformRotate: {
+                    // Transform-mode pitch-curve edit
+                    Curve newCurve = note.getPitchCurve();
+                    undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
+                                                         EditCurveCommand::PitchCurve,
                                                          dragStartCurve, newCurve,
                                                          this));
                     break;
@@ -2209,6 +2457,32 @@ void ScoreCanvas::mouseReleaseEvent(QMouseEvent *event)
 
             undoStack->push(new MoveMultipleNotesCommand(&phrase, selectedNoteIndices,
                                                          oldStates, newStates, this));
+        } else if (selectedNoteIndices.size() > 1 &&
+                   (currentDragMode == ResizingLeft || currentDragMode == ResizingRight)) {
+            // Multi-selection resize - create batch resize command
+            QVector<ResizeMultipleNotesCommand::NoteState> oldStates;
+            QVector<ResizeMultipleNotesCommand::NoteState> newStates;
+
+            const QVector<Note> &notes = phrase.getNotes();
+
+            for (int i = 0; i < multiResizeStartTimes.size(); ++i) {
+                int index = multiResizeStartTimes[i].first;
+                ResizeMultipleNotesCommand::NoteState oldState;
+                oldState.index = index;
+                oldState.startTime = multiResizeStartTimes[i].second;
+                oldState.duration = multiResizeStartDurations[i].second;
+                oldStates.append(oldState);
+
+                if (index >= 0 && index < notes.size()) {
+                    ResizeMultipleNotesCommand::NoteState newState;
+                    newState.index = index;
+                    newState.startTime = notes[index].getStartTime();
+                    newState.duration = notes[index].getDuration();
+                    newStates.append(newState);
+                }
+            }
+
+            undoStack->push(new ResizeMultipleNotesCommand(&phrase, oldStates, newStates, this));
         }
 
         currentDragMode = NoDrag;
@@ -2365,6 +2639,9 @@ void ScoreCanvas::mouseReleaseEvent(QMouseEvent *event)
             newNote.setDynamicsCurve(dynamicsCurve);
         }
 
+        // Stamp current toolbar variation
+        newNote.setVariationIndex(m_activeVariationIndex);
+
         // Use undo command to add note
         undoStack->push(new AddNoteCommand(&phrase, newNote, this));
 
@@ -2383,6 +2660,13 @@ void ScoreCanvas::mouseReleaseEvent(QMouseEvent *event)
 
 void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
 {
+    // In transform mode, draw against the frozen rect captured at mode entry so the
+    // box doesn't visibly resize as the user transforms the curve.
+    QRect frozenSelectionRect;
+    if (transformMode) {
+        frozenSelectionRect = transformModeRect;
+    }
+
     // Calculate bounding rectangle for the note
     int x = timeToPixel(note.getStartTime());
     int width = timeToPixel(note.getEndTime()) - x;
@@ -2415,13 +2699,57 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
     int bottomY = frequencyToPixel(minPitch) + blobHeight/2 + 5;
     int height = bottomY - topY;
 
-    // Draw selection rectangle (gray outline)
-    QRect selectionRect(x - 5, topY, width + 10, height);
+    QRect selectionRect = transformMode ? frozenSelectionRect
+                                        : QRect(x - 5, topY, width + 10, height);
+
+    if (transformMode) {
+        // Transform mode: purple outline + 8 perimeter handles for pitch-curve transforms.
+        const QColor transformColor(94, 53, 177);  // #5E35B1 (deep purple)
+        painter.setPen(QPen(transformColor, 2));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(selectionRect);
+
+        painter.setBrush(transformColor);
+        painter.setPen(QPen(QColor(49, 27, 146), 1));  // #311B92 darker purple
+
+        const int cornerSize = 10;
+        const int midSize = 8;
+
+        int leftX = selectionRect.left();
+        int rightX = selectionRect.right();
+        int topYr = selectionRect.top();
+        int botYr = selectionRect.bottom();
+        int midX = selectionRect.left() + selectionRect.width() / 2;
+        int midY = selectionRect.top() + selectionRect.height() / 2;
+
+        // Corners (squares)
+        painter.drawRect(leftX  - cornerSize/2, topYr - cornerSize/2, cornerSize, cornerSize);
+        painter.drawRect(rightX - cornerSize/2, topYr - cornerSize/2, cornerSize, cornerSize);
+        painter.drawRect(leftX  - cornerSize/2, botYr - cornerSize/2, cornerSize, cornerSize);
+        painter.drawRect(rightX - cornerSize/2, botYr - cornerSize/2, cornerSize, cornerSize);
+
+        // Edge midpoints (diamonds — rotated squares — to read as different from corners)
+        auto drawDiamond = [&](int cx, int cy) {
+            QPolygon d;
+            d << QPoint(cx, cy - midSize/2)
+              << QPoint(cx + midSize/2, cy)
+              << QPoint(cx, cy + midSize/2)
+              << QPoint(cx - midSize/2, cy);
+            painter.drawPolygon(d);
+        };
+        drawDiamond(midX,  topYr);   // top
+        drawDiamond(midX,  botYr);   // bottom
+        drawDiamond(leftX,  midY);   // left
+        drawDiamond(rightX, midY);   // right
+
+        return;
+    }
+
+    // Default mode: gray outline + per-point dots
     painter.setPen(QPen(QColor(128, 128, 128), 2));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(selectionRect);
 
-    // Draw manipulation dots (round circles)
     painter.setBrush(QColor(200, 200, 200));
     painter.setPen(QPen(QColor(100, 100, 100), 1));
 
@@ -2437,9 +2765,15 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
         painter.drawEllipse(dotX - dotSize/2, selectionRect.top() - dotSize/2, dotSize, dotSize);
     }
 
-    // Left edge dots (2 dots - top for dynamics curve start, middle is square for resize)
+    // Bottom edge dots (adaptive count for shaping pitch curve)
+    for (int i = 1; i <= numDots; ++i) {
+        int dotX = selectionRect.left() + (selectionRect.width() * i / numSegments);
+        painter.drawEllipse(dotX - dotSize/2, selectionRect.bottom() - dotSize/2, dotSize, dotSize);
+    }
+
+    // Left edge dots: top (dynamics start), middle (resize, square), bottom (pitch start)
     int leftX = selectionRect.left();
-    for (int i = 1; i <= 2; ++i) {
+    for (int i = 1; i <= 3; ++i) {
         int dotY = selectionRect.top() + (selectionRect.height() * i / 4);
         if (i == 2) {
             // Middle dot is square (resize handle)
@@ -2451,9 +2785,9 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
         }
     }
 
-    // Right edge dots (2 dots - top for dynamics curve end, middle is square for resize)
+    // Right edge dots: top (dynamics end), middle (resize, square), bottom (pitch end)
     int rightX = selectionRect.right();
-    for (int i = 1; i <= 2; ++i) {
+    for (int i = 1; i <= 3; ++i) {
         int dotY = selectionRect.top() + (selectionRect.height() * i / 4);
         if (i == 2) {
             // Middle dot is square (resize handle)
@@ -2596,12 +2930,14 @@ void ScoreCanvas::selectNotes(const QVector<int> &indices)
 {
     selectedNoteIndices = indices;
     emit noteSelectionChanged();
+    update();
 }
 
 void ScoreCanvas::deselectAll()
 {
     selectedNoteIndices.clear();
     emit noteSelectionChanged();
+    update();
 }
 
 bool ScoreCanvas::isNoteSelected(int index) const
@@ -2782,6 +3118,40 @@ ScoreCanvas::DragMode ScoreCanvas::detectDragMode(const QPoint &pos, const Note 
     int dotSize = 8;
     int clickTolerance = 12;  // Larger tolerance for easier clicking
 
+    // Transform mode: hit-test the 8 perimeter handles on the frozen rect.
+    if (transformMode) {
+        const int handleTol = 14;  // Larger than per-point click tolerance for these
+        int leftX  = transformModeRect.left();
+        int rightX = transformModeRect.right();
+        int topYr  = transformModeRect.top();
+        int botYr  = transformModeRect.bottom();
+        int midX   = transformModeRect.left() + transformModeRect.width() / 2;
+        int midY   = transformModeRect.top() + transformModeRect.height() / 2;
+
+        auto hits = [&](int cx, int cy) {
+            return QRect(cx - handleTol/2, cy - handleTol/2, handleTol, handleTol).contains(pos);
+        };
+
+        // Edge midpoints — vertical-stretch (top/bottom) or time-stretch via existing resize (left/right)
+        if (hits(midX, topYr)) return TransformStretchTop;
+        if (hits(midX, botYr)) return TransformStretchBottom;
+        if (hits(leftX,  midY)) return ResizingLeft;
+        if (hits(rightX, midY)) return ResizingRight;
+
+        // Corners — anchored rotation: each corner's pivot is the opposite corner so the
+        // grabbed corner moves and the other side stays put.
+        auto setAnchor = [this](int ax, int ay) {
+            const_cast<ScoreCanvas*>(this)->transformRotateAnchor = QPointF(ax, ay);
+        };
+        if (hits(leftX,  topYr)) { setAnchor(rightX, botYr); return TransformRotate; }
+        if (hits(rightX, topYr)) { setAnchor(leftX,  botYr); return TransformRotate; }
+        if (hits(leftX,  botYr)) { setAnchor(rightX, topYr); return TransformRotate; }
+        if (hits(rightX, botYr)) { setAnchor(leftX,  topYr); return TransformRotate; }
+
+        // Anywhere else inside transform mode: do nothing (no per-point edits, no note drag)
+        return NoDrag;
+    }
+
     int numDots = calculateCurveDotCount(note);
     int numSegments = numDots + 1;  // e.g., 4 dots = 5 segments
 
@@ -2796,6 +3166,19 @@ ScoreCanvas::DragMode ScoreCanvas::detectDragMode(const QPoint &pos, const Note 
             const_cast<ScoreCanvas*>(this)->editingDotIndex = i - 1;  // 0-based index
             const_cast<ScoreCanvas*>(this)->editingDotTimePos = static_cast<double>(i) / numSegments;  // Normalized time
             return EditingTopCurve;
+        }
+    }
+
+    // Check bottom edge dots (for editing pitch curve)
+    int bottomY = noteRect.bottom();
+    for (int i = 1; i <= numDots; ++i) {
+        int dotX = noteRect.left() + (noteRect.width() * i / numSegments);
+        QRect dotRect(dotX - clickTolerance/2, bottomY - clickTolerance/2,
+                     clickTolerance, clickTolerance);
+        if (dotRect.contains(pos)) {
+            const_cast<ScoreCanvas*>(this)->editingDotIndex = i - 1;
+            const_cast<ScoreCanvas*>(this)->editingDotTimePos = static_cast<double>(i) / numSegments;
+            return EditingPitchCurve;
         }
     }
 
@@ -2817,6 +3200,24 @@ ScoreCanvas::DragMode ScoreCanvas::detectDragMode(const QPoint &pos, const Note 
     if (rightDotRect.contains(pos)) {
         const_cast<ScoreCanvas*>(this)->editingDotTimePos = 1.0;  // End of curve
         return EditingTopCurveEnd;
+    }
+
+    // Check left edge bottom dot (for editing pitch curve start value)
+    int leftPitchDotY = noteRect.top() + (noteRect.height() * 3 / 4);
+    QRect leftPitchDotRect(leftX - clickTolerance/2, leftPitchDotY - clickTolerance/2,
+                           clickTolerance, clickTolerance);
+    if (leftPitchDotRect.contains(pos)) {
+        const_cast<ScoreCanvas*>(this)->editingDotTimePos = 0.0;
+        return EditingPitchCurveStart;
+    }
+
+    // Check right edge bottom dot (for editing pitch curve end value)
+    int rightPitchDotY = noteRect.top() + (noteRect.height() * 3 / 4);
+    QRect rightPitchDotRect(rightX - clickTolerance/2, rightPitchDotY - clickTolerance/2,
+                            clickTolerance, clickTolerance);
+    if (rightPitchDotRect.contains(pos)) {
+        const_cast<ScoreCanvas*>(this)->editingDotTimePos = 1.0;
+        return EditingPitchCurveEnd;
     }
 
     // Check resize handles (higher priority than note body)
@@ -2936,12 +3337,35 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                     event->accept();
                     return;
                 }
+
+                // Selected note: open curve editor for the active curve.
+                // Defer so the tablet press completes before the modal dialog opens —
+                // otherwise the pen never gets a TabletRelease and is inert inside the dialog.
+                if (selectedNoteIndices.contains(clickedNoteIndex)) {
+                    QTimer::singleShot(0, this, [this, clickedNoteIndex]() {
+                        editNoteCurve(clickedNoteIndex);
+                    });
+                    event->accept();
+                    return;
+                }
             }
         }
 
         // Mode-specific behavior (left button / pen tip)
         if (currentInputMode == SelectionMode) {
             const QVector<Note> &notes = phrase.getNotes();
+
+            // Ctrl+click on the body of an already-selected note toggles it off
+            if (event->modifiers() & Qt::ControlModifier) {
+                int toggleIndex = findNoteAtPosition(pos.toPoint());
+                if (toggleIndex >= 0 && selectedNoteIndices.contains(toggleIndex)) {
+                    selectedNoteIndices.removeAll(toggleIndex);
+                    emit noteSelectionChanged();
+                    update();
+                    event->accept();
+                    return;
+                }
+            }
 
             // FIRST: Check if clicking on handles/dots of selected note (these are outside note rect)
             if (selectedNoteIndices.size() == 1) {
@@ -2972,10 +3396,29 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                             } else {
                                 dragStartCurve = selectedNote.getDynamicsCurve();
                             }
-                        } else if (pendingDragMode == EditingBottomCurve ||
-                                   pendingDragMode == EditingBottomCurveStart ||
-                                   pendingDragMode == EditingBottomCurveEnd) {
-                            dragStartCurve = selectedNote.getBottomCurve();
+                        } else if (pendingDragMode == EditingPitchCurve ||
+                                   pendingDragMode == EditingPitchCurveStart ||
+                                   pendingDragMode == EditingPitchCurveEnd) {
+                            dragStartCurve = selectedNote.getPitchCurve();
+                            if (dragStartCurve.isEmpty()) {
+                                // Discrete note: seed with nominal pitch so valueAt() returns nominal
+                                // for unedited points. First drag will auto-promote to continuous.
+                                double nominal = selectedNote.getPitchHz();
+                                dragStartCurve.addPoint(0.0, nominal);
+                                dragStartCurve.addPoint(1.0, nominal);
+                            }
+                        } else if (pendingDragMode == TransformStretchTop ||
+                                   pendingDragMode == TransformStretchBottom ||
+                                   pendingDragMode == TransformRotate) {
+                            dragStartCurve = selectedNote.getPitchCurve();
+                            if (dragStartCurve.isEmpty()) {
+                                int n = calculateCurveDotCount(selectedNote) + 2;
+                                double nominal = selectedNote.getPitchHz();
+                                for (int i = 0; i < n; ++i) {
+                                    double t = (n == 1) ? 0.0 : double(i) / (n - 1);
+                                    dragStartCurve.addPoint(t, nominal);
+                                }
+                            }
                         } else if (pendingDragMode == DraggingNote && selectedNote.hasPitchCurve()) {
                             // Save pitch curve for continuous notes
                             dragStartCurve = selectedNote.getPitchCurve();
@@ -2983,6 +3426,51 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
 
                         event->accept();
                         return;  // Don't proceed with other selection logic
+                    }
+                }
+            }
+
+            // Check resize handles on any selected note (multi-selection resize)
+            if (selectedNoteIndices.size() > 1) {
+                for (int selIdx : selectedNoteIndices) {
+                    if (selIdx >= 0 && selIdx < notes.size()) {
+                        const Note &selNote = notes[selIdx];
+                        if (getLeftResizeHandle(selNote).contains(pos.toPoint())) {
+                            pendingDragMode = ResizingLeft;
+                            currentDragMode = NoDrag;
+                            dragThresholdExceeded = false;
+                            dragStartPos = pos.toPoint();
+
+                            multiResizeStartTimes.clear();
+                            multiResizeStartDurations.clear();
+                            for (int index : selectedNoteIndices) {
+                                if (index >= 0 && index < notes.size()) {
+                                    const Note &note = notes[index];
+                                    multiResizeStartTimes.append(qMakePair(index, note.getStartTime()));
+                                    multiResizeStartDurations.append(qMakePair(index, note.getDuration()));
+                                }
+                            }
+                            event->accept();
+                            return;
+                        }
+                        if (getRightResizeHandle(selNote).contains(pos.toPoint())) {
+                            pendingDragMode = ResizingRight;
+                            currentDragMode = NoDrag;
+                            dragThresholdExceeded = false;
+                            dragStartPos = pos.toPoint();
+
+                            multiResizeStartTimes.clear();
+                            multiResizeStartDurations.clear();
+                            for (int index : selectedNoteIndices) {
+                                if (index >= 0 && index < notes.size()) {
+                                    const Note &note = notes[index];
+                                    multiResizeStartTimes.append(qMakePair(index, note.getStartTime()));
+                                    multiResizeStartDurations.append(qMakePair(index, note.getDuration()));
+                                }
+                            }
+                            event->accept();
+                            return;
+                        }
                     }
                 }
             }
@@ -2997,10 +3485,9 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                     event->accept();
                     return;
                 } else {
-                    // Multi-selection - only allow dragging the group (no resize/curve edit)
-                    // Use pending mode with threshold to avoid accidental drags from pen barrel buttons
+                    // Multi-selection - allow dragging the group
                     pendingDragMode = DraggingNote;
-                    currentDragMode = NoDrag;  // Don't start dragging yet
+                    currentDragMode = NoDrag;
                     dragThresholdExceeded = false;
                     dragStartPos = pos.toPoint();
 
@@ -3200,15 +3687,14 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                 break;
             }
 
-            case EditingBottomCurve: {
-                // Edit bottom curve by dragging dot vertically
-                double curveChange = delta.y() / 50.0;  // Positive because down = more for bottom
+            case EditingPitchCurve: {
+                // Edit pitch curve by dragging dot vertically (Hz, log-y via canvas mapping)
+                double startHz = dragStartCurve.valueAt(editingDotTimePos);
+                int startPixelY = frequencyToPixel(startHz);
+                double newHz = pixelToFrequency(startPixelY + delta.y());
 
-                double originalValue = dragStartCurve.valueAt(editingDotTimePos);
-                double newValue = qBound(0.0, originalValue + curveChange, 1.0);
-
-                Curve &bottomCurve = note.getBottomCurve();
-                bottomCurve.clearPoints();
+                Curve &pitchCurve = note.getPitchCurve();
+                pitchCurve.clearPoints();
 
                 // Rebuild curve with adaptive number of control points
                 int numDots = calculateCurveDotCount(note);
@@ -3217,15 +3703,15 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                     double value;
 
                     if (i == editingDotIndex + 1) {
-                        value = newValue;
+                        value = newHz;
                     } else {
                         value = dragStartCurve.valueAt(t);
                     }
 
-                    bottomCurve.addPoint(t, value);
+                    pitchCurve.addPoint(t, value);
                 }
 
-                bottomCurve.sortPoints();
+                pitchCurve.sortPoints();
                 break;
             }
 
@@ -3269,41 +3755,86 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                 break;
             }
 
-            case EditingBottomCurveStart: {
-                // Edit bottom curve start value (t=0.0)
-                double curveChange = delta.y() / 50.0;
-                double originalValue = dragStartCurve.valueAt(0.0);
-                double newValue = qBound(0.0, originalValue + curveChange, 1.0);
+            case EditingPitchCurveStart: {
+                // Edit pitch curve start value (t=0.0)
+                double startHz = dragStartCurve.valueAt(0.0);
+                int startPixelY = frequencyToPixel(startHz);
+                double newHz = pixelToFrequency(startPixelY + delta.y());
 
-                Curve &bottomCurve = note.getBottomCurve();
-                bottomCurve.clearPoints();
+                Curve &pitchCurve = note.getPitchCurve();
+                pitchCurve.clearPoints();
 
                 int numDots = calculateCurveDotCount(note);
                 for (int i = 0; i <= numDots + 1; ++i) {
                     double t = i / (numDots + 1.0);
-                    double value = (i == 0) ? newValue : dragStartCurve.valueAt(t);
-                    bottomCurve.addPoint(t, value);
+                    double value = (i == 0) ? newHz : dragStartCurve.valueAt(t);
+                    pitchCurve.addPoint(t, value);
                 }
-                bottomCurve.sortPoints();
+                pitchCurve.sortPoints();
                 break;
             }
 
-            case EditingBottomCurveEnd: {
-                // Edit bottom curve end value (t=1.0)
-                double curveChange = delta.y() / 50.0;
-                double originalValue = dragStartCurve.valueAt(1.0);
-                double newValue = qBound(0.0, originalValue + curveChange, 1.0);
+            case EditingPitchCurveEnd: {
+                // Edit pitch curve end value (t=1.0)
+                double startHz = dragStartCurve.valueAt(1.0);
+                int startPixelY = frequencyToPixel(startHz);
+                double newHz = pixelToFrequency(startPixelY + delta.y());
 
-                Curve &bottomCurve = note.getBottomCurve();
-                bottomCurve.clearPoints();
+                Curve &pitchCurve = note.getPitchCurve();
+                pitchCurve.clearPoints();
 
                 int numDots = calculateCurveDotCount(note);
                 for (int i = 0; i <= numDots + 1; ++i) {
                     double t = i / (numDots + 1.0);
-                    double value = (i == numDots + 1) ? newValue : dragStartCurve.valueAt(t);
-                    bottomCurve.addPoint(t, value);
+                    double value = (i == numDots + 1) ? newHz : dragStartCurve.valueAt(t);
+                    pitchCurve.addPoint(t, value);
                 }
-                bottomCurve.sortPoints();
+                pitchCurve.sortPoints();
+                break;
+            }
+
+            case TransformStretchTop:
+            case TransformStretchBottom: {
+                int pivotY = frequencyToPixel(note.getPitchHz());
+                int origHandleY = (currentDragMode == TransformStretchTop)
+                    ? transformModeRect.top()
+                    : transformModeRect.bottom();
+                int origOffset = origHandleY - pivotY;
+                if (origOffset == 0) break;
+                double scale = double(origOffset + delta.y()) / double(origOffset);
+
+                Curve &pitchCurve = note.getPitchCurve();
+                pitchCurve.clearPoints();
+                for (const auto &p : dragStartCurve.getPoints()) {
+                    int origPixelY = frequencyToPixel(p.value);
+                    int newPixelY  = pivotY + static_cast<int>((origPixelY - pivotY) * scale);
+                    pitchCurve.addPoint(p.time, pixelToFrequency(newPixelY));
+                }
+                pitchCurve.sortPoints();
+                break;
+            }
+
+            case TransformRotate: {
+                const QPointF &anchor = transformRotateAnchor;
+                double dx0 = dragStartPos.x() - anchor.x();
+                double dy0 = dragStartPos.y() - anchor.y();
+                double dx1 = (dragStartPos.x() + delta.x()) - anchor.x();
+                double dy1 = (dragStartPos.y() + delta.y()) - anchor.y();
+                double angle = std::atan2(dy1, dx1) - std::atan2(dy0, dx0);
+                double tanA = std::tan(angle);
+                int width = transformModeRect.width();
+                double tPivot = (width > 0)
+                    ? double(anchor.x() - transformModeRect.left()) / double(width)
+                    : 0.5;
+
+                Curve &pitchCurve = note.getPitchCurve();
+                pitchCurve.clearPoints();
+                for (const auto &p : dragStartCurve.getPoints()) {
+                    int origPixelY = frequencyToPixel(p.value);
+                    int newPixelY  = origPixelY + static_cast<int>(tanA * (p.time - tPivot) * width);
+                    pitchCurve.addPoint(p.time, pixelToFrequency(newPixelY));
+                }
+                pitchCurve.sortPoints();
                 break;
             }
 
@@ -3311,8 +3842,37 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                     break;
                 }
             } else {
-                // Multi-selection - only allow dragging the group
-                if (currentDragMode == DraggingNote) {
+                // Multi-selection resize or drag
+                if (currentDragMode == ResizingLeft) {
+                    double timeDelta = pixelToTime(delta.x()) - pixelToTime(0);
+                    for (int i = 0; i < multiResizeStartTimes.size(); ++i) {
+                        int index = multiResizeStartTimes[i].first;
+                        double origStart = multiResizeStartTimes[i].second;
+                        double origDur = multiResizeStartDurations[i].second;
+                        if (index >= 0 && index < notes.size()) {
+                            double newStart = origStart + timeDelta;
+                            double newDur = origDur - timeDelta;
+                            if (newDur < 100.0) {
+                                newDur = 100.0;
+                                newStart = origStart + origDur - 100.0;
+                            }
+                            if (newStart < 0.0) newStart = 0.0;
+                            notes[index].setStartTime(newStart);
+                            notes[index].setDuration(newDur);
+                        }
+                    }
+                } else if (currentDragMode == ResizingRight) {
+                    double timeDelta = pixelToTime(delta.x()) - pixelToTime(0);
+                    for (int i = 0; i < multiResizeStartDurations.size(); ++i) {
+                        int index = multiResizeStartDurations[i].first;
+                        double origDur = multiResizeStartDurations[i].second;
+                        if (index >= 0 && index < notes.size()) {
+                            double newDur = origDur + timeDelta;
+                            if (newDur < 100.0) newDur = 100.0;
+                            notes[index].setDuration(newDur);
+                        }
+                    }
+                } else if (currentDragMode == DraggingNote) {
                     // Calculate time delta from original position
                     double timeDelta = pixelToTime(delta.x()) - pixelToTime(0);
 
@@ -3488,22 +4048,33 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                         break;
                     }
 
-                    case EditingBottomCurve: {
-                        // Push curve edit command for bottom curve
-                        Curve newCurve = note.getBottomCurve();
+                    case EditingPitchCurve: {
+                        // Push curve edit command for pitch curve
+                        Curve newCurve = note.getPitchCurve();
                         undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
-                                                             EditCurveCommand::BottomCurve,
+                                                             EditCurveCommand::PitchCurve,
                                                              dragStartCurve, newCurve,
                                                              this));
                         break;
                     }
 
-                    case EditingBottomCurveStart:
-                    case EditingBottomCurveEnd: {
-                        // Push curve edit command for bottom curve (start/end)
-                        Curve newCurve = note.getBottomCurve();
+                    case EditingPitchCurveStart:
+                    case EditingPitchCurveEnd: {
+                        // Push curve edit command for pitch curve (start/end)
+                        Curve newCurve = note.getPitchCurve();
                         undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
-                                                             EditCurveCommand::BottomCurve,
+                                                             EditCurveCommand::PitchCurve,
+                                                             dragStartCurve, newCurve,
+                                                             this));
+                        break;
+                    }
+
+                    case TransformStretchTop:
+                    case TransformStretchBottom:
+                    case TransformRotate: {
+                        Curve newCurve = note.getPitchCurve();
+                        undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
+                                                             EditCurveCommand::PitchCurve,
                                                              dragStartCurve, newCurve,
                                                              this));
                         break;
@@ -3568,6 +4139,32 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
 
                 undoStack->push(new MoveMultipleNotesCommand(&phrase, selectedNoteIndices,
                                                              oldStates, newStates, this));
+            } else if (selectedNoteIndices.size() > 1 &&
+                       (currentDragMode == ResizingLeft || currentDragMode == ResizingRight)) {
+                // Multi-selection resize - create batch resize command
+                QVector<ResizeMultipleNotesCommand::NoteState> oldStates;
+                QVector<ResizeMultipleNotesCommand::NoteState> newStates;
+
+                const QVector<Note> &notes = phrase.getNotes();
+
+                for (int i = 0; i < multiResizeStartTimes.size(); ++i) {
+                    int index = multiResizeStartTimes[i].first;
+                    ResizeMultipleNotesCommand::NoteState oldState;
+                    oldState.index = index;
+                    oldState.startTime = multiResizeStartTimes[i].second;
+                    oldState.duration = multiResizeStartDurations[i].second;
+                    oldStates.append(oldState);
+
+                    if (index >= 0 && index < notes.size()) {
+                        ResizeMultipleNotesCommand::NoteState newState;
+                        newState.index = index;
+                        newState.startTime = notes[index].getStartTime();
+                        newState.duration = notes[index].getDuration();
+                        newStates.append(newState);
+                    }
+                }
+
+                undoStack->push(new ResizeMultipleNotesCommand(&phrase, oldStates, newStates, this));
             }
 
             currentDragMode = NoDrag;
@@ -3707,6 +4304,9 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                 newNote.setPitchCurve(pitchCurve);
             }
 
+            // Stamp current toolbar variation
+            newNote.setVariationIndex(m_activeVariationIndex);
+
             // Use undo command to add note
             undoStack->push(new AddNoteCommand(&phrase, newNote, this));
 
@@ -3770,6 +4370,20 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
                 }
             }
         }
+    }
+
+    // Escape exits transform mode (when active and not in segment mode)
+    if (event->key() == Qt::Key_Escape && transformMode) {
+        setTransformMode(false);
+        event->accept();
+        return;
+    }
+
+    // T: toggle transform mode (only meaningful with a single note selected)
+    if (event->key() == Qt::Key_T && event->modifiers() == Qt::NoModifier) {
+        toggleTransformMode();
+        event->accept();
+        return;
     }
 
     // Enter key enters segment editing mode (alternative to double-click)
@@ -3845,7 +4459,14 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    // Ctrl+V for paste
+    // Ctrl+Shift+V: paste at end of active track (building mode)
+    if (event->key() == Qt::Key_V && event->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier)) {
+        performPaste(true);
+        event->accept();
+        return;
+    }
+
+    // Ctrl+V: paste at now marker (editing mode)
     if (event->matches(QKeySequence::Paste)) {
         performPaste();
         event->accept();
@@ -3873,6 +4494,23 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    // R: retrograde selection at now marker
+    if (event->key() == Qt::Key_R && event->modifiers() == Qt::NoModifier) {
+        performRetrograde();
+        event->accept();
+        return;
+    }
+
+    // Shift+L: link selected notes as legato (matches right-click "Link as Legato").
+    // Plain L is reserved for loop-mode at the window level.
+    if (event->key() == Qt::Key_L && event->modifiers() == Qt::ShiftModifier) {
+        if (selectedNoteIndices.size() >= 2) {
+            undoStack->push(new LinkAsLegatoCommand(&phrase, selectedNoteIndices, this));
+        }
+        event->accept();
+        return;
+    }
+
     // Let parent window handle other keys (including shortcuts)
     event->ignore();
 }
@@ -3881,6 +4519,35 @@ void ScoreCanvas::toggleSlideMode()
 {
     slideMode = !slideMode;
     emit slideModeChanged(slideMode);
+}
+
+void ScoreCanvas::toggleTransformMode()
+{
+    setTransformMode(!transformMode);
+}
+
+void ScoreCanvas::setTransformMode(bool active)
+{
+    // Transform mode requires a single-note selection.
+    if (active && selectedNoteIndices.size() != 1) {
+        active = false;
+    }
+    if (transformMode == active) {
+        return;
+    }
+    transformMode = active;
+    if (transformMode) {
+        // Freeze the selection rect at entry so it doesn't pulse as the curve grows
+        // while transforming. Live recomputation reads min/max pitch from the curve,
+        // which would make all four handles drift mid-drag.
+        const QVector<Note> &notes = phrase.getNotes();
+        int idx = selectedNoteIndices.first();
+        if (idx >= 0 && idx < notes.size()) {
+            transformModeRect = getNoteRect(notes[idx]);
+        }
+    }
+    emit transformModeChanged(transformMode);
+    update();
 }
 
 // ============================================================================
@@ -3919,16 +4586,32 @@ void ScoreCanvas::performCut()
     }
 }
 
-void ScoreCanvas::performPaste()
+void ScoreCanvas::performPaste(bool atEndOfTrack)
 {
     if (!clipboard.isEmpty()) {
-        double viewCenterTime = (horizontalScrollOffset + 400) / pixelsPerSecond * 1000.0;
-        PasteNotesCommand *pasteCmd = new PasteNotesCommand(&phrase, clipboard, viewCenterTime, activeTrackIndex, this);
+        double targetTime;
+        if (atEndOfTrack) {
+            // Ctrl+Shift+V: paste 200ms after the end of the active track (building mode).
+            double trackEnd = 0.0;
+            bool hasTrackNotes = false;
+            const QVector<Note> &existing = phrase.getNotes();
+            for (const Note &n : existing) {
+                if (n.getTrackIndex() != activeTrackIndex) continue;
+                hasTrackNotes = true;
+                if (n.getEndTime() > trackEnd) trackEnd = n.getEndTime();
+            }
+            targetTime = hasTrackNotes ? trackEnd + 200.0 : 0.0;
+        } else {
+            // Ctrl+V: paste at now marker (editing mode).
+            targetTime = pasteTargetTime;
+        }
+
+        PasteNotesCommand *pasteCmd = new PasteNotesCommand(&phrase, clipboard, targetTime, activeTrackIndex, this);
         undoStack->push(pasteCmd);
 
         selectNotes(pasteCmd->getPastedIndices());
         update();
-        qDebug() << "Pasted" << clipboard.size() << "notes at time" << viewCenterTime;
+        qDebug() << "Pasted" << clipboard.size() << "notes at time" << targetTime;
     }
 }
 
@@ -3985,6 +4668,27 @@ void ScoreCanvas::performSelectToEnd()
         selectNotes(newSelection);
         update();
     }
+}
+
+void ScoreCanvas::performRetrograde()
+{
+    if (selectedNoteIndices.isEmpty()) return;
+
+    const QVector<Note> &notes = phrase.getNotes();
+    QVector<Note> selectedNotes;
+    for (int index : selectedNoteIndices) {
+        if (index >= 0 && index < notes.size()) {
+            selectedNotes.append(notes[index]);
+        }
+    }
+
+    RetrogradeNotesCommand *cmd = new RetrogradeNotesCommand(
+        &phrase, selectedNotes, pasteTargetTime, activeTrackIndex, this);
+    undoStack->push(cmd);
+
+    selectNotes(cmd->getInsertedIndices());
+    update();
+    qDebug() << "Retrograde:" << selectedNotes.size() << "notes at time" << pasteTargetTime;
 }
 
 // ============================================================================
@@ -4062,21 +4766,26 @@ void ScoreCanvas::showNoteContextMenu(const QPoint &globalPos)
     scaleDynamicsAction->setEnabled(selectedNoteIndices.size() >= 1);
     connect(scaleDynamicsAction, &QAction::triggered, this, &ScoreCanvas::showScaleDynamicsDialog);
 
-    // Expressive Curve Shape action — enabled only when selection has named curves
+    // Expressive Curve action — enabled when every selected note's variation
+    // (or the base sounit for notes on the base) declares at least one curve
+    // name in common. The dialog's dropdown is populated from that intersection,
+    // so mixed-variation selections only expose curves all of them share.
     {
-        bool hasExpressiveCurves = false;
-        const QVector<Note> &notesRef = phrase.getNotes();
-        for (int idx : selectedNoteIndices) {
-            if (idx >= 0 && idx < notesRef.size() &&
-                notesRef[idx].getExpressiveCurveCount() > 1) {
-                hasExpressiveCurves = true;
-                break;
-            }
-        }
+        QStringList commonNames = selectionCommonExpressiveCurveNames();
         QAction *expressiveAction = menu.addAction("Apply Expressive Curve...");
-        expressiveAction->setEnabled(hasExpressiveCurves);
+        expressiveAction->setEnabled(!commonNames.isEmpty());
         connect(expressiveAction, &QAction::triggered,
                 this, &ScoreCanvas::showExpressiveCurveApplyDialog);
+    }
+
+    // EQ Curve action — enabled when every selected note's variation has
+    // all 10 "band 1".."band 10" expressive curves wired up (for the 10-Band EQ).
+    {
+        QStringList bandNames = selectionMatchingBandCurveNames();
+        QAction *eqAction = menu.addAction("Apply EQ Curve...");
+        eqAction->setEnabled(!bandNames.isEmpty());
+        connect(eqAction, &QAction::triggered,
+                this, &ScoreCanvas::showEqCurveDialog);
     }
 
     menu.addSeparator();
@@ -4143,30 +4852,35 @@ void ScoreCanvas::showNoteContextMenu(const QPoint &globalPos)
 
 void ScoreCanvas::applyVariationToSelection(int variationIndex)
 {
-    QVector<Note> &notes = phrase.getNotes();
+    if (selectedNoteIndices.isEmpty())
+        return;
 
-    int appliedCount = 0;
+    const QVector<Note> &notes = phrase.getNotes();
+
+    QVector<EditNotePropertyCommand::NoteChange> changes;
+    changes.reserve(selectedNoteIndices.size());
     for (int idx : selectedNoteIndices) {
-        if (idx >= 0 && idx < notes.size()) {
-            qDebug() << "ScoreCanvas: Setting note" << notes[idx].getId()
-                     << "from variation" << notes[idx].getVariationIndex()
-                     << "to variation" << variationIndex;
-            notes[idx].setVariationIndex(variationIndex);
-            notes[idx].setRenderDirty(true);
-            appliedCount++;
-        }
+        if (idx < 0 || idx >= notes.size())
+            continue;
+        const int oldIdx = notes[idx].getVariationIndex();
+        if (oldIdx == variationIndex)
+            continue;
+        EditNotePropertyCommand::NoteChange c;
+        c.index    = idx;
+        c.oldValue = static_cast<double>(oldIdx);
+        c.newValue = static_cast<double>(variationIndex);
+        changes.append(c);
     }
 
-    // Debug: Show current variation state of all notes
-    qDebug() << "ScoreCanvas: After applying, note variation state:";
-    for (int i = 0; i < notes.size(); ++i) {
-        qDebug() << "  Note" << i << "id=" << notes[i].getId()
-                 << "variationIndex=" << notes[i].getVariationIndex();
-    }
+    if (changes.isEmpty())
+        return;
+
+    auto *cmd = new EditNotePropertyCommand(
+        &phrase, changes, EditNotePropertyCommand::VariationIndex, this);
+    cmd->setText(QString("Apply variation %1").arg(variationIndex));
+    undoStack->push(cmd);
 
     update();
-    qDebug() << "ScoreCanvas: Applied variation" << variationIndex
-             << "to" << appliedCount << "notes";
 }
 
 void ScoreCanvas::showDynamicsCurveDialog()
@@ -4269,34 +4983,132 @@ void ScoreCanvas::showScaleDynamicsDialog()
              << "notes by" << factor;
 }
 
+QStringList ScoreCanvas::selectionCommonExpressiveCurveNames() const
+{
+    if (selectedNoteIndices.isEmpty() || !m_currentTrack) return {};
+
+    const QVector<Note> &notes = phrase.getNotes();
+
+    // Collect the set of distinct variation indices under the selection.
+    QSet<int> variationIndices;
+    for (int idx : selectedNoteIndices) {
+        if (idx < 0 || idx >= notes.size()) continue;
+        variationIndices.insert(notes[idx].getVariationIndex());
+    }
+    if (variationIndices.isEmpty()) return {};
+
+    // Use the canvas of *some* variation as the reference for ordering, then
+    // intersect with the curve name list of every other variation in play.
+    QStringList result;
+    bool first = true;
+    for (int varIdx : variationIndices) {
+        Canvas *c = m_currentTrack->getCanvasForVariation(varIdx);
+        QStringList names = c ? c->getExpressiveCurveNames() : QStringList{};
+        if (first) {
+            result = names;
+            first = false;
+        } else {
+            QSet<QString> keep(names.begin(), names.end());
+            result.erase(std::remove_if(result.begin(), result.end(),
+                                        [&keep](const QString &n) { return !keep.contains(n); }),
+                         result.end());
+        }
+        if (result.isEmpty()) break;
+    }
+    return result;
+}
+
+QStringList ScoreCanvas::selectionMatchingBandCurveNames() const
+{
+    QStringList common = selectionCommonExpressiveCurveNames();
+    if (common.isEmpty()) return {};
+
+    // For each band index 1..10, find a case/whitespace-insensitive match of
+    // "band N" in the shared names. If any band is missing, return empty.
+    QStringList result;
+    for (int b = 1; b <= 10; ++b) {
+        QString expected = QString("band %1").arg(b);
+        QString match;
+        for (const QString &n : common) {
+            QString normalized = n.simplified().toLower();
+            if (normalized == expected) { match = n; break; }
+        }
+        if (match.isEmpty()) return {};
+        result.append(match);
+    }
+    return result;
+}
+
+void ScoreCanvas::showEqCurveDialog()
+{
+    if (selectedNoteIndices.isEmpty()) return;
+
+    QStringList bandNames = selectionMatchingBandCurveNames();
+    if (bandNames.size() != 10) {
+        QMessageBox::information(this, "Apply EQ Curve",
+            "This feature needs every selected note's sounit (or variation) to "
+            "expose expressive curves named \"band 1\" through \"band 10\" — "
+            "one per EQ band.\n\n"
+            "Add those names on the Envelope container(s) driving the 10-Band EQ.");
+        return;
+    }
+
+    const QVector<Note> &notes = phrase.getNotes();
+    double startTime = std::numeric_limits<double>::max();
+    double endTime   = std::numeric_limits<double>::lowest();
+    for (int idx : selectedNoteIndices) {
+        if (idx >= 0 && idx < notes.size()) {
+            double noteStart = notes[idx].getStartTime();
+            double noteEnd   = noteStart + notes[idx].getDuration();
+            startTime = qMin(startTime, noteStart);
+            endTime   = qMax(endTime,   noteEnd);
+        }
+    }
+    double timeSpanMs = endTime - startTime;
+
+    EqCurveDialog dialog(selectedNoteIndices.size(), timeSpanMs, this);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        QVector<EnvelopePoint> shape     = dialog.getShapeCurve();
+        QVector<EnvelopePoint> intensity = dialog.getIntensityCurve();
+        double weight  = dialog.getWeight();
+        bool   perNote = dialog.getPerNoteMode();
+
+        undoStack->push(new ApplyEqCurveCommand(
+            &phrase, selectedNoteIndices, bandNames,
+            shape, intensity, weight, perNote, this));
+
+        // Activate the EQ pseudo-entry so the score canvas shows the freshly
+        // applied curves. Emitting expressiveCurveApplied drives the toolbar
+        // dropdown to switch to "EQ Curve", which in turn re-triggers
+        // setActiveExpressiveCurveIndex with the proper combo index.
+        emit expressiveCurveApplied(QStringLiteral("EQ Curve"));
+
+        qDebug() << "ScoreCanvas: Applied EQ curve to"
+                 << selectedNoteIndices.size() << "notes";
+    }
+}
+
 void ScoreCanvas::showExpressiveCurveApplyDialog()
 {
     if (selectedNoteIndices.isEmpty()) return;
 
-    const QVector<Note> &notes = phrase.getNotes();
+    // Curve names come from the sounit (base or variation) each selected note
+    // is attached to. Only names shared by *all* selected notes' sounits are
+    // offered, so the chosen curve can be applied to every note in one go.
+    QStringList curveNames = selectionCommonExpressiveCurveNames();
 
-    // Collect unique named expressive curve names from the selection
-    QSet<QString> namesSet;
-    for (int idx : selectedNoteIndices) {
-        if (idx >= 0 && idx < notes.size()) {
-            const Note &note = notes[idx];
-            for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
-                namesSet.insert(note.getExpressiveCurveName(i));
-            }
-        }
-    }
-
-    if (namesSet.isEmpty()) {
+    if (curveNames.isEmpty()) {
         QMessageBox::information(this, "Apply Expressive Curve",
-            "No named expressive curves found in the selection.\n"
-            "Add expressive curves to notes first using the inspector.");
+            "No expressive curve is shared by every selected note's sounit.\n"
+            "Add curve names in the Envelope container inspector of each "
+            "variation (or narrow the selection).");
         return;
     }
 
-    QStringList curveNames = QStringList(namesSet.begin(), namesSet.end());
-    curveNames.sort();
+    const QVector<Note> &notes = phrase.getNotes();
 
-    // Calculate selection time span
+    // Selection time span (for dialog's display only — same shape applies to every note regardless)
     double startTime = std::numeric_limits<double>::max();
     double endTime   = std::numeric_limits<double>::lowest();
     for (int idx : selectedNoteIndices) {
@@ -4315,12 +5127,245 @@ void ScoreCanvas::showExpressiveCurveApplyDialog()
         QString targetName = dialog.getSelectedCurveName();
         QVector<EnvelopePoint> curve = dialog.getCurve();
         double weight = dialog.getWeight();
+        bool perNote = dialog.getPerNoteMode();
 
-        undoStack->push(new ApplyExpressiveCurveShapeCommand(
-            &phrase, selectedNoteIndices, targetName, curve, weight, this));
+        undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
+            &phrase, selectedNoteIndices, targetName, curve, weight, perNote, this));
 
-        qDebug() << "ScoreCanvas: Applied expressive curve shape to '" << targetName
-                 << "' on" << selectedNoteIndices.size() << "notes";
+        // Activate the applied curve so the score canvas immediately draws the new shape,
+        // and notify KalaMain so the note-inspector dropdown picks it up without needing
+        // a reselect.
+        const QVector<Note> &updated = phrase.getNotes();
+        if (!selectedNoteIndices.isEmpty() && selectedNoteIndices.first() < updated.size()) {
+            int idx = updated[selectedNoteIndices.first()].findExpressiveCurveIndexByName(targetName);
+            if (idx >= 1) {
+                setActiveExpressiveCurveIndex(idx, targetName);
+            }
+        }
+        emit expressiveCurveApplied(targetName);
+
+        qDebug() << "ScoreCanvas: Applied expressive curve '" << targetName
+                 << "' to" << selectedNoteIndices.size() << "notes";
+    }
+}
+
+void ScoreCanvas::editNoteCurve(int noteIndex)
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (noteIndex < 0 || noteIndex >= notes.size()) return;
+
+    const Note &note = notes[noteIndex];
+    int activeCurveIndex = resolveActiveCurveIndex(note);
+
+    // Fallback: convert a Note's sampled Curve to EnvelopePoints for the dialog canvas
+    auto curveToEnvelopePoints = [](const Curve &curve) -> QVector<EnvelopePoint> {
+        QVector<EnvelopePoint> points;
+        for (const Curve::Point &pt : curve.getPoints()) {
+            points.append(EnvelopePoint(pt.time, pt.value, 0));
+        }
+        if (points.isEmpty()) {
+            points.append(EnvelopePoint(0.0, 0.8, 0));
+            points.append(EnvelopePoint(1.0, 0.8, 0));
+        }
+        return points;
+    };
+
+    double duration = note.getDuration();
+
+    // ---- Edit EQ curve ----
+    // When the "EQ Curve" pseudo-entry is active, route double-click to the
+    // EqCurveDialog with shape + intensity reconstructed from the note's 10
+    // band envelopes. All bands share the same time-shape scaled by their own
+    // delta from 0.5, so the intensity curve can be recovered from the band
+    // with the largest peak deviation.
+    if (m_activeExpressiveCurveName == QStringLiteral("EQ Curve")) {
+        QStringList bandNames = selectionMatchingBandCurveNames();
+        if (bandNames.size() != 10) {
+            QMessageBox::information(this, "Edit EQ Curve",
+                "This requires every selected note's sounit (or variation) to "
+                "expose \"band 1\" through \"band 10\" as expressive curves.");
+            return;
+        }
+
+        QVector<EnvelopePoint> shapeCurve;
+        QVector<EnvelopePoint> intensityCurve;
+
+        // Preferred path: the note stored the original author shape/intensity
+        // when the EQ curve was applied, so editing loads the exact 2–3 point
+        // curves instead of the dense per-band samples.
+        const bool hasStoredShape =
+            note.hasEnvelopeControlPoints(QStringLiteral("EQ Shape"));
+        const bool hasStoredIntensity =
+            note.hasEnvelopeControlPoints(QStringLiteral("EQ Intensity"));
+
+        if (hasStoredShape && hasStoredIntensity) {
+            shapeCurve     = note.getEnvelopeControlPoints(QStringLiteral("EQ Shape"));
+            intensityCurve = note.getEnvelopeControlPoints(QStringLiteral("EQ Intensity"));
+        } else {
+            // Legacy fallback: reconstruct shape + intensity from the per-band
+            // envelope points (older EQ curves applied before we persisted the
+            // originals). Evaluates a stored envelope at normalised time t.
+            auto evalEnv = [](const QVector<EnvelopePoint> &env, double t) -> double {
+                if (env.isEmpty()) return 0.5;
+                if (env.size() == 1) return env[0].value;
+                if (t <= env.first().time) return env.first().value;
+                if (t >= env.last().time)  return env.last().value;
+                for (int i = 0; i < env.size() - 1; ++i) {
+                    if (t >= env[i].time && t <= env[i + 1].time) {
+                        double dt = env[i + 1].time - env[i].time;
+                        if (dt <= 0.0) return env[i + 1].value;
+                        double segT = (t - env[i].time) / dt;
+                        if (env[i].curveType == 1) {
+                            double s = (1.0 - std::cos(segT * M_PI)) * 0.5;
+                            return env[i].value + s * (env[i + 1].value - env[i].value);
+                        } else if (env[i].curveType == 2) {
+                            return env[i].value;
+                        } else {
+                            return env[i].value + segT * (env[i + 1].value - env[i].value);
+                        }
+                    }
+                }
+                return env.last().value;
+            };
+
+            // Find the band with the largest |peak - 0.5| across its control
+            // points, and the time where that peak occurs.
+            int bestBand = -1;
+            double bestAbsDelta = 0.0;
+            double bestSignedDelta = 0.0;
+            double bestTime = 0.0;
+            for (int b = 0; b < 10; ++b) {
+                if (!note.hasEnvelopeControlPoints(bandNames[b])) continue;
+                QVector<EnvelopePoint> eps = note.getEnvelopeControlPoints(bandNames[b]);
+                for (const EnvelopePoint &ep : eps) {
+                    double d = ep.value - 0.5;
+                    if (std::abs(d) > bestAbsDelta) {
+                        bestAbsDelta = std::abs(d);
+                        bestSignedDelta = d;
+                        bestBand = b;
+                        bestTime = ep.time;
+                    }
+                }
+            }
+
+            auto bandValueAt = [&](int b, double t) -> double {
+                if (!note.hasEnvelopeControlPoints(bandNames[b])) return 0.5;
+                return evalEnv(note.getEnvelopeControlPoints(bandNames[b]), t);
+            };
+            shapeCurve.append(EnvelopePoint(0.0, bandValueAt(0, bestTime), 0));
+            for (int b = 0; b < 10; ++b) {
+                double t = (b + 0.5) / 10.0;
+                shapeCurve.append(EnvelopePoint(t, bandValueAt(b, bestTime), 1));
+            }
+            shapeCurve.append(EnvelopePoint(1.0, bandValueAt(9, bestTime), 0));
+
+            if (bestBand < 0 || bestAbsDelta < 1e-6) {
+                intensityCurve.append(EnvelopePoint(0.0, 0.0, 0));
+                intensityCurve.append(EnvelopePoint(1.0, 0.0, 0));
+            } else {
+                QVector<EnvelopePoint> bestEnv = note.getEnvelopeControlPoints(bandNames[bestBand]);
+                for (const EnvelopePoint &ep : bestEnv) {
+                    double intensity = (ep.value - 0.5) / bestSignedDelta;
+                    intensity = qBound(0.0, intensity, 1.0);
+                    intensityCurve.append(EnvelopePoint(ep.time, intensity, ep.curveType));
+                }
+                if (intensityCurve.isEmpty()) {
+                    intensityCurve.append(EnvelopePoint(0.0, 0.0, 0));
+                    intensityCurve.append(EnvelopePoint(1.0, 0.0, 0));
+                }
+            }
+        }
+
+        EqCurveDialog dialog(selectedNoteIndices.size(), duration, this);
+        dialog.setWindowTitle("Edit EQ Curve");
+        dialog.setInitialShapeCurve(shapeCurve);
+        dialog.setInitialIntensityCurve(intensityCurve);
+
+        if (dialog.exec() == QDialog::Accepted) {
+            QVector<EnvelopePoint> shape     = dialog.getShapeCurve();
+            QVector<EnvelopePoint> intensity = dialog.getIntensityCurve();
+            double weight  = dialog.getWeight();
+            bool   perNote = dialog.getPerNoteMode();
+
+            undoStack->push(new ApplyEqCurveCommand(
+                &phrase, selectedNoteIndices, bandNames,
+                shape, intensity, weight, perNote, this));
+
+            qDebug() << "ScoreCanvas: Edited EQ curve on"
+                     << selectedNoteIndices.size() << "notes (double-click)";
+        }
+        return;
+    }
+
+    if (activeCurveIndex == 0) {
+        // ---- Edit dynamics curve ----
+        DynamicsCurveDialog dialog(selectedNoteIndices.size(), duration, this);
+        dialog.setWindowTitle("Edit Dynamics Curve");
+
+        // Prefer original envelope control points; fall back to sampled curve
+        QVector<EnvelopePoint> initialPoints;
+        if (note.hasEnvelopeControlPoints(QStringLiteral("Dynamics")))
+            initialPoints = note.getEnvelopeControlPoints(QStringLiteral("Dynamics"));
+        else
+            initialPoints = curveToEnvelopePoints(note.getDynamicsCurve());
+        dialog.setInitialCurve(initialPoints);
+
+        if (dialog.exec() == QDialog::Accepted) {
+            QVector<EnvelopePoint> curve = dialog.getCurve();
+            double weight = dialog.getWeight();
+            bool perNote = dialog.getPerNoteMode();
+            undoStack->push(new ApplyDynamicsCurveCommand(
+                &phrase, selectedNoteIndices, curve, weight, perNote, this));
+
+            qDebug() << "ScoreCanvas: Edited dynamics curve on"
+                     << selectedNoteIndices.size() << "notes (double-click)";
+        }
+    } else {
+        // ---- Edit expressive curve ----
+        QString curveName = note.getExpressiveCurveName(activeCurveIndex);
+        QStringList curveNames = selectionCommonExpressiveCurveNames();
+
+        if (curveNames.isEmpty()) {
+            QMessageBox::information(this, "Edit Expressive Curve",
+                "No expressive curve is shared by every selected note's sounit.");
+            return;
+        }
+
+        ExpressiveCurveApplyDialog dialog(selectedNoteIndices.size(), duration,
+                                          curveNames, this);
+        dialog.setWindowTitle("Edit Expressive Curve");
+        dialog.setSelectedCurveName(curveName);
+
+        // Prefer original envelope control points; fall back to sampled curve
+        QVector<EnvelopePoint> initialPoints;
+        if (note.hasEnvelopeControlPoints(curveName))
+            initialPoints = note.getEnvelopeControlPoints(curveName);
+        else
+            initialPoints = curveToEnvelopePoints(note.getExpressiveCurve(activeCurveIndex));
+        dialog.setInitialCurve(initialPoints);
+
+        if (dialog.exec() == QDialog::Accepted) {
+            QString targetName = dialog.getSelectedCurveName();
+            QVector<EnvelopePoint> curve = dialog.getCurve();
+            double weight = dialog.getWeight();
+            bool perNote = dialog.getPerNoteMode();
+
+            undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
+                &phrase, selectedNoteIndices, targetName, curve, weight, perNote, this));
+
+            // Activate the applied curve
+            const QVector<Note> &updated = phrase.getNotes();
+            if (!selectedNoteIndices.isEmpty() && selectedNoteIndices.first() < updated.size()) {
+                int idx = updated[selectedNoteIndices.first()].findExpressiveCurveIndexByName(targetName);
+                if (idx >= 1) {
+                    setActiveExpressiveCurveIndex(idx, targetName);
+                }
+            }
+            emit expressiveCurveApplied(targetName);
+
+            qDebug() << "ScoreCanvas: Edited expressive curve '" << targetName
+                     << "' on" << selectedNoteIndices.size() << "notes (double-click)";
+        }
     }
 }
 
@@ -4346,6 +5391,20 @@ int ScoreCanvas::resolveActiveCurveIndex(const Note &note) const
         m_activeExpressiveCurveName == QStringLiteral("Dynamics")) {
         return 0;
     }
+    // "EQ Curve" pseudo-entry: render the first band curve the note actually
+    // carries. All 10 bands share the same time-shape (intensity curve) scaled
+    // by their own delta, so any band visually conveys the intensity over time.
+    // Notes without EQ applied fall back to dynamics rendering.
+    if (m_activeExpressiveCurveName == QStringLiteral("EQ Curve")) {
+        for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
+            QString n = note.getExpressiveCurveName(i).simplified().toLower();
+            if (n.startsWith(QStringLiteral("band "))) {
+                int num = n.mid(5).toInt();
+                if (num >= 1 && num <= 10) return i;
+            }
+        }
+        return 0;
+    }
     // Search the note for a curve that matches the active name
     for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
         if (note.getExpressiveCurveName(i) == m_activeExpressiveCurveName)
@@ -4353,15 +5412,6 @@ int ScoreCanvas::resolveActiveCurveIndex(const Note &note) const
     }
     // Note doesn't carry this curve — fall back to dynamics
     return 0;
-}
-
-void ScoreCanvas::addExpressiveCurveToSelection(const QString &name,
-                                                 const QVector<EnvelopePoint> &curve,
-                                                 double weight, bool perNote)
-{
-    if (selectedNoteIndices.isEmpty()) return;
-    undoStack->push(new AddExpressiveCurveCommand(
-        &phrase, selectedNoteIndices, name, curve, weight, perNote, this));
 }
 
 void ScoreCanvas::removeExpressiveCurveFromSelection(int curveIndex)
@@ -4374,7 +5424,10 @@ void ScoreCanvas::removeExpressiveCurveFromSelection(int curveIndex)
 void ScoreCanvas::removeExpressiveCurveByName(const QString &name)
 {
     if (name.isEmpty()) return;
-    undoStack->push(new RemoveNamedExpressiveCurveCommand(&phrase, name, this));
+    // Scope to the current selection so the inspector's Delete button only strips
+    // the curve from the notes the user has selected, not every note in the phrase.
+    undoStack->push(new RemoveNamedExpressiveCurveCommand(
+        &phrase, name, selectedNoteIndices, this));
 }
 
 void ScoreCanvas::applyNamedCurveToSelection(const QString &name, const Curve &curve)

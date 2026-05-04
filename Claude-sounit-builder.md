@@ -764,6 +764,18 @@ The clarinet parameter sweet spot is **narrow**. Small changes to `vocalTractFre
 }
 ```
 
+**Pan** (Green) — stereo pan position controller. Outputs a value from -1.0 (full left) to +1.0 (full right). Applied per-sample during rendering, so notes are stereo-panned without re-rendering. Typical use: connect a Frequency Mapper (outputMin=-1.0, outputMax=1.0) to `controlIn` for pitch-dependent panning (low notes left, high notes right, like a piano).
+**Ports in:** `controlIn`  **Ports out:** `panOut`
+```json
+"parameters": {
+    "pan": 0.0              // base pan position: -1.0=full left, 0.0=center, +1.0=full right
+}
+```
+The `controlIn` value (e.g. from Frequency Mapper) is added to the base `pan`, then clamped to [-1, +1]. Without a connection, only the base pan applies.
+
+**Pan signal chain (typical pattern):**
+`Frequency Mapper (outputMin=-1.0, outputMax=1.0, curve=Logarithmic) → controlOut → Pan:controlIn`
+
 **Formant Body** (Orange) — vowel-like resonance, instrument body model
 **Ports in:** `signalIn`, `f1Freq`, `f2Freq`, `f1Q`, `f2Q`, `f1f2Balance`, `directMix`
 **Ports out:** `signalOut`
@@ -928,7 +940,7 @@ Drive `blend` with Envelope Engine for dynamic breath evolution.
 |-------|----------|------------|
 | `#3498db` | Blue — Essential | HG, StoS, Signal Mixer, Note Tail, Attack, Karplus Strong, Wavetable Synth, Recorder, Bowed, Reed, Clarinet |
 | `#e67e22` | Orange — Shaping | Rolloff Processor, Spectrum Blender, Formant Body, Noise Color Filter, Breath Turbulence |
-| `#27ae60` | Green — Modifiers | Envelope Engine, Drift Engine, LFO, Physics System, Easing Applicator, Frequency Mapper |
+| `#27ae60` | Green — Modifiers | Envelope Engine, Drift Engine, LFO, Physics System, Easing Applicator, Frequency Mapper, Pan |
 | `#9b59b6` | Purple — Filters | 10-Band EQ, Comb Filter, LP/HP Filter, IR Convolution |
 
 ---

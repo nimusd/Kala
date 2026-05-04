@@ -31,36 +31,43 @@ void LLMClient::sendChatRequest(const QJsonArray &messages,
                                  const QJsonArray &tools,
                                  ResponseCallback callback)
 {
-    const bool isAnthropic = (m_config.provider == LLMProvider::Anthropic);
+    const LLMProvider prov = m_config.provider;
 
-    QJsonObject body = buildOpenAIRequest(messages, tools);
-    if (isAnthropic)
-        body = adaptRequestForAnthropic(body);
+    QJsonObject body;
+    QString     url;
 
-    const QString url = isAnthropic
-        ? QStringLiteral("https://api.anthropic.com/v1/messages")
-        : m_config.baseUrl + QStringLiteral("/chat/completions");
+    if (prov == LLMProvider::Anthropic) {
+        body = adaptRequestForAnthropic(buildOpenAIRequest(messages, tools));
+        url  = QStringLiteral("https://api.anthropic.com/v1/messages");
+    } else if (prov == LLMProvider::Ollama) {
+        body = adaptRequestForOllama(messages, tools);
+        url  = ollamaChatUrl();
+    } else {
+        body = buildOpenAIRequest(messages, tools);
+        url  = m_config.baseUrl + QStringLiteral("/chat/completions");
+    }
 
     QUrl qurl(url);
     QNetworkRequest req(qurl);
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 
-    if (isAnthropic) {
+    if (prov == LLMProvider::Anthropic) {
         req.setRawHeader("x-api-key",         m_config.apiKey.toUtf8());
         req.setRawHeader("anthropic-version", "2023-06-01");
-    } else {
+    } else if (prov == LLMProvider::OpenAICompatible) {
         req.setRawHeader("Authorization",
                          ("Bearer " + m_config.apiKey).toUtf8());
     }
+    // Ollama local: no auth header needed.
 
     QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
     QNetworkReply *reply = m_nam->post(req, payload);
     m_currentReply = reply;
 
     connect(reply, &QNetworkReply::finished, this,
-            [this, reply, isAnthropic, callback]() {
+            [this, reply, prov, callback]() {
                 m_currentReply = nullptr;
-                handleReply(reply, isAnthropic, callback);
+                handleReply(reply, prov, callback);
             });
 }
 
@@ -75,12 +82,36 @@ QJsonObject LLMClient::buildOpenAIRequest(const QJsonArray &messages,
     body["model"]       = m_config.model;
     body["max_tokens"]  = m_config.maxTokens;
     body["temperature"] = m_config.temperature;
-    body["messages"]    = messages;
+    body["messages"]    = withNoThinkTag(messages);
     if (!tools.isEmpty()) {
         body["tools"]        = tools;
         body["tool_choice"]  = QStringLiteral("auto");
     }
     return body;
+}
+
+// Qwen3 honours the `/no_think` soft switch at the end of the latest user
+// turn (system-prompt placement is inconsistent across builds, and the
+// Ollama /v1 endpoint doesn't forward the native `think: false` param).
+// Appending it here keeps reasoning disabled for all outbound requests.
+QJsonArray LLMClient::withNoThinkTag(const QJsonArray &messages) const
+{
+    QJsonArray out = messages;
+    for (int i = out.size() - 1; i >= 0; --i) {
+        QJsonObject msg = out[i].toObject();
+        if (msg["role"].toString() != "user") continue;
+
+        QString content = msg["content"].toString();
+        if (!content.trimmed().endsWith(QStringLiteral("/no_think"))) {
+            if (!content.isEmpty() && !content.endsWith('\n'))
+                content += '\n';
+            content += QStringLiteral("/no_think");
+            msg["content"] = content;
+            out[i] = msg;
+        }
+        break;
+    }
+    return out;
 }
 
 void LLMClient::abort()
@@ -89,7 +120,7 @@ void LLMClient::abort()
         m_currentReply->abort();
 }
 
-void LLMClient::handleReply(QNetworkReply *reply, bool isAnthropic,
+void LLMClient::handleReply(QNetworkReply *reply, LLMProvider provider,
                               ResponseCallback callback)
 {
     reply->deleteLater();
@@ -105,6 +136,9 @@ void LLMClient::handleReply(QNetworkReply *reply, bool isAnthropic,
             QString msg;
             if (errVal.isObject())
                 msg = errVal.toObject()["message"].toString();
+            // Ollama surfaces errors as a top-level "error" string, not an object.
+            if (msg.isEmpty() && errVal.isString())
+                msg = errVal.toString();
             if (!msg.isEmpty()) {
                 callback({}, msg);
                 return;
@@ -125,25 +159,31 @@ void LLMClient::handleReply(QNetworkReply *reply, bool isAnthropic,
 
     QJsonObject response = doc.object();
 
-    // Both APIs return an "error" object on failure (auth, rate limit, etc.)
     if (response.contains("error")) {
         const QJsonValue errVal = response["error"];
         QString msg;
         if (errVal.isObject())
             msg = errVal.toObject()["message"].toString();
+        else if (errVal.isString())
+            msg = errVal.toString();
         if (msg.isEmpty())
             msg = "API error (see response body)";
         callback({}, msg);
         return;
     }
 
-    if (isAnthropic)
-        response = adaptResponseFromAnthropic(response);
-
-    if (isAnthropic)
-        callback(response, {});
-    else
+    switch (provider) {
+    case LLMProvider::Anthropic:
+        callback(adaptResponseFromAnthropic(response), {});
+        return;
+    case LLMProvider::Ollama:
+        callback(normalizeTextToolCalls(adaptResponseFromOllama(response)), {});
+        return;
+    case LLMProvider::OpenAICompatible:
+    default:
         callback(normalizeTextToolCalls(response), {});
+        return;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -371,4 +411,99 @@ QJsonObject LLMClient::normalizeTextToolCalls(const QJsonObject &raw) const
     }
 
     return raw;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Ollama native adapters
+// ─────────────────────────────────────────────────────────────
+
+// Convert a baseUrl like "http://localhost:11434/v1" (legacy config) or
+// "http://localhost:11434" into the Ollama native chat endpoint.
+QString LLMClient::ollamaChatUrl() const
+{
+    QString base = m_config.baseUrl;
+    while (base.endsWith('/')) base.chop(1);
+    if (base.endsWith(QStringLiteral("/v1")))
+        base.chop(3);
+    return base + QStringLiteral("/api/chat");
+}
+
+// Ollama's /api/chat accepts messages and tools in OpenAI shape, but
+// reasoning models skip the <think> phase only if `think: false` is set
+// at the top level of the request. Also moves temperature / num_predict
+// into the `options` sub-object where Ollama expects them.
+QJsonObject LLMClient::adaptRequestForOllama(const QJsonArray &messages,
+                                              const QJsonArray &tools) const
+{
+    QJsonObject body;
+    body["model"]    = m_config.model;
+    body["messages"] = messages;
+    body["stream"]   = false;
+    body["think"]    = false;
+
+    QJsonObject options;
+    options["temperature"] = m_config.temperature;
+    options["num_predict"] = m_config.maxTokens;
+    body["options"] = options;
+
+    if (!tools.isEmpty())
+        body["tools"] = tools;
+
+    return body;
+}
+
+// Ollama responds in the form
+//   { "message": { "role":"assistant", "content":"...", "tool_calls":[
+//        { "function": { "name":"...", "arguments": { ...object... } } } ] },
+//     "done_reason": "stop", "done": true }
+// The rest of the codebase expects OpenAI shape, so wrap the message in
+// choices[0], synthesize an id for each tool call, stringify arguments,
+// and surface a plausible finish_reason.
+QJsonObject LLMClient::adaptResponseFromOllama(const QJsonObject &ollamaResponse) const
+{
+    QJsonObject message = ollamaResponse["message"].toObject();
+    const QJsonArray rawCalls = message["tool_calls"].toArray();
+
+    if (!rawCalls.isEmpty()) {
+        QJsonArray outCalls;
+        int idx = 0;
+        for (const QJsonValue &cv : rawCalls) {
+            QJsonObject c = cv.toObject();
+            QJsonObject fn = c["function"].toObject();
+
+            // Ollama returns arguments as an object; KalaAgent expects a
+            // JSON-encoded string (matches OpenAI's choice to forward the
+            // model's raw token stream).
+            const QJsonValue argsVal = fn["arguments"];
+            QString argsStr;
+            if (argsVal.isObject() || argsVal.isArray()) {
+                argsStr = QString::fromUtf8(
+                    QJsonDocument::fromVariant(argsVal.toVariant())
+                        .toJson(QJsonDocument::Compact));
+            } else if (argsVal.isString()) {
+                argsStr = argsVal.toString();
+            }
+            fn["arguments"] = argsStr;
+
+            QJsonObject adapted;
+            adapted["id"]       = QStringLiteral("call_%1").arg(idx++);
+            adapted["type"]     = QStringLiteral("function");
+            adapted["function"] = fn;
+            outCalls.append(adapted);
+        }
+        message["tool_calls"] = outCalls;
+    }
+
+    QJsonObject choice;
+    choice["index"]         = 0;
+    choice["message"]       = message;
+    choice["finish_reason"] = rawCalls.isEmpty()
+        ? QStringLiteral("stop")
+        : QStringLiteral("tool_calls");
+
+    QJsonObject wrapped;
+    QJsonArray choices;
+    choices.append(choice);
+    wrapped["choices"] = choices;
+    return wrapped;
 }

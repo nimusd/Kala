@@ -224,6 +224,18 @@ void Container::addFollowDynamicsButton()
     connect(followDynamicsBtn, &QPushButton::toggled, this, [this](bool checked) {
         setParameter("followDynamics", checked ? 1.0 : 0.0);
     });
+
+    // Keep button visual in sync when the param is changed from outside the UI
+    // (load, paste, AI tool calls). Block signals to avoid the toggled handler
+    // re-writing the param.
+    connect(this, &Container::parameterChanged, this, [this]() {
+        if (!followDynamicsBtn) return;
+        const bool desired = getParameter("followDynamics", 0.0) > 0.5;
+        if (followDynamicsBtn->isChecked() != desired) {
+            QSignalBlocker block(followDynamicsBtn);
+            followDynamicsBtn->setChecked(desired);
+        }
+    });
 }
 
 void Container::setSelected(bool selected)
@@ -277,6 +289,19 @@ void Container::setParameter(const QString &name, double value)
 double Container::getParameter(const QString &name, double defaultValue) const
 {
     return parameters.value(name, defaultValue);
+}
+
+void Container::setStringParameter(const QString &name, const QString &value)
+{
+    stringParameters[name] = value;
+    if (!batchUpdateInProgress) {
+        emit parameterChanged();
+    }
+}
+
+QString Container::getStringParameter(const QString &name, const QString &defaultValue) const
+{
+    return stringParameters.value(name, defaultValue);
 }
 
 void Container::beginParameterUpdate()

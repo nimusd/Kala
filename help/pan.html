@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>Pan</title>
+  </head>
+  <body>
+    <h1 id="pan-documentation">Pan Documentation</h1>
+
+    <h2 id="overview">Overview</h2>
+    <p>The Pan container is a <strong>stereo pan position controller</strong>
+      that outputs a value from <strong>-1.0</strong> (full left) through
+      <strong>0.0</strong> (center) to <strong>+1.0</strong> (full right).
+      It determines where each note sits in the stereo field.</p>
+    <p>On its own, it sets a static pan position for all notes in the track.
+      When driven by a <strong>Frequency Mapper</strong> connected to its
+      <code>controlIn</code> port, it distributes notes across the stereo field
+      based on pitch &mdash; low notes to the left, high notes to the right,
+      like a piano keyboard.</p>
+
+    <h2 id="category">Category</h2>
+    <p><strong>Modifiers</strong> (Green) &mdash; Generates stereo positioning from control signals</p>
+
+    <h2 id="core-concept">Core Concept</h2>
+    <pre><code>pan position = clamp(basePan + controlIn, -1.0, +1.0)</code></pre>
+    <p>The base <code>pan</code> parameter sets a default position. If a control
+      signal is connected to <code>controlIn</code> (typically from a Frequency Mapper),
+      it is added to the base pan value. The result is clamped to the [-1, +1] range.</p>
+    <p>Pan is applied <strong>per-sample</strong> during rendering, so it tracks
+      pitch changes within a note (glissando, vibrato) in real time. Because pan
+      is applied at mix time (not during synthesis), changing the pan value does
+      <strong>not</strong> require re-rendering notes.</p>
+
+    <h2 id="ports">Ports</h2>
+    <h3 id="input-ports">Input Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>controlIn</code></td>
+          <td>Control</td>
+          <td>0.0</td>
+          <td>External pan control value. Added to the base <code>pan</code> parameter.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="output-ports">Output Ports</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Data Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>panOut</code></td>
+          <td>Control</td>
+          <td>Final pan position, clamped to [-1.0, +1.0]</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="parameters">Parameters</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Range</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>pan</code></td>
+          <td>-1.0 to +1.0</td>
+          <td>0.0</td>
+          <td>Base pan position. -1.0 = full left, 0.0 = center, +1.0 = full right.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="stereo-panning">How Stereo Panning Works</h2>
+    <p>Pan uses a <strong>linear pan law</strong>:</p>
+    <pre><code>leftGain  = min(1.0, 1.0 - panValue)
+rightGain = min(1.0, 1.0 + panValue)</code></pre>
+    <ul>
+      <li>At <code>pan = -1.0</code>: left = 1.0, right = 0.0 (full left)</li>
+      <li>At <code>pan =  0.0</code>: left = 1.0, right = 1.0 (center)</li>
+      <li>At <code>pan = +1.0</code>: left = 0.0, right = 1.0 (full right)</li>
+    </ul>
+    <p>This is the same pan law used for track-level panning. Per-note pan from
+      the Pan container is applied first, then track-level pan is applied on top.</p>
+
+    <h2 id="typical-usage">Typical Usage</h2>
+    <h3>Piano-style register panning</h3>
+    <p>Connect a Frequency Mapper to spread notes across the stereo field by pitch:</p>
+    <pre><code>Frequency Mapper (outputMin=-1.0, outputMax=1.0, curve=Logarithmic)
+    controlOut &rarr; controlIn &rarr; Pan (pan=0.0)</code></pre>
+    <p>Low notes pan left, high notes pan right. Use the Frequency Mapper's
+      <code>lowFreq</code>/<code>highFreq</code> to control the pitch range,
+      and its curve type to shape the distribution.</p>
+
+    <h3>Static offset</h3>
+    <p>Set <code>pan</code> to a fixed value (e.g. 0.3) with no connection
+      to <code>controlIn</code>. All notes in the track will be panned slightly right.</p>
+
+    <h3>Narrow stereo spread</h3>
+    <p>Use a Frequency Mapper with a narrow output range (e.g. -0.3 to +0.3)
+      for subtle stereo width without hard panning.</p>
+
+    <h2 id="interaction-with-track-pan">Interaction with Track-Level Pan</h2>
+    <p>The Pan container provides <strong>per-note</strong> stereo positioning within
+      a track. The track-level pan knob (in the track mixer) applies <strong>on top</strong>
+      of the per-note pan. For example, if a note is panned to -0.5 (left) by the
+      Pan container and the track pan is set to +0.3 (right), the final stereo
+      position reflects both.</p>
+
+    <h2 id="notes">Notes</h2>
+    <ul>
+      <li>Only one Pan container per sounit graph is supported. If multiple are present,
+        the last one in execution order is used.</li>
+      <li>Pan values are stored per-sample alongside the rendered audio. This means
+        pan tracks pitch changes smoothly (e.g. during glissando or vibrato).</li>
+      <li>Without a Pan container in the graph, all notes render as center-panned (mono),
+        and only track-level pan applies.</li>
+    </ul>
+  </body>
+</html>

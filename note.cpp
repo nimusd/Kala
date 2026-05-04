@@ -122,6 +122,39 @@ void Note::renameExpressiveCurve(int index, const QString &name)
     }
 }
 
+int Note::findExpressiveCurveIndexByName(const QString &name) const
+{
+    for (int i = 0; i < m_additionalExpressiveCurves.size(); ++i) {
+        if (m_additionalExpressiveCurves[i].name == name) return i + 1;
+    }
+    return -1;
+}
+
+int Note::upsertExpressiveCurve(const QString &name, const Curve &curve)
+{
+    int idx = findExpressiveCurveIndexByName(name);
+    if (idx >= 1) {
+        m_additionalExpressiveCurves[idx - 1].curve = curve;
+        renderDirty = true;
+        return idx;
+    }
+    NamedCurve nc;
+    nc.name = name;
+    nc.curve = curve;
+    m_additionalExpressiveCurves.append(nc);
+    renderDirty = true;
+    return m_additionalExpressiveCurves.size();
+}
+
+bool Note::removeExpressiveCurveByName(const QString &name)
+{
+    int idx = findExpressiveCurveIndexByName(name);
+    if (idx < 1) return false;
+    m_additionalExpressiveCurves.removeAt(idx - 1);
+    renderDirty = true;
+    return true;
+}
+
 void Note::detectSegments()
 {
     segments.clear();
@@ -281,7 +314,47 @@ uint64_t Note::computeHash() const
     hash ^= static_cast<uint64_t>(legato ? 1 : 0);
     hash *= prime;
 
+    // Hash additional named expressive curves. These feed Envelope Engines with
+    // followDynamics=on via scoreCurveName matching, so they must invalidate the
+    // render cache when changed. Omitting them here silently reused stale audio
+    // whenever a user applied or edited a non-Dynamics curve on an existing note.
+    hash ^= static_cast<uint64_t>(m_additionalExpressiveCurves.size());
+    hash *= prime;
+    for (const auto &nc : m_additionalExpressiveCurves) {
+        for (QChar ch : nc.name) {
+            hash ^= static_cast<uint64_t>(ch.unicode());
+            hash *= prime;
+        }
+        const auto &pts = nc.curve.getPoints();
+        hash ^= static_cast<uint64_t>(pts.size());
+        hash *= prime;
+        for (const auto &pt : pts) {
+            mixDouble(pt.time);
+            mixDouble(pt.value);
+        }
+    }
+
     return hash;
+}
+
+void Note::setEnvelopeControlPoints(const QString &curveName, const QVector<EnvelopePoint> &points)
+{
+    m_envelopeControlPoints[curveName] = points;
+}
+
+QVector<EnvelopePoint> Note::getEnvelopeControlPoints(const QString &curveName) const
+{
+    return m_envelopeControlPoints.value(curveName);
+}
+
+bool Note::hasEnvelopeControlPoints(const QString &curveName) const
+{
+    return m_envelopeControlPoints.contains(curveName);
+}
+
+void Note::removeEnvelopeControlPoints(const QString &curveName)
+{
+    m_envelopeControlPoints.remove(curveName);
 }
 
 QJsonObject Note::toJson() const
@@ -325,6 +398,24 @@ QJsonObject Note::toJson() const
             ecArray.append(ecObj);
         }
         json["expressiveCurves"] = ecArray;
+    }
+
+    // Serialize envelope control points (original editor shapes)
+    if (!m_envelopeControlPoints.isEmpty()) {
+        QJsonObject cpObj;
+        for (auto it = m_envelopeControlPoints.constBegin();
+             it != m_envelopeControlPoints.constEnd(); ++it) {
+            QJsonArray pointsArray;
+            for (const EnvelopePoint &pt : it.value()) {
+                QJsonObject ptObj;
+                ptObj["time"] = pt.time;
+                ptObj["value"] = pt.value;
+                ptObj["curveType"] = pt.curveType;
+                pointsArray.append(ptObj);
+            }
+            cpObj[it.key()] = pointsArray;
+        }
+        json["envelopeControlPoints"] = cpObj;
     }
 
     return json;
@@ -373,6 +464,23 @@ Note Note::fromJson(const QJsonObject &json)
             nc.name = ecObj["name"].toString();
             nc.curve = Curve::fromJson(ecObj["curve"].toObject());
             note.m_additionalExpressiveCurves.append(nc);
+        }
+    }
+
+    // Deserialize envelope control points (backward-compatible)
+    if (json.contains("envelopeControlPoints")) {
+        QJsonObject cpObj = json["envelopeControlPoints"].toObject();
+        for (auto it = cpObj.constBegin(); it != cpObj.constEnd(); ++it) {
+            QVector<EnvelopePoint> points;
+            QJsonArray arr = it.value().toArray();
+            for (const QJsonValue &val : arr) {
+                QJsonObject ptObj = val.toObject();
+                points.append(EnvelopePoint(
+                    ptObj["time"].toDouble(0.0),
+                    ptObj["value"].toDouble(0.0),
+                    ptObj["curveType"].toInt(0)));
+            }
+            note.m_envelopeControlPoints[it.key()] = points;
         }
     }
 

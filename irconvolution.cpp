@@ -38,15 +38,8 @@ IRConvolution::IRConvolution(double sampleRate)
     , m_accumBuf(nullptr)
     , m_fdlPos(0)
     , m_inputPos(0)
-    , m_peakInputRms(0.0f)
-    , m_lastInputRms(0.0f)
-    , m_lastSignificantBlockRms(0.0f)
-    , m_blocksBelowThreshold(0)
     , m_staticWetDry(0.5)
     , m_tailModeActive(false)
-    , m_tailInjectionActive(false)
-    , m_tailInjectionFactor(0.0)
-    , m_tailInjectionDecayPerBlock(0.0)
     , m_irCapturePos(0)
     , m_irCapturedCount(0)
     , m_irCaptureLengthSamples(0)
@@ -105,15 +98,8 @@ IRConvolution::IRConvolution(const IRConvolution& other)
     , m_inputBuffer(other.m_inputBuffer)
     , m_outputBuffer(other.m_outputBuffer)
     , m_overlapBuffer(other.m_overlapBuffer)
-    , m_peakInputRms(0.0f)
-    , m_lastInputRms(0.0f)
-    , m_lastSignificantBlockRms(0.0f)
-    , m_blocksBelowThreshold(0)
     , m_staticWetDry(other.m_staticWetDry)
     , m_tailModeActive(false)
-    , m_tailInjectionActive(false)
-    , m_tailInjectionFactor(0.0)
-    , m_tailInjectionDecayPerBlock(0.0)
     , m_irCaptureBuffer(other.m_irCaptureBuffer)
     , m_irCapturePos(other.m_irCapturePos)
     , m_irCapturedCount(other.m_irCapturedCount)
@@ -385,15 +371,7 @@ void IRConvolution::resetConvolutionState()
     m_dampState   = 0.0;
     m_lowCutState = 0.0;
 
-    m_peakInputRms             = 0.0f;
-    m_lastInputRms             = 0.0f;
-    m_lastSignificantBlockRms  = 0.0f;
-    m_lastSignificantBlock.clear();
-    m_blocksBelowThreshold     = 0;
-    m_tailModeActive           = false;
-    m_tailInjectionActive      = false;
-    m_tailInjectionFactor      = 0.0;
-    m_tailInjectionDecayPerBlock = 0.0;
+    m_tailModeActive = false;
 }
 
 void IRConvolution::reset()
@@ -414,13 +392,6 @@ double IRConvolution::processSample(double input)
 {
     if (m_numPartitions == 0) {
         return input;
-    }
-
-    // Tail injection: replace zero input with a decaying replay of the last
-    // peak-amplitude block so the FDL has energy to produce a natural ring-out
-    // when the note ended with a soft (near-zero) dynamics fade.
-    if (m_tailInjectionActive && !m_lastSignificantBlock.empty()) {
-        input = static_cast<double>(m_lastSignificantBlock[m_inputPos]) * m_tailInjectionFactor;
     }
 
     m_inputBuffer[m_inputPos] = static_cast<float>(input);
@@ -483,11 +454,6 @@ double IRConvolution::processSampleWetOnly(double input)
         return 0.0;  // No IR loaded — no wet signal
     }
 
-    // Tail injection: replace zero input with a decaying replay of the peak block
-    if (m_tailInjectionActive && !m_lastSignificantBlock.empty()) {
-        input = static_cast<double>(m_lastSignificantBlock[m_inputPos]) * m_tailInjectionFactor;
-    }
-
     m_inputBuffer[m_inputPos] = static_cast<float>(input);
     double convOut = static_cast<double>(m_outputBuffer[m_inputPos]);
     m_inputPos++;
@@ -541,35 +507,6 @@ double IRConvolution::processSampleWetOnly(double input)
 
 void IRConvolution::processBlock()
 {
-    // Compute per-block RMS for peak tracking and soft-ending detection.
-    {
-        float sumSq = 0.0f;
-        for (int i = 0; i < m_blockSize; i++) {
-            sumSq += m_inputBuffer[i] * m_inputBuffer[i];
-        }
-        m_lastInputRms = std::sqrt(sumSq / static_cast<float>(m_blockSize));
-    }
-
-    if (m_lastInputRms > m_peakInputRms) {
-        m_peakInputRms = m_lastInputRms;
-    }
-
-    // Save this block when it carries meaningful energy (> 1 % of peak).
-    // This gives prepareForTailMode() a reference block with the note's spectral content.
-    // Also track how many consecutive sub-threshold blocks have elapsed (taper depth):
-    // prepareForTailMode() uses this to scale injection only for the portion of the FDL
-    // that has actually been replaced by near-zero data.
-    if (m_peakInputRms > 0.0f && m_lastInputRms > 0.01f * m_peakInputRms) {
-        if (static_cast<int>(m_lastSignificantBlock.size()) != m_blockSize) {
-            m_lastSignificantBlock.resize(m_blockSize);
-        }
-        std::copy(m_inputBuffer.begin(), m_inputBuffer.end(), m_lastSignificantBlock.begin());
-        m_lastSignificantBlockRms = m_lastInputRms;
-        m_blocksBelowThreshold = 0;
-    } else if (!m_tailModeActive) {
-        m_blocksBelowThreshold++;
-    }
-
     // Copy input block into real buffer, zero-pad upper half
     std::memcpy(m_realBuf, m_inputBuffer.data(), m_blockSize * sizeof(float));
     std::fill(m_realBuf + m_blockSize, m_realBuf + m_fftSize, 0.0f);
@@ -610,15 +547,6 @@ void IRConvolution::processBlock()
     }
 
     m_fdlPos = (m_fdlPos + 1) % m_numPartitions;
-
-    // Decay the tail injection factor each block until it reaches silence.
-    if (m_tailInjectionActive) {
-        m_tailInjectionFactor *= m_tailInjectionDecayPerBlock;
-        if (m_tailInjectionFactor < 1e-5) {
-            m_tailInjectionActive = false;
-            m_tailInjectionFactor = 0.0;
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +559,7 @@ void IRConvolution::setStaticWetDry(double wetDry)
     m_wetDry       = wetDry;
 }
 
-void IRConvolution::prepareForTailMode(double endDynamics)
+void IRConvolution::prepareForTailMode(double /*endDynamics*/)
 {
     if (m_tailModeActive) return;   // Idempotent — run only once per note
     m_tailModeActive = true;
@@ -642,45 +570,6 @@ void IRConvolution::prepareForTailMode(double endDynamics)
     // convolution tail entirely.
     m_wetDry = m_staticWetDry;
 
-    // Soft-ending injection: only when the NOTE'S DYNAMICS (not the signal's own
-    // natural decay) caused the silence.  endDynamics is the dynamics curve value
-    // at the last non-tail sample.  For pen notes the curve returns to ~0; for
-    // flat-dynamics notes (mouse input, Karplus Strong "let ring", physical models
-    // whose signal decays on its own) it stays near 1.0.
-    // This prevents injection from wrongly shortening the natural ring-out of
-    // decaying instruments while still fixing pen-note reverb tails.
-    if (endDynamics < 0.05
-        && m_numPartitions > 0
-        && m_peakInputRms > 1e-6f
-        && m_lastSignificantBlockRms > 0.0f
-        && !m_lastSignificantBlock.empty())
-    {
-        // Scale the replayed block so its effective RMS equals peakInputRms —
-        // then modulate by how much of the FDL has actually been replaced by the taper.
-        //
-        // When the taper is SHORT relative to the IR length, the older FDL slots
-        // still hold peak-level data and the convolution will ring out naturally at
-        // the correct level — no injection needed (fdlFillFraction ≈ 0).
-        // When the taper is LONG (> IR length), the FDL is fully overwritten with
-        // near-zero data, so the convolution would ring out too quietly — full
-        // injection needed (fdlFillFraction ≈ 1).
-        // Scaling by this fraction prevents the double-energy overshoot that caused
-        // distortion on notes with a brief dynamic fade at the end.
-        double fdlFillFraction = (m_numPartitions > 0)
-            ? std::min(static_cast<double>(m_blocksBelowThreshold) / m_numPartitions, 1.0)
-            : 1.0;
-
-        double factor = static_cast<double>(m_peakInputRms)
-                      / static_cast<double>(m_lastSignificantBlockRms);
-        factor = std::min(factor, 100.0) * fdlFillFraction;  // Scale by taper depth in FDL
-
-        m_tailInjectionFactor = factor;
-
-        // Decay the injection over one IR-length (numPartitions blocks) so it
-        // reaches -60 dB and the tail sounds natural, not like a second note.
-        int decayBlocks = std::max(m_numPartitions, 4);
-        m_tailInjectionDecayPerBlock = std::exp(-std::log(1000.0) / decayBlocks);
-
-        m_tailInjectionActive = true;
-    }
+    // The FDL naturally retains whatever the convolution saw up to tail-start,
+    // so feeding zero samples from here lets it drain cleanly on its own.
 }

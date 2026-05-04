@@ -50,6 +50,11 @@ public:
     double getParameter(const QString &name, double defaultValue = 0.0) const;
     QMap<QString, double> getParameters() const { return parameters; }
 
+    // String parameters (used for string-valued config such as scoreCurveName)
+    void setStringParameter(const QString &name, const QString &value);
+    QString getStringParameter(const QString &name, const QString &defaultValue = QString()) const;
+    QMap<QString, QString> getStringParameters() const { return stringParameters; }
+
     // Batch parameter updates (to avoid triggering rebuild for each parameter)
     void beginParameterUpdate();
     void endParameterUpdate();
@@ -115,6 +120,7 @@ private:
     QString instanceName;  // User-editable instance name
     bool isSelected = false;
     QMap<QString, double> parameters;  // Internal parameters (config)
+    QMap<QString, QString> stringParameters;
     EnvelopeData customEnvelopeData;  // Custom envelope data (for Envelope Engine)
     QString customDnaName;  // Name of custom DNA pattern (for Harmonic Generator)
     QString digitString;    // Precomputed fractional digit string (digit formula mode)

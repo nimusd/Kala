@@ -203,6 +203,11 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
                        {"curve"},
                        {"controlOut"});
     });
+    connect(ui->actionPan, &QAction::triggered, this, [this]() {
+        onAddContainer("Pan", QColor("#27ae60"),
+                       {"signalIn", "controlIn"},
+                       {"signalOut", "panOut"});
+    });
     connect(ui->actionAttack, &QAction::triggered, this, [this]() {
         onAddContainer("Attack", QColor("#3498db"),
                        {"signalIn", "trigger", "attackType", "duration", "intensity", "mix",
@@ -575,6 +580,8 @@ void SounitBuilder::onAddContainer(const QString &name, const QColor &color,
         newContainer->setParameter("curveType", 1.0);    // Logarithmic
         newContainer->setParameter("invert", 0.0);
         newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "Pan") {
+        newContainer->setParameter("pan", 0.0);          // Center
     } else if (name == "Wavetable Synth") {
         newContainer->setParameter("wavetableSelect", 0.0);  // Saw preset
         newContainer->setParameter("position", 0.0);
@@ -608,8 +615,22 @@ void SounitBuilder::onAddContainer(const QString &name, const QColor &color,
         newContainer->setParameter("fadeInPct", 10.0);
         newContainer->setParameter("captureLength", 1.0);
     } else if (name == "Recorder") {
+        newContainer->setParameter("breathPressure", 0.81);
+        newContainer->setParameter("jetRatio",       0.35);
+        newContainer->setParameter("noiseGain",      0.015);
+        newContainer->setParameter("vibratoFreq",    0.0);
+        newContainer->setParameter("vibratoGain",    0.0);
+        newContainer->setParameter("endReflection",  0.73);
+        newContainer->setParameter("jetReflection",  0.59);
         newContainer->setParameter("pitchMultiplier", 1.0);
     } else if (name == "Bowed") {
+        newContainer->setParameter("bowPressure",  0.75);
+        newContainer->setParameter("bowVelocity",  0.5);
+        newContainer->setParameter("bowPosition",  0.127);
+        newContainer->setParameter("nlType",       0.0);
+        newContainer->setParameter("nlAmount",     0.0);
+        newContainer->setParameter("nlFreqMod",    10.0);
+        newContainer->setParameter("nlAttack",     0.1);
         newContainer->setParameter("pitchMultiplier", 1.0);
     } else if (name == "Reed") {
         newContainer->setParameter("breathPressure", 0.7);
@@ -1196,15 +1217,19 @@ void SounitBuilder::connectContainerSignals(Container *container)
     connect(container, &Container::clicked, canvas, &Canvas::selectContainer, Qt::UniqueConnection);
     connect(container, &Container::moved, canvas, QOverload<>::of(&QWidget::update), Qt::UniqueConnection);
 
-    // Envelope Engine: add the "Follow Dynamics" toggle button to the header
-    if (container->getName() == "Envelope Engine")
-        container->addFollowDynamicsButton();
-
-    // Note: Lambda connections cannot use Qt::UniqueConnection, so we disconnect first
-    disconnect(container, &Container::parameterChanged, nullptr, nullptr);
+    // Note: Lambda connections cannot use Qt::UniqueConnection, so we disconnect first.
+    // Scope to receiver=this so we don't kill the container's own internal handlers
+    // (e.g. the followDynamicsBtn ↔ param sync set up in addFollowDynamicsButton).
+    disconnect(container, &Container::parameterChanged, this, nullptr);
     connect(container, &Container::parameterChanged, this, [this]() {
         rebuildGraph(currentEditingTrack);
     });
+
+    // Envelope Engine: add the "Follow Dynamics" toggle button to the header.
+    // Done AFTER the parameterChanged plumbing above so the button's own
+    // parameterChanged listener survives any future blanket-disconnects.
+    if (container->getName() == "Envelope Engine")
+        container->addFollowDynamicsButton();
 
     // Connect dragStarted to set up multi-drag companions and record undo positions
     disconnect(container, &Container::dragStarted, nullptr, nullptr);

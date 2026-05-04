@@ -15,6 +15,7 @@
 #include <QtConcurrent>
 #include <algorithm>
 #include <QUuid>
+#include <QHash>
 
 // ========== Construction / Destruction ==========
 
@@ -65,6 +66,16 @@ Track::Track(int trackId, const QString &name, const QColor &color, QObject *par
 Track::~Track()
 {
     qDebug() << "Track destroyed: ID" << m_trackId << "Name:" << m_name;
+
+    // Cancel any in-flight background render and wait for it to finish,
+    // otherwise the QtConcurrent lambda captures 'this' and will crash.
+    if (m_rendering.load()) {
+        m_cancelRender.store(true);
+        if (m_renderWatcher && m_renderWatcher->isRunning()) {
+            m_renderWatcher->waitForFinished();
+        }
+        m_rendering.store(false);
+    }
 
     // Clean up render cache
     clearRenderCache();
@@ -216,6 +227,7 @@ void Track::newSounit()
 
     m_canvas->setSounitName(m_sounitName);
     m_canvas->setSounitComment(m_sounitComment);
+    m_canvas->setExpressiveCurveNames(QStringList{});
 
     // Invalidate graph and cache
     if (m_graph) {
@@ -380,6 +392,10 @@ int Track::createVariation(const QString &name)
     }
     graphData["connections"] = connectionsArray;
 
+    QJsonArray curveNamesArray;
+    for (const QString &n : m_canvas->getExpressiveCurveNames()) curveNamesArray.append(n);
+    graphData["expressiveCurveNames"] = curveNamesArray;
+
     qDebug() << "Track" << m_trackId << "serialized" << containersArray.size()
              << "containers and" << connectionsArray.size() << "connections";
 
@@ -531,6 +547,16 @@ SounitGraph* Track::getGraphForVariation(int index)
     return m_graph;  // Fallback to base
 }
 
+Canvas* Track::getCanvasForVariation(int index) const
+{
+    if (index == 0) return m_canvas;
+    int listIndex = index - 1;
+    if (listIndex >= 0 && listIndex < m_variations.size()) {
+        return m_variations[listIndex]->sourceCanvas;
+    }
+    return nullptr;
+}
+
 QStringList Track::getVariationNames() const
 {
     QStringList names;
@@ -567,6 +593,10 @@ int Track::createOrUpdateInternalVariation(int existingIndex)
         connectionsArray.append(m_canvas->serializeConnection(conn));
     }
     graphData["connections"] = connectionsArray;
+
+    QJsonArray curveNamesArray;
+    for (const QString &n : m_canvas->getExpressiveCurveNames()) curveNamesArray.append(n);
+    graphData["expressiveCurveNames"] = curveNamesArray;
 
     // Check if we should update an existing internal variation
     int listIndex = existingIndex - 1;
@@ -641,6 +671,10 @@ void Track::saveBaseCanvasState()
         connectionsArray.append(m_canvas->serializeConnection(conn));
     }
     state["connections"] = connectionsArray;
+
+    QJsonArray curveNamesArray;
+    for (const QString &n : m_canvas->getExpressiveCurveNames()) curveNamesArray.append(n);
+    state["expressiveCurveNames"] = curveNamesArray;
 
     m_baseCanvasState = state;
     qDebug() << "Track" << m_trackId << "saved base canvas state:"
@@ -729,6 +763,18 @@ bool Track::loadVariationToCanvas(int index)
         }
     }
 
+    // Restore the canvas's declared expressive curve names so the envelope
+    // inspector + score canvas see the names that belong to this variation /
+    // base sounit. Older saves that predate the field will yield an empty
+    // list, matching the prior behaviour.
+    QStringList loadedCurveNames;
+    QJsonArray curveNamesArray = graphData["expressiveCurveNames"].toArray();
+    for (const QJsonValue &v : curveNamesArray) {
+        QString s = v.toString();
+        if (!s.isEmpty()) loadedCurveNames.append(s);
+    }
+    m_canvas->setExpressiveCurveNames(loadedCurveNames);
+
     m_canvas->setLoading(false);
     m_canvas->update();
 
@@ -795,6 +841,17 @@ void Track::buildGraphFromJson(const QJsonObject &graphData, double sampleRate, 
             canvas->getConnections().append(conn);
         }
     }
+
+    // Restore the sounit's declared expressive curve names so code that queries
+    // this canvas (e.g. score canvas right-click / "Show curve" combo) sees the
+    // same names the variation was created with.
+    QStringList loadedCurveNames;
+    QJsonArray curveNamesArray = graphData["expressiveCurveNames"].toArray();
+    for (const QJsonValue &v : curveNamesArray) {
+        QString s = v.toString();
+        if (!s.isEmpty()) loadedCurveNames.append(s);
+    }
+    canvas->setExpressiveCurveNames(loadedCurveNames);
 
     canvas->setLoading(false);
 
@@ -916,6 +973,18 @@ bool Track::prerender(double sampleRate, double segmentDurationMs)
         size_t noteStartSample = static_cast<size_t>((note.getStartTime() / 1000.0) * sampleRate);
         size_t noteDurationSamples = static_cast<size_t>((note.getDuration() / 1000.0) * sampleRate);
 
+        // Precompute expressive curve names/curves for this note (see renderNoteImpl).
+        const int expressiveCount = note.getExpressiveCurveCount();
+        QStringList scoreCurveNames;
+        scoreCurveNames.reserve(expressiveCount);
+        scoreCurveNames.append(QStringLiteral("Dynamics"));
+        QVector<const Curve*> expressiveCurves;
+        expressiveCurves.reserve(expressiveCount - 1);
+        for (int ci = 1; ci < expressiveCount; ++ci) {
+            scoreCurveNames.append(note.getExpressiveCurveName(ci));
+            expressiveCurves.append(&note.getExpressiveCurve(ci));
+        }
+
         // Render each sample of the note
         for (size_t i = 0; i < noteDurationSamples; ++i) {
             // Calculate note progress (0.0 to 1.0)
@@ -926,8 +995,17 @@ bool Track::prerender(double sampleRate, double segmentDurationMs)
             double pitch = note.getPitchAt(noteProgress);
             double dynamics = note.getDynamicsAt(noteProgress);
 
+            QVector<double> scoreCurveValues;
+            scoreCurveValues.reserve(scoreCurveNames.size());
+            scoreCurveValues.append(dynamics);
+            for (const Curve *c : expressiveCurves) {
+                double val = (c && !c->isEmpty()) ? c->valueAt(std::min(noteProgress, 1.0)) : 0.5;
+                scoreCurveValues.append(val);
+            }
+
             // Generate audio sample
-            double sample = m_graph->generateSample(pitch, noteProgress, false, false, dynamics);
+            double sample = m_graph->generateSample(pitch, noteProgress, false, false,
+                                                    dynamics, scoreCurveValues, scoreCurveNames);
 
             // Apply dynamics and simple envelope
             double envelope = 1.0;
@@ -1350,7 +1428,12 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     outRender.sampleRate = m_sampleRate;
 
     // Pre-allocate for note + reasonable tail estimate, will grow if needed
-    outRender.samples.reserve(noteSamples + static_cast<size_t>(m_sampleRate * 5));
+    size_t reserveSize = noteSamples + static_cast<size_t>(m_sampleRate * 5);
+    outRender.samples.reserve(reserveSize);
+    bool graphHasPan = graph->hasPan();
+    if (graphHasPan) {
+        outRender.panValues.reserve(reserveSize);
+    }
 
     // Reset graph for this note
     // For legato notes, don't fully reset - preserve K-S state so string keeps vibrating
@@ -1375,6 +1458,21 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     // Skip release envelope when graph has a tail — the reverb/decay handles the fade naturally
     bool graphHasTail = graph->hasTail();
     bool skipRelease = hasLegatoFollowing || graphHasTail;
+
+    // Precompute expressive curve names for this note (index 0 = Dynamics).
+    // These feed Envelope Engines with followDynamics=on via scoreCurveName match.
+    // Without this, the pre-render path sees empty score curves and every
+    // non-Dynamics follow falls back to unity, silently ignoring the shape.
+    const int expressiveCount = note.getExpressiveCurveCount();
+    QStringList scoreCurveNames;
+    scoreCurveNames.reserve(expressiveCount);
+    scoreCurveNames.append(QStringLiteral("Dynamics"));
+    QVector<const Curve*> expressiveCurves;
+    expressiveCurves.reserve(expressiveCount - 1);
+    for (int ci = 1; ci < expressiveCount; ++ci) {
+        scoreCurveNames.append(note.getExpressiveCurveName(ci));
+        expressiveCurves.append(&note.getExpressiveCurve(ci));
+    }
 
     // --- Phase 1: Render the note's nominal duration ---
     for (size_t i = 0; i < noteSamples; ++i) {
@@ -1403,7 +1501,17 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
             dynamics *= std::max(0.0, 1.0 + (lfoValue * vibrato.amplitudeDepth * envelopeIntensity));
         }
 
-        double sample = graph->generateSample(pitch, progress, isLegato, false, dynamics);
+        // Build per-sample expressive curve values to pass to the graph.
+        QVector<double> scoreCurveValues;
+        scoreCurveValues.reserve(scoreCurveNames.size());
+        scoreCurveValues.append(dynamics);  // index 0: dynamics (with vibrato applied)
+        for (const Curve *c : expressiveCurves) {
+            double val = (c && !c->isEmpty()) ? c->valueAt(std::min(progress, 1.0)) : 0.5;
+            scoreCurveValues.append(val);
+        }
+
+        double sample = graph->generateSample(pitch, progress, isLegato, false,
+                                              dynamics, scoreCurveValues, scoreCurveNames);
 
         // Simple envelope
         double envelope = 1.0;
@@ -1425,6 +1533,9 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
             outputSample = static_cast<float>(sample * dynamics * envelope);
         }
         outRender.samples.push_back(outputSample);
+        if (graphHasPan) {
+            outRender.panValues.push_back(static_cast<float>(graph->getPanValue()));
+        }
     }
 
     // --- Phase 2: Render tail until silence (reverb/decay ring-out) ---
@@ -1432,10 +1543,22 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     if (!hasLegatoFollowing && graphHasTail) {
         double lastPitch = note.getPitchAt(1.0);
         double lastDynamics = note.getDynamicsAt(1.0);
+        float lastPan = graphHasPan ? static_cast<float>(graph->getPanValue()) : 0.0f;
         size_t silenceRun = 0;
 
+        // In tail mode, freeze each expressive curve to its final value (curve.valueAt(1.0))
+        // so any parameter being driven by the curve carries smoothly into the tail
+        // instead of snapping to 1.0 at the note→tail boundary. Matches audioengine.cpp.
+        QVector<double> tailCurveValues;
+        tailCurveValues.reserve(scoreCurveNames.size());
+        tailCurveValues.append(lastDynamics);  // index 0: Dynamics
+        for (const Curve *c : expressiveCurves) {
+            tailCurveValues.append((c && !c->isEmpty()) ? c->valueAt(1.0) : 0.5);
+        }
+
         for (size_t t = 0; t < maxTailSamples; ++t) {
-            double sample = graph->generateSample(lastPitch, 1.0, isLegato, true, lastDynamics);
+            double sample = graph->generateSample(lastPitch, 1.0, isLegato, true,
+                                                  lastDynamics, tailCurveValues, scoreCurveNames);
 
             // In tail mode generators are silent (sample ≈ 0); post-render IR rings out
             // via its FDL and tail injection mechanism.
@@ -1458,6 +1581,9 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
             }
 
             outRender.samples.push_back(outputSample);
+            if (graphHasPan) {
+                outRender.panValues.push_back(lastPan);
+            }
         }
 
         // Apply short fade-out at the very end to prevent any click
@@ -1596,6 +1722,7 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         completedCount.fetch_add(1);
     });
 
+    // Wait for completion while keeping UI responsive
     // Wait for completion while keeping UI responsive
     while (!future.isFinished()) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
@@ -1843,7 +1970,8 @@ bool Track::hasRenderWork() const
 std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
 {
     size_t numSamples = static_cast<size_t>((durationMs / 1000.0) * m_sampleRate);
-    std::vector<float> buffer(numSamples, 0.0f);
+    // Stereo interleaved: [L0, R0, L1, R1, ...]
+    std::vector<float> buffer(numSamples * 2, 0.0f);
 
     if (m_muted || numSamples == 0) {
         return buffer;
@@ -1854,18 +1982,38 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
     // Lock mutex to prevent race conditions with UI thread syncing notes
     std::lock_guard<std::mutex> lock(m_playbackMutex);
 
-    // Check if string damping is active (K-S with stringDamping toggled on)
-    bool stringDamping = m_graph && m_graph->hasStringDamping();
-
-    // For string damping: collect note start times sorted chronologically
-    // so we can find when the next note cuts off each note's tail
-    std::vector<double> noteStartTimes;
-    if (stringDamping) {
-        noteStartTimes.reserve(m_notes.size());
-        for (const Note &note : m_notes) {
-            noteStartTimes.push_back(note.getStartTime());
+    // String damping is per-variation: a fretted-KS graph in one variation
+    // should only damp earlier notes routed through the same variation,
+    // not notes plucked on a different sounit on the same track.
+    auto canonicalVarIdx = [this](int idx) -> int {
+        if (idx == 0) return 0;
+        int li = idx - 1;
+        if (li >= 0 && li < m_variations.size()
+            && m_variations[li]->compiledGraph
+            && m_variations[li]->compiledGraph->isValid()) {
+            return idx;
         }
-        std::sort(noteStartTimes.begin(), noteStartTimes.end());
+        return 0;
+    };
+    auto graphForCanonical = [this](int idx) -> SounitGraph* {
+        return idx == 0 ? m_graph : m_variations[idx - 1]->compiledGraph;
+    };
+
+    QHash<int, bool> dampsByVariation;
+    QHash<int, std::vector<double>> dampStartsByVariation;
+    for (const Note &note : m_notes) {
+        int varIdx = canonicalVarIdx(note.getVariationIndex());
+        auto dIt = dampsByVariation.find(varIdx);
+        if (dIt == dampsByVariation.end()) {
+            SounitGraph* g = graphForCanonical(varIdx);
+            dIt = dampsByVariation.insert(varIdx, g && g->hasStringDamping());
+        }
+        if (dIt.value()) {
+            dampStartsByVariation[varIdx].push_back(note.getStartTime());
+        }
+    }
+    for (auto it = dampStartsByVariation.begin(); it != dampStartsByVariation.end(); ++it) {
+        std::sort(it.value().begin(), it.value().end());
     }
 
     // String damping fade-out duration (5ms = fast but click-free)
@@ -1883,6 +2031,8 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
             continue;  // Invalid render
         }
 
+        bool hasPan = !render.panValues.empty();
+
         // Use actual render length (includes tail for reverb/decay)
         double noteStartMs = note.getStartTime();
         double renderDurationMs = (static_cast<double>(render.samples.size()) / render.sampleRate) * 1000.0;
@@ -1894,16 +2044,16 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
 
         // String damping: find the next note's start time after this note starts.
         // That's when the string gets re-plucked and this note should be damped.
+        // Scoped to this note's variation so notes on other sounits aren't damped.
         double dampTimeMs = -1.0;
-        if (stringDamping) {
-            // Find the first start time strictly after this note's start
-            auto it = std::upper_bound(noteStartTimes.begin(), noteStartTimes.end(), noteStartMs);
-            if (it != noteStartTimes.end()) {
-                dampTimeMs = *it;
-            }
+        auto sIt = dampStartsByVariation.find(canonicalVarIdx(note.getVariationIndex()));
+        if (sIt != dampStartsByVariation.end()) {
+            const std::vector<double> &starts = sIt.value();
+            auto upIt = std::upper_bound(starts.begin(), starts.end(), noteStartMs);
+            if (upIt != starts.end()) dampTimeMs = *upIt;
         }
 
-        // Mix this note's samples into the buffer
+        // Mix this note's samples into the stereo buffer
         for (size_t i = 0; i < numSamples; ++i) {
             // Calculate absolute time for this sample
             double timeMs = startTimeMs + (static_cast<double>(i) / m_sampleRate) * 1000.0;
@@ -1929,7 +2079,14 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
                         sample *= static_cast<float>(0.5 * (1.0 + std::cos(fadeElapsed / DAMP_FADE_MS * M_PI)));
                     }
 
-                    buffer[i] += sample;
+                    // Apply per-note pan (from Pan container in sounit graph)
+                    float pan = (hasPan && noteIdx < render.panValues.size())
+                                ? render.panValues[noteIdx] : 0.0f;
+                    float leftGain  = std::min(1.0f, 1.0f - pan);
+                    float rightGain = std::min(1.0f, 1.0f + pan);
+
+                    buffer[i * 2]     += sample * leftGain;
+                    buffer[i * 2 + 1] += sample * rightGain;
                 }
             }
         }

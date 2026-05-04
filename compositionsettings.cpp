@@ -4,8 +4,8 @@
 CompositionSettings::CompositionSettings()
     : compositionName("Untitled")
     , timeMode(Musical)
-    , tempo(100)
-    , referenceTempo(100)  // Initially matches tempo
+    , tempo(60)
+    , referenceTempo(60)  // Initially matches tempo
     , timeSigTop(5)
     , timeSigBottom(4)
     , lengthMs(300000.0)
@@ -67,7 +67,7 @@ CompositionSettings CompositionSettings::fromJson(const QJsonObject &json)
     CompositionSettings s;
     s.compositionName = json["name"].toString("Untitled");
     s.timeMode = (json["timeMode"].toString() == "Musical") ? Musical : Absolute;
-    s.tempo = json["tempo"].toInt(100);
+    s.tempo = json["tempo"].toInt(60);
     // Default referenceTempo to tempo if not present (backwards compatibility)
     s.referenceTempo = json["referenceTempo"].toInt(s.tempo);
     s.timeSigTop = json["timeSigTop"].toInt(5);

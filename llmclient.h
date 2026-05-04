@@ -34,17 +34,29 @@ private:
     QJsonObject buildOpenAIRequest(const QJsonArray &messages,
                                    const QJsonArray &tools) const;
 
+    // Append `/no_think` to the last user message so Qwen3 skips reasoning.
+    QJsonArray  withNoThinkTag(const QJsonArray &messages) const;
+
     // Anthropic adapters — transform request/response so the rest of the
     // codebase stays completely unaware of the Anthropic wire format.
     QJsonObject adaptRequestForAnthropic(const QJsonObject &openAiRequest) const;
     QJsonObject adaptResponseFromAnthropic(const QJsonObject &anthropicResponse) const;
+
+    // Ollama native-API adapters — uses /api/chat with `think: false` so
+    // reasoning models (Qwen3) skip the <think> phase. Ollama's native
+    // response wraps the reply in `message` instead of `choices[0]`, and
+    // tool_call arguments are an object instead of a stringified JSON.
+    QJsonObject adaptRequestForOllama(const QJsonArray &messages,
+                                      const QJsonArray &tools) const;
+    QJsonObject adaptResponseFromOllama(const QJsonObject &ollamaResponse) const;
+    QString     ollamaChatUrl() const;
 
     // Text-format tool call parser — local models (Ollama, etc.) emit
     // <function=name><parameter=p>v</parameter></function> when they can't
     // produce structured JSON. This normalizes them to the standard tool_calls format.
     QJsonObject normalizeTextToolCalls(const QJsonObject &raw) const;
 
-    void handleReply(QNetworkReply *reply, bool isAnthropic,
+    void handleReply(QNetworkReply *reply, LLMProvider provider,
                      ResponseCallback callback);
 
     LLMConfig               m_config;

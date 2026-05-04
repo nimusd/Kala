@@ -298,50 +298,36 @@ void TrackSelector::resizeEvent(QResizeEvent *event)
 
 int TrackSelector::frequencyToPixel(double hz) const
 {
-    // Convert Hz to pixel position using logarithmic spacing
-    // Each octave = PIXELS_PER_OCTAVE (100 pixels)
-    // Higher frequencies = lower Y values (top of screen)
-    // MUST MATCH ScoreCanvas implementation
+    // Convert Hz to pixel position using logarithmic spacing.
+    // Maps FULL frequency range to widget height — MUST MATCH ScoreCanvas implementation.
 
     if (hz <= 0 || BASE_FREQUENCY <= 0) {
         return 0;
     }
 
-    // Calculate octave number from base frequency (logarithmic)
     double octaveNumber = std::log2(hz / BASE_FREQUENCY);
+    double fullMinOctave = std::log2(FULL_MIN_HZ / BASE_FREQUENCY);
+    double fullMaxOctave = std::log2(FULL_MAX_HZ / BASE_FREQUENCY);
+    double fullOctaveRange = fullMaxOctave - fullMinOctave;
 
-    // Calculate visible octave range
-    double minOctave = std::log2(visibleMinHz / BASE_FREQUENCY);
-    double maxOctave = std::log2(visibleMaxHz / BASE_FREQUENCY);
-    double visibleOctaveRange = maxOctave - minOctave;
+    double normalizedPos = (octaveNumber - fullMinOctave) / fullOctaveRange;
 
-    // Normalize position within visible range
-    double normalizedPos = (octaveNumber - minOctave) / visibleOctaveRange;
-    // Don't clamp - allow frequencies outside visible range to be positioned off-screen
-    // MUST MATCH ScoreCanvas implementation
-
-    // Convert to pixel position (flip for top-down coordinate system)
     int pixel = height() - static_cast<int>(normalizedPos * height());
     return pixel;
 }
 
 double TrackSelector::pixelToFrequency(int pixel) const
 {
-    // Convert pixel position to Hz using logarithmic spacing
-    // MUST MATCH ScoreCanvas implementation
-    int adjustedPixel = pixel;
-    double normalizedPos = 1.0 - (static_cast<double>(adjustedPixel) / height());
+    // Convert pixel position to Hz — MUST MATCH ScoreCanvas implementation.
+    double normalizedPos = 1.0 - (static_cast<double>(pixel) / height());
     normalizedPos = qBound(0.0, normalizedPos, 1.0);
 
-    // Calculate visible octave range
-    double minOctave = std::log2(visibleMinHz / BASE_FREQUENCY);
-    double maxOctave = std::log2(visibleMaxHz / BASE_FREQUENCY);
-    double visibleOctaveRange = maxOctave - minOctave;
+    double fullMinOctave = std::log2(FULL_MIN_HZ / BASE_FREQUENCY);
+    double fullMaxOctave = std::log2(FULL_MAX_HZ / BASE_FREQUENCY);
+    double fullOctaveRange = fullMaxOctave - fullMinOctave;
 
-    // Calculate octave number at this position
-    double octaveNumber = minOctave + (normalizedPos * visibleOctaveRange);
+    double octaveNumber = fullMinOctave + (normalizedPos * fullOctaveRange);
 
-    // Convert back to Hz
     return BASE_FREQUENCY * std::pow(2.0, octaveNumber);
 }
 

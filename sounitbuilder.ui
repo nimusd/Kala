@@ -109,6 +109,7 @@
     <addaction name="actionDrift_Engine"/>
     <addaction name="actionLFO"/>
     <addaction name="actionFrequency_Mapper"/>
+    <addaction name="actionPan"/>
    </widget>
    <widget class="QMenu" name="menuFilters">
     <property name="title">
@@ -247,6 +248,14 @@
   <action name="actionFrequency_Mapper">
    <property name="text">
     <string>Frequency Mapper</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionPan">
+   <property name="text">
+    <string>Pan</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
