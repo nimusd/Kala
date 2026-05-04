@@ -31,6 +31,7 @@
 #include "saxophonemodel2.h"
 #include "tailprocessor.h"
 #include "percussionmodel.h"
+#include "panprocessor.h"
 #include "spectrum.h"
 #include <QMap>
 #include <QVector>
@@ -54,7 +55,15 @@ public:
     // noteProgress = 0.0 to 1.0, represents position within note duration
     // isLegato = true if this note continues from previous (skip attack triggers)
     // tailMode = true to mute signal sources and let processors drain (reverb/decay ring-out)
-    double generateSample(double pitch, double noteProgress = 0.5, bool isLegato = false, bool tailMode = false, double currentDynamics = 1.0, const QVector<double> &scoreCurveValues = {});
+    // scoreCurveValues / scoreCurveNames are required (no defaults) so every caller
+    // is forced to think about expressive curve routing. Pass {}, {} explicitly
+    // when no curves apply (e.g. IR pre-roll); in that no-score-context case,
+    // followDynamics expressive-curve branches fall back to unity (act as no-ops).
+    // With a non-empty list, a note missing the named curve falls back to zero.
+    double generateSample(double pitch, double noteProgress, bool isLegato, bool tailMode,
+                          double currentDynamics,
+                          const QVector<double> &scoreCurveValues,
+                          const QStringList &scoreCurveNames);
 
     // Post-render IR: when IR Convolution is the last container, it is applied here
     // instead of inside the graph so reverb is independent of note dynamics style.
@@ -87,6 +96,12 @@ public:
 
     // Returns true if graph contains a Karplus-Strong with string damping enabled
     bool hasStringDamping() const;
+
+    // Returns true if graph contains a Pan container
+    bool hasPan() const { return m_panContainer != nullptr; }
+
+    // Returns the current pan value (-1.0 to +1.0) from the Pan container, or 0.0 if none
+    double getPanValue() const;
 
     // Deep-copy the graph (each processor is cloned; Container pointers are shared read-only)
     SounitGraph* clone() const;
@@ -125,11 +140,18 @@ private:
         SaxophoneModel2 *saxophoneModel  = nullptr;
         TailProcessor    *tailProc         = nullptr;
         PercussionModel  *percussionModel  = nullptr;
+        PanProcessor     *panProc          = nullptr;
 
         // Data storage for this container's outputs
         Spectrum spectrumOut;
         double signalOut = 0.0;
         double controlOut = 0.0;
+
+        // When true, downstream consumers should ignore this processor's output
+        // (skip the connection entirely so downstream parameters keep their design-time
+        // value). Set by the Envelope Engine when followDynamics=on but the named
+        // score curve isn't present on the current note. Re-evaluated every sample.
+        bool inactive = false;
 
         // Gate Processor specific outputs
         double gateEnvelopeOut = 0.0;
@@ -177,6 +199,7 @@ private:
             delete saxophoneModel;
             delete tailProc;
             delete percussionModel;
+            delete panProc;
         }
     };
 
@@ -192,6 +215,7 @@ private:
     double m_currentDynamics = 1.0;      // Note's dynamics value at current sample (for followDynamics)
     double m_lastNormalDynamics = 1.0;   // Dynamics at the last non-tail sample (for prepareForTailMode)
     QVector<double> m_scoreCurveValues;  // All expressive curve values for current sample (index 0=dynamics, 1+=named)
+    QStringList m_scoreCurveNames;       // Parallel name list (index 0 = "Dynamics", 1+ = curve names)
 
     // Post-render IR Convolution: when IR is the final container it is lifted out of the
     // graph and applied by processPostIR() with the pre-outer-dynamics signal as input.
@@ -199,6 +223,9 @@ private:
     // the in-graph Envelope Engine, once by the audio engine's outer currentDynamics).
     Container    *m_postRenderIRContainer = nullptr;  // The IR container that was lifted out
     IRConvolution *m_postRenderIRConv     = nullptr;  // Alias into processors[m_postRenderIRContainer]
+
+    // Pan container tracking (for stereo rendering)
+    Container *m_panContainer = nullptr;
 
     // Cached connections - snapshot taken at build time so graph is independent of live canvas edits
     QVector<Canvas::Connection> cachedConnections;
@@ -210,6 +237,13 @@ private:
     double getInputValue(Container *container, const QString &portName, double defaultValue);
     double getOutputValue(const ProcessorData &proc, const QString &portName) const;
     void runIRPreroll(double pitch);  // Pre-renders irIn source to capture IR before note starts
+
+    // True when fromContainer has a processor and is not marked inactive.
+    // Used in executeContainer to gate connection reads — inactive sources contribute nothing.
+    bool isSourceActive(Container *fromContainer) const {
+        auto it = processors.constFind(fromContainer);
+        return it != processors.constEnd() && !it->inactive;
+    }
 };
 
 #endif // SOUNITGRAPH_H

@@ -73,6 +73,13 @@ public:
     QString getSounitComment() const { return sounitComment; }
     void setSounitComment(const QString &comment);
 
+    // Named expressive curves declared by this sounit. Envelope containers reference
+    // a name from this list via their scoreCurveName param; notes supply the shapes
+    // keyed by the same name.
+    const QStringList& getExpressiveCurveNames() const { return expressiveCurveNames; }
+    bool addExpressiveCurveName(const QString &name);   // returns true if added (non-empty, non-duplicate)
+    void setExpressiveCurveNames(const QStringList &names);  // used by loader
+
     // Zoom functionality
     void setZoomMode(bool active);
     bool isZoomMode() const { return m_zoomMode; }
@@ -103,6 +110,7 @@ signals:
     void undoRedoPerformed();  // Emitted after undo/redo via keyboard
     void sounitNameChanged(const QString &name);
     void sounitCommentChanged(const QString &comment);
+    void expressiveCurveNamesChanged();
     void selectionModeChanged(bool active);
 
 protected:
@@ -118,6 +126,7 @@ private:
     QUndoStack *undoStack;
     QString sounitName = "Untitled Sounit";
     QString sounitComment;
+    QStringList expressiveCurveNames;
 
     QPoint getPortPosition(Container *container, const QString &portName, bool isOutput);
     int selectedConnectionIndex = -1;

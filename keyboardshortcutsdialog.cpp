@@ -44,7 +44,8 @@ void KeyboardShortcutsDialog::setupUI()
     addShortcut(edit, "Redo", "Ctrl+Y");
     addShortcut(edit, "Cut", "Ctrl+X");
     addShortcut(edit, "Copy", "Ctrl+C");
-    addShortcut(edit, "Paste", "Ctrl+V");
+    addShortcut(edit, "Paste at now marker", "Ctrl+V");
+    addShortcut(edit, "Paste at end of track", "Ctrl+Shift+V");
     addShortcut(edit, "Delete", "Delete");
     addShortcut(edit, "Select All", "Ctrl+A");
     addShortcut(edit, "Deselect", "Escape");
@@ -75,6 +76,7 @@ void KeyboardShortcutsDialog::setupUI()
     addShortcut(composition, "Draw Discrete Notes", "D");
     addShortcut(composition, "Draw Continuous Notes", "C");
     addShortcut(composition, "Toggle Zoom Mode", "Z");
+    addShortcut(composition, "Toggle Pitch-Curve Transform Mode", "T");
     addShortcut(composition, "Play/Stop", "Space");
     addShortcut(composition, "Toggle Pan Mode", "Ctrl+Space");
     addShortcut(composition, "Set Loop", "L");

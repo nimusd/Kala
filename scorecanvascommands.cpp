@@ -234,6 +234,8 @@ EditCurveCommand::EditCurveCommand(Phrase *phrase, int noteIndex, CurveType curv
 {
     if (curveType == DynamicsCurve) {
         setText("Edit Dynamics Curve");
+    } else if (curveType == PitchCurve) {
+        setText("Edit Pitch Curve");
     } else {
         setText("Edit Bottom Curve");
     }
@@ -265,6 +267,8 @@ void EditCurveCommand::undo()
             note.setDynamicsCurve(m_oldCurve);
         } else if (m_curveType == BottomCurve) {
             note.setBottomCurve(m_oldCurve);
+        } else if (m_curveType == PitchCurve) {
+            note.setPitchCurve(m_oldCurve);
         } else if (m_curveType == ExpressiveCurveN) {
             if (m_curveIndex >= 0 && m_curveIndex < note.getExpressiveCurveCount()) {
                 note.getExpressiveCurve(m_curveIndex) = m_oldCurve;
@@ -286,6 +290,8 @@ void EditCurveCommand::redo()
             note.setDynamicsCurve(m_newCurve);
         } else if (m_curveType == BottomCurve) {
             note.setBottomCurve(m_newCurve);
+        } else if (m_curveType == PitchCurve) {
+            note.setPitchCurve(m_newCurve);
         } else if (m_curveType == ExpressiveCurveN) {
             if (m_curveIndex >= 0 && m_curveIndex < note.getExpressiveCurveCount()) {
                 note.getExpressiveCurve(m_curveIndex) = m_newCurve;
@@ -440,6 +446,55 @@ void MoveMultipleNotesCommand::redo()
 }
 
 // ============================================================================
+// Resize Multiple Notes Command
+// ============================================================================
+
+ResizeMultipleNotesCommand::ResizeMultipleNotesCommand(Phrase *phrase,
+                                                       const QVector<NoteState> &oldStates,
+                                                       const QVector<NoteState> &newStates,
+                                                       ScoreCanvas *canvas, QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_oldStates(oldStates)
+    , m_newStates(newStates)
+    , m_canvas(canvas)
+{
+    setText("Resize Multiple Notes");
+}
+
+void ResizeMultipleNotesCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    for (const NoteState &state : m_oldStates) {
+        if (state.index >= 0 && state.index < notes.size()) {
+            Note &note = notes[state.index];
+            note.setStartTime(state.startTime);
+            note.setDuration(state.duration);
+        }
+    }
+
+    m_canvas->update();
+    qDebug() << "Undo: Restored" << m_oldStates.size() << "notes to original sizes";
+}
+
+void ResizeMultipleNotesCommand::redo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    for (const NoteState &state : m_newStates) {
+        if (state.index >= 0 && state.index < notes.size()) {
+            Note &note = notes[state.index];
+            note.setStartTime(state.startTime);
+            note.setDuration(state.duration);
+        }
+    }
+
+    m_canvas->update();
+    qDebug() << "Redo: Resized" << m_newStates.size() << "notes";
+}
+
+// ============================================================================
 // Apply Dynamics Curve Command
 // ============================================================================
 
@@ -460,11 +515,13 @@ ApplyDynamicsCurveCommand::ApplyDynamicsCurveCommand(Phrase *phrase,
 {
     setText("Apply Dynamics Curve");
 
-    // Store original dynamics curves for undo
+    // Store original dynamics curves and envelope control points for undo
     QVector<Note> &notes = m_phrase->getNotes();
     for (int idx : m_noteIndices) {
         if (idx >= 0 && idx < notes.size()) {
             m_oldDynamicsCurves.append(notes[idx].getDynamicsCurve());
+            m_oldEnvelopeControlPoints.append(
+                notes[idx].getEnvelopeControlPoints(QStringLiteral("Dynamics")));
         }
     }
 }
@@ -473,11 +530,16 @@ void ApplyDynamicsCurveCommand::undo()
 {
     QVector<Note> &notes = m_phrase->getNotes();
 
-    // Restore original dynamics curves
+    // Restore original dynamics curves and envelope control points
     for (int i = 0; i < m_noteIndices.size() && i < m_oldDynamicsCurves.size(); ++i) {
         int idx = m_noteIndices[i];
         if (idx >= 0 && idx < notes.size()) {
             notes[idx].setDynamicsCurve(m_oldDynamicsCurves[i]);
+            if (i < m_oldEnvelopeControlPoints.size() && !m_oldEnvelopeControlPoints[i].isEmpty())
+                notes[idx].setEnvelopeControlPoints(QStringLiteral("Dynamics"),
+                                                     m_oldEnvelopeControlPoints[i]);
+            else
+                notes[idx].removeEnvelopeControlPoints(QStringLiteral("Dynamics"));
             notes[idx].setRenderDirty(true);
         }
     }
@@ -520,6 +582,25 @@ void ApplyDynamicsCurveCommand::redo()
         return m_curve.last().value;
     };
 
+    // Helper: detect flat curves (e.g., from MIDI velocity) and compute baseline.
+    // Used to scale applied curve proportionally to preserve relative loudness.
+    auto curveBaselineIfFlat = [](const Curve &curve, double threshold = 0.05) -> std::pair<bool, double> {
+        if (curve.isEmpty()) return {true, 0.5};  // Empty curve defaults to 0.5
+        const int SAMPLE_COUNT = 5;
+        double minVal = 1.0;
+        double maxVal = 0.0;
+        double sum = 0.0;
+        for (int i = 0; i <= SAMPLE_COUNT; ++i) {
+            double t = static_cast<double>(i) / SAMPLE_COUNT;
+            double val = curve.valueAt(t);
+            minVal = qMin(minVal, val);
+            maxVal = qMax(maxVal, val);
+            sum += val;
+        }
+        bool flat = (maxVal - minVal) <= threshold;
+        return {flat, sum / (SAMPLE_COUNT + 1)};
+    };
+
     if (m_perNote) {
         // Per-note mode: the chosen curve becomes each note's dynamics shape.
         // Sample at 20 evenly-spaced points so that smooth (cosine) segments in
@@ -532,16 +613,26 @@ void ApplyDynamicsCurveCommand::redo()
             Note &note = notes[idx];
             const Curve &existing = note.getDynamicsCurve();
 
+            // Detect flat curves (e.g., MIDI velocity) to scale envelope proportionally
+            auto flatResult = curveBaselineIfFlat(existing);
+            bool isFlat = flatResult.first;
+            double baseline = flatResult.second;
+            double scale = baseline;  // Multiply envelope by baseline when flat
+
             Curve newCurve;
             for (int s = 0; s <= SAMPLE_COUNT; ++s) {
                 double t = static_cast<double>(s) / SAMPLE_COUNT;
                 double curveVal   = evaluateCurve(t);
                 double existingVal = existing.isEmpty() ? 0.5 : existing.valueAt(t);
-                double newVal = existingVal + (curveVal - existingVal) * m_weight;
+
+                // Scale curve value if existing curve is flat
+                double scaledCurveVal = isFlat ? (scale * curveVal) : curveVal;
+                double newVal = existingVal + (scaledCurveVal - existingVal) * m_weight;
                 newCurve.addPoint(t, qBound(0.0, newVal, 1.0), 1.0);
             }
 
             note.setDynamicsCurve(newCurve);
+            note.setEnvelopeControlPoints(QStringLiteral("Dynamics"), m_curve);
             note.setRenderDirty(true);
         }
     } else if (m_noteIndices.size() == 1) {
@@ -555,15 +646,25 @@ void ApplyDynamicsCurveCommand::redo()
             Note &note = notes[idx];
             const Curve &existingCurve = note.getDynamicsCurve();
 
+            // Detect flat curves (e.g., MIDI velocity) to scale envelope proportionally
+            auto flatResult = curveBaselineIfFlat(existingCurve);
+            bool isFlat = flatResult.first;
+            double baseline = flatResult.second;
+            double scale = baseline;  // Multiply envelope by baseline when flat
+
             Curve newCurve;
             for (int s = 0; s <= SAMPLE_COUNT; ++s) {
                 double t  = static_cast<double>(s) / SAMPLE_COUNT;
                 double cv = evaluateCurve(t);
                 double existingVal = existingCurve.isEmpty() ? 0.5 : existingCurve.valueAt(t);
-                double newVal = existingVal + (cv - existingVal) * m_weight;
+
+                // Scale curve value if existing curve is flat
+                double scaledCurveVal = isFlat ? (scale * cv) : cv;
+                double newVal = existingVal + (scaledCurveVal - existingVal) * m_weight;
                 newCurve.addPoint(t, qBound(0.0, newVal, 1.0), 1.0);
             }
             note.setDynamicsCurve(newCurve);
+            note.setEnvelopeControlPoints(QStringLiteral("Dynamics"), m_curve);
             note.setRenderDirty(true);
         }
     } else {
@@ -678,10 +779,13 @@ void PasteNotesCommand::redo()
         pastedNote.regenerateId();  // Generate new unique ID to avoid sharing state with original
         pastedNote.setStartTime(note.getStartTime() + timeOffset);
         // Always assign to the active track at paste time — this is what makes
-        // cross-track paste work.  Variation indices are per-track, so reset to
-        // base sounit (0) to avoid an invalid index on the destination track.
+        // cross-track paste work.  Variation indices are per-track, so only
+        // reset to base on a cross-track paste (where the source's index may
+        // not exist on the destination); within-track paste keeps it.
+        if (note.getTrackIndex() != m_targetTrackIndex) {
+            pastedNote.setVariationIndex(0);
+        }
         pastedNote.setTrackIndex(m_targetTrackIndex);
-        pastedNote.setVariationIndex(0);
         pastedNote.setRenderDirty(true);
 
         // Add note and track its index
@@ -1661,16 +1765,44 @@ UnlinkLegatoCommand::UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &not
             // the split note keeps its original glide rather than becoming a flat note.
             if (note.hasPitchCurve() && note.isLinkedAsLegato() && segSpan > 0) {
                 const Curve &srcPitch = note.getPitchCurve();
+                const auto &srcPts = srcPitch.getPoints();
+
+                // At segment boundaries the merged curve has coincident points
+                // (prev-seg end + this-seg start at the same time). For this
+                // segment's start we want the RIGHTMOST coincident value; for
+                // the end we want the LEFTMOST. valueAt() returns the leftmost,
+                // so it's correct for endTime but wrong for startTime.
+                auto startAnchor = [&]() {
+                    int lastMatch = -1;
+                    for (int i = 0; i < srcPts.size(); ++i) {
+                        if (std::abs(srcPts[i].time - seg.startTime) < 1e-9) {
+                            lastMatch = i;
+                        } else if (srcPts[i].time > seg.startTime) {
+                            break;
+                        }
+                    }
+                    return lastMatch >= 0 ? srcPts[lastMatch].value
+                                          : srcPitch.valueAt(seg.startTime);
+                };
+                auto endAnchor = [&]() {
+                    for (int i = 0; i < srcPts.size(); ++i) {
+                        if (std::abs(srcPts[i].time - seg.endTime) < 1e-9) {
+                            return srcPts[i].value;
+                        }
+                        if (srcPts[i].time > seg.endTime) break;
+                    }
+                    return srcPitch.valueAt(seg.endTime);
+                };
+
                 Curve splitPitch;
-                // Anchor start and end so the curve always covers [0, 1]
-                splitPitch.addPoint(0.0, srcPitch.valueAt(seg.startTime), 1.0);
-                for (const auto &pt : srcPitch.getPoints()) {
+                splitPitch.addPoint(0.0, startAnchor(), 1.0);
+                for (const auto &pt : srcPts) {
                     if (pt.time > seg.startTime && pt.time < seg.endTime) {
                         splitPitch.addPoint((pt.time - seg.startTime) / segSpan,
                                             pt.value, pt.pressure);
                     }
                 }
-                splitPitch.addPoint(1.0, srcPitch.valueAt(seg.endTime), 1.0);
+                splitPitch.addPoint(1.0, endAnchor(), 1.0);
                 splitNote.setPitchCurve(splitPitch);
             }
 
@@ -2110,120 +2242,6 @@ void DeleteScaleChangeCommand::redo()
 }
 
 // ============================================================================
-// Add Expressive Curve Command
-// ============================================================================
-
-AddExpressiveCurveCommand::AddExpressiveCurveCommand(Phrase *phrase,
-                                                      const QVector<int> &noteIndices,
-                                                      const QString &name,
-                                                      const QVector<EnvelopePoint> &envelopeCurve,
-                                                      double weight,
-                                                      bool perNote,
-                                                      ScoreCanvas *canvas,
-                                                      QUndoCommand *parent)
-    : QUndoCommand(parent)
-    , m_phrase(phrase)
-    , m_noteIndices(noteIndices)
-    , m_name(name)
-    , m_envelopeCurve(envelopeCurve)
-    , m_weight(weight)
-    , m_perNote(perNote)
-    , m_canvas(canvas)
-{
-    setText("Add Expressive Curve");
-}
-
-Curve AddExpressiveCurveCommand::evaluateToCurve(double noteStart, double noteDuration,
-                                                  double selStart, double selDuration) const
-{
-    // Reuse the same evaluation logic as ApplyDynamicsCurveCommand
-    auto evaluateCurve = [this](double t) -> double {
-        if (m_envelopeCurve.isEmpty()) return 1.0;
-        if (m_envelopeCurve.size() == 1) return m_envelopeCurve[0].value;
-        if (t <= m_envelopeCurve.first().time) return m_envelopeCurve.first().value;
-        if (t >= m_envelopeCurve.last().time)  return m_envelopeCurve.last().value;
-        for (int i = 0; i < m_envelopeCurve.size() - 1; ++i) {
-            if (t >= m_envelopeCurve[i].time && t <= m_envelopeCurve[i + 1].time) {
-                double segT = (t - m_envelopeCurve[i].time) / (m_envelopeCurve[i + 1].time - m_envelopeCurve[i].time);
-                if (m_envelopeCurve[i].curveType == 1) {
-                    double smoothT = (1.0 - std::cos(segT * M_PI)) * 0.5;
-                    return m_envelopeCurve[i].value + smoothT * (m_envelopeCurve[i + 1].value - m_envelopeCurve[i].value);
-                } else if (m_envelopeCurve[i].curveType == 2) {
-                    return m_envelopeCurve[i].value;
-                } else {
-                    return m_envelopeCurve[i].value + segT * (m_envelopeCurve[i + 1].value - m_envelopeCurve[i].value);
-                }
-            }
-        }
-        return m_envelopeCurve.last().value;
-    };
-
-    const int SAMPLE_COUNT = 20;
-    Curve result;
-
-    if (m_perNote || m_noteIndices.size() == 1 || selDuration <= 0.0) {
-        // Per-note (or single note): curve applied across entire note duration
-        for (int s = 0; s <= SAMPLE_COUNT; ++s) {
-            double t = static_cast<double>(s) / SAMPLE_COUNT;
-            double val = qBound(0.0, evaluateCurve(t) * m_weight, 1.0);
-            result.addPoint(t, val, 1.0);
-        }
-    } else {
-        // Multi-note: curve spans whole selection, note gets value at its center
-        double noteCenter = noteStart + noteDuration / 2.0;
-        double normalizedPos = qBound(0.0, (noteCenter - selStart) / selDuration, 1.0);
-        double targetVal = qBound(0.0, evaluateCurve(normalizedPos) * m_weight, 1.0);
-        result.addPoint(0.0, targetVal, 1.0);
-        result.addPoint(1.0, targetVal, 1.0);
-    }
-
-    return result;
-}
-
-void AddExpressiveCurveCommand::undo()
-{
-    QVector<Note> &notes = m_phrase->getNotes();
-    for (int i = 0; i < m_noteIndices.size(); ++i) {
-        int idx = m_noteIndices[i];
-        if (idx >= 0 && idx < notes.size() && i < m_addedAtIndex.size()) {
-            notes[idx].removeExpressiveCurve(m_addedAtIndex[i]);
-        }
-    }
-    m_canvas->update();
-    qDebug() << "Undo: Removed expressive curve from" << m_noteIndices.size() << "notes";
-}
-
-void AddExpressiveCurveCommand::redo()
-{
-    QVector<Note> &notes = m_phrase->getNotes();
-    m_addedAtIndex.clear();
-
-    // Calculate selection time span for multi-note mode
-    double selStart = std::numeric_limits<double>::max();
-    double selEnd   = std::numeric_limits<double>::lowest();
-    for (int idx : m_noteIndices) {
-        if (idx >= 0 && idx < notes.size()) {
-            selStart = qMin(selStart, notes[idx].getStartTime());
-            selEnd   = qMax(selEnd,   notes[idx].getStartTime() + notes[idx].getDuration());
-        }
-    }
-    double selDuration = (selEnd > selStart) ? (selEnd - selStart) : 0.0;
-
-    for (int idx : m_noteIndices) {
-        if (idx >= 0 && idx < notes.size()) {
-            Note &note = notes[idx];
-            int addedAt = note.getExpressiveCurveCount();
-            Curve c = evaluateToCurve(note.getStartTime(), note.getDuration(), selStart, selDuration);
-            note.addExpressiveCurve(m_name, c);
-            m_addedAtIndex.append(addedAt);
-        }
-    }
-
-    m_canvas->update();
-    qDebug() << "Redo: Added expressive curve '" << m_name << "' to" << m_noteIndices.size() << "notes";
-}
-
-// ============================================================================
 // Remove Expressive Curve Command
 // ============================================================================
 
@@ -2291,23 +2309,33 @@ void RemoveExpressiveCurveCommand::redo()
 // ============================================================================
 
 RemoveNamedExpressiveCurveCommand::RemoveNamedExpressiveCurveCommand(
-    Phrase *phrase, const QString &curveName, ScoreCanvas *canvas, QUndoCommand *parent)
+    Phrase *phrase, const QString &curveName, const QVector<int> &noteIndices,
+    ScoreCanvas *canvas, QUndoCommand *parent)
     : QUndoCommand(parent)
     , m_phrase(phrase)
     , m_curveName(curveName)
     , m_canvas(canvas)
 {
-    setText(QString("Delete Curve \"%1\" from All Notes").arg(curveName));
+    const bool scoped = !noteIndices.isEmpty();
+    setText(scoped
+        ? QString("Delete Curve \"%1\" from Selection").arg(curveName)
+        : QString("Delete Curve \"%1\" from All Notes").arg(curveName));
 
-    // Scan all notes and save those that carry this curve
+    // Save state for notes that will actually have the curve removed.
     const QVector<Note> &notes = m_phrase->getNotes();
-    for (int i = 0; i < notes.size(); ++i) {
+    auto captureNote = [&](int i) {
+        if (i < 0 || i >= notes.size()) return;
         for (int j = 1; j < notes[i].getExpressiveCurveCount(); ++j) {
             if (notes[i].getExpressiveCurveName(j) == curveName) {
                 m_saved.append({i, notes[i].getExpressiveCurve(j)});
                 break;
             }
         }
+    };
+    if (scoped) {
+        for (int i : noteIndices) captureNote(i);
+    } else {
+        for (int i = 0; i < notes.size(); ++i) captureNote(i);
     }
 }
 
@@ -2427,15 +2455,16 @@ void ApplyNamedCurveCommand::undo()
 }
 
 // ============================================================================
-// Apply Expressive Curve Shape Command
+// Apply Expressive Curve To Selection Command
 // ============================================================================
 
-ApplyExpressiveCurveShapeCommand::ApplyExpressiveCurveShapeCommand(
+ApplyExpressiveCurveToSelectionCommand::ApplyExpressiveCurveToSelectionCommand(
     Phrase *phrase,
     const QVector<int> &noteIndices,
     const QString &curveName,
     const QVector<EnvelopePoint> &envelope,
     double weight,
+    bool perNote,
     ScoreCanvas *canvas,
     QUndoCommand *parent)
     : QUndoCommand(parent)
@@ -2444,40 +2473,43 @@ ApplyExpressiveCurveShapeCommand::ApplyExpressiveCurveShapeCommand(
     , m_curveName(curveName)
     , m_envelope(envelope)
     , m_weight(weight)
+    , m_perNote(perNote)
     , m_firstTime(true)
     , m_canvas(canvas)
 {
-    setText("Apply Expressive Curve Shape");
+    setText("Apply Expressive Curve");
 }
 
-void ApplyExpressiveCurveShapeCommand::undo()
+void ApplyExpressiveCurveToSelectionCommand::undo()
 {
     QVector<Note> &notes = m_phrase->getNotes();
-
-    for (const SavedState &state : m_savedStates) {
-        if (state.curveIdx < 0) continue;  // note was skipped on redo
+    for (const PriorState &state : m_priorStates) {
         int idx = state.noteIdx;
         if (idx < 0 || idx >= notes.size()) continue;
         Note &note = notes[idx];
-        if (state.curveIdx >= 1 && state.curveIdx < note.getExpressiveCurveCount()) {
-            note.getExpressiveCurve(state.curveIdx) = state.oldCurve;
-            note.setRenderDirty(true);
+        if (state.hadCurve) {
+            note.upsertExpressiveCurve(m_curveName, state.oldCurve);
+            if (!state.oldControlPoints.isEmpty())
+                note.setEnvelopeControlPoints(m_curveName, state.oldControlPoints);
+            else
+                note.removeEnvelopeControlPoints(m_curveName);
+        } else {
+            note.removeExpressiveCurveByName(m_curveName);
+            note.removeEnvelopeControlPoints(m_curveName);
         }
+        note.setRenderDirty(true);
     }
-
     m_canvas->update();
     emit m_canvas->notesChanged();
-    qDebug() << "Undo: Restored expressive curve '" << m_curveName
-             << "' on" << m_savedStates.size() << "notes";
+    qDebug() << "Undo: Apply Expressive Curve '" << m_curveName << "' on"
+             << m_priorStates.size() << "notes";
 }
 
-void ApplyExpressiveCurveShapeCommand::redo()
+void ApplyExpressiveCurveToSelectionCommand::redo()
 {
-    QVector<Note> &notes = m_phrase->getNotes();
-
     if (m_noteIndices.isEmpty() || m_envelope.isEmpty()) return;
 
-    // Evaluate the envelope shape at normalized time t in [0,1]
+    // Evaluate the envelope shape at normalized time t in [0,1].
     auto evalEnvelope = [this](double t) -> double {
         if (m_envelope.size() == 1) return m_envelope[0].value;
         if (t <= m_envelope.first().time) return m_envelope.first().value;
@@ -2501,10 +2533,69 @@ void ApplyExpressiveCurveShapeCommand::redo()
         return m_envelope.last().value;
     };
 
-    // Calculate selection time span
+    // Sample the envelope into a Curve (used by per-note / single-note / "add
+    // as-is" branches).  Weight linearly scales every value; when the target
+    // note had no prior curve, this is the curve that gets laid down.
+    const int SAMPLE_COUNT = 30;
+    auto buildShapedCurve = [&](double extraScale) {
+        Curve c;
+        for (int s = 0; s <= SAMPLE_COUNT; ++s) {
+            double t = static_cast<double>(s) / SAMPLE_COUNT;
+            double v = qBound(0.0, evalEnvelope(t) * m_weight * extraScale, 1.0);
+            c.addPoint(t, v, 1.0);
+        }
+        return c;
+    };
+
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    if (m_firstTime) {
+        m_priorStates.clear();
+        for (int idx : m_noteIndices) {
+            if (idx < 0 || idx >= notes.size()) continue;
+            PriorState ps;
+            ps.noteIdx = idx;
+            int existingIdx = notes[idx].findExpressiveCurveIndexByName(m_curveName);
+            if (existingIdx >= 1) {
+                ps.hadCurve = true;
+                ps.oldCurve = notes[idx].getExpressiveCurve(existingIdx);
+                ps.oldControlPoints = notes[idx].getEnvelopeControlPoints(m_curveName);
+            } else {
+                ps.hadCurve = false;
+            }
+            m_priorStates.append(ps);
+        }
+        m_firstTime = false;
+    }
+
+    // Per-note mode, or single-note selection → copy the drawn shape to each
+    // note's own duration. Same behaviour as the legacy path.
+    if (m_perNote || m_priorStates.size() == 1) {
+        Curve shapedCurve = buildShapedCurve(1.0);
+        for (const PriorState &ps : m_priorStates) {
+            int idx = ps.noteIdx;
+            if (idx < 0 || idx >= notes.size()) continue;
+            notes[idx].upsertExpressiveCurve(m_curveName, shapedCurve);
+            notes[idx].setEnvelopeControlPoints(m_curveName, m_envelope);
+            notes[idx].setRenderDirty(true);
+        }
+
+        m_canvas->update();
+        emit m_canvas->notesChanged();
+        qDebug() << "Redo: Apply Expressive Curve '" << m_curveName
+                 << "' per-note on" << m_priorStates.size()
+                 << "notes (weight=" << m_weight << ")";
+        return;
+    }
+
+    // Selection-scaling mode: envelope spans the whole selection.  Notes that
+    // already carry the named curve keep their per-note shape, scaled by
+    // evalEnvelope at their centre's position.  Notes without the curve get
+    // the drawn shape laid down as-is.
     double selStart = std::numeric_limits<double>::max();
     double selEnd   = std::numeric_limits<double>::lowest();
-    for (int idx : m_noteIndices) {
+    for (const PriorState &ps : m_priorStates) {
+        int idx = ps.noteIdx;
         if (idx >= 0 && idx < notes.size()) {
             selStart = qMin(selStart, notes[idx].getStartTime());
             selEnd   = qMax(selEnd,   notes[idx].getStartTime() + notes[idx].getDuration());
@@ -2513,70 +2604,279 @@ void ApplyExpressiveCurveShapeCommand::redo()
     double selDuration = selEnd - selStart;
     if (selDuration <= 0.0) return;
 
-    if (m_firstTime) {
-        m_savedStates.clear();
-
-        for (int idx : m_noteIndices) {
-            if (idx < 0 || idx >= notes.size()) continue;
-            const Note &note = notes[idx];
-
-            SavedState state;
-            state.noteIdx  = idx;
-            state.curveIdx = -1;
-
-            // Find the named curve
-            for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
-                if (note.getExpressiveCurveName(i) == m_curveName) {
-                    state.curveIdx = i;
-                    state.oldCurve = note.getExpressiveCurve(i);
-                    break;
-                }
-            }
-
-            m_savedStates.append(state);
-        }
-
-        m_firstTime = false;
-    }
-
-    // Apply the scaled curve to each note that has the named curve
-    for (const SavedState &state : m_savedStates) {
-        if (state.curveIdx < 0) continue;  // note doesn't carry this curve
-        int idx = state.noteIdx;
+    for (const PriorState &ps : m_priorStates) {
+        int idx = ps.noteIdx;
         if (idx < 0 || idx >= notes.size()) continue;
         Note &note = notes[idx];
-        if (state.curveIdx < 1 || state.curveIdx >= note.getExpressiveCurveCount()) continue;
 
-        // Normalised position of this note's centre within the selection
-        double noteCenter    = note.getStartTime() + note.getDuration() / 2.0;
-        double normalizedPos = qBound(0.0, (noteCenter - selStart) / selDuration, 1.0);
-        double curveValue    = evalEnvelope(normalizedPos);
+        if (ps.hadCurve) {
+            // Scale the pre-existing per-note shape by the envelope at the
+            // note's centre in the selection — preserves internal shape.
+            double noteCenter    = note.getStartTime() + note.getDuration() / 2.0;
+            double normalizedPos = qBound(0.0, (noteCenter - selStart) / selDuration, 1.0);
+            double curveValue    = evalEnvelope(normalizedPos);
+            double scale         = 1.0 + m_weight * (curveValue - 1.0);
 
-        // scale = 1.0 when curveValue=1 (no change), blended by weight
-        double scale = 1.0 + m_weight * (curveValue - 1.0);
-
-        const Curve &existingCurve = note.getExpressiveCurve(state.curveIdx);
-        const QVector<Curve::Point> &pts = existingCurve.getPoints();
-        Curve newCurve;
-
-        if (pts.isEmpty()) {
-            double val = qBound(0.0, 0.7 * scale, 1.0);
-            newCurve.addPoint(0.0, val, 1.0);
-            newCurve.addPoint(1.0, val, 1.0);
-        } else {
-            for (const Curve::Point &pt : pts) {
-                newCurve.addPoint(pt.time, qBound(0.0, pt.value * scale, 1.0), pt.pressure);
+            const QVector<Curve::Point> &pts = ps.oldCurve.getPoints();
+            Curve newCurve;
+            if (pts.isEmpty()) {
+                double v = qBound(0.0, 0.7 * scale, 1.0);
+                newCurve.addPoint(0.0, v, 1.0);
+                newCurve.addPoint(1.0, v, 1.0);
+            } else {
+                for (const Curve::Point &pt : pts) {
+                    newCurve.addPoint(pt.time, qBound(0.0, pt.value * scale, 1.0),
+                                      pt.pressure);
+                }
             }
+            note.upsertExpressiveCurve(m_curveName, newCurve);
+            // Preserve prior control points — the per-note shape is what was
+            // drawn (or pre-existing); dialog envelope belongs to the selection
+            // spread, not to this note's own shape.
+            if (!ps.oldControlPoints.isEmpty())
+                note.setEnvelopeControlPoints(m_curveName, ps.oldControlPoints);
+        } else {
+            // No prior curve → slice the drawn envelope across this note's
+            // time span within the selection so the envelope reads
+            // continuously across the whole selection rather than being
+            // repeated per-note.
+            double tNoteStart = qBound(0.0,
+                (note.getStartTime() - selStart) / selDuration, 1.0);
+            double tNoteEnd   = qBound(0.0,
+                (note.getStartTime() + note.getDuration() - selStart) / selDuration, 1.0);
+            Curve sliceCurve;
+            for (int s = 0; s <= SAMPLE_COUNT; ++s) {
+                double localT = static_cast<double>(s) / SAMPLE_COUNT;
+                double selT   = tNoteStart + localT * (tNoteEnd - tNoteStart);
+                double v      = qBound(0.0, evalEnvelope(selT) * m_weight, 1.0);
+                sliceCurve.addPoint(localT, v, 1.0);
+            }
+            note.upsertExpressiveCurve(m_curveName, sliceCurve);
+            note.setEnvelopeControlPoints(m_curveName, m_envelope);
         }
-
-        note.getExpressiveCurve(state.curveIdx) = newCurve;
         note.setRenderDirty(true);
     }
 
     m_canvas->update();
     emit m_canvas->notesChanged();
-    qDebug() << "Redo: Applied expressive curve shape to '" << m_curveName
-             << "' (weight=" << m_weight << ") across" << m_noteIndices.size() << "notes";
+    qDebug() << "Redo: Apply Expressive Curve '" << m_curveName
+             << "' selection-scaled on" << m_priorStates.size()
+             << "notes (weight=" << m_weight << ")";
+}
+
+// ============================================================================
+// Apply EQ Curve Command
+// ============================================================================
+
+ApplyEqCurveCommand::ApplyEqCurveCommand(Phrase *phrase,
+                                         const QVector<int> &noteIndices,
+                                         const QStringList &bandNames,
+                                         const QVector<EnvelopePoint> &shape,
+                                         const QVector<EnvelopePoint> &intensity,
+                                         double weight,
+                                         bool perNote,
+                                         ScoreCanvas *canvas,
+                                         QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_noteIndices(noteIndices)
+    , m_bandNames(bandNames)
+    , m_shape(shape)
+    , m_intensity(intensity)
+    , m_weight(weight)
+    , m_perNote(perNote)
+    , m_firstTime(true)
+    , m_canvas(canvas)
+{
+    setText("Apply EQ Curve");
+}
+
+void ApplyEqCurveCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (const PriorNoteState &pns : m_priorStates) {
+        int idx = pns.noteIdx;
+        if (idx < 0 || idx >= notes.size()) continue;
+        Note &note = notes[idx];
+        for (int b = 0; b < m_bandNames.size() && b < pns.bands.size(); ++b) {
+            const QString &name = m_bandNames[b];
+            const PriorBandState &ps = pns.bands[b];
+            if (ps.hadCurve) {
+                note.upsertExpressiveCurve(name, ps.oldCurve);
+                if (!ps.oldControlPoints.isEmpty())
+                    note.setEnvelopeControlPoints(name, ps.oldControlPoints);
+                else
+                    note.removeEnvelopeControlPoints(name);
+            } else {
+                note.removeExpressiveCurveByName(name);
+                note.removeEnvelopeControlPoints(name);
+            }
+        }
+        if (pns.hadShape)
+            note.setEnvelopeControlPoints(QStringLiteral("EQ Shape"), pns.oldShape);
+        else
+            note.removeEnvelopeControlPoints(QStringLiteral("EQ Shape"));
+        if (pns.hadIntensity)
+            note.setEnvelopeControlPoints(QStringLiteral("EQ Intensity"), pns.oldIntensity);
+        else
+            note.removeEnvelopeControlPoints(QStringLiteral("EQ Intensity"));
+        note.setRenderDirty(true);
+    }
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "Undo: Apply EQ Curve on" << m_priorStates.size() << "notes";
+}
+
+void ApplyEqCurveCommand::redo()
+{
+    if (m_noteIndices.isEmpty() || m_shape.isEmpty() || m_intensity.isEmpty()) return;
+    if (m_bandNames.size() != 10) return;
+
+    // --- Envelope evaluators (mirrors ApplyExpressiveCurveToSelectionCommand) ---
+    auto evalEnvelope = [](const QVector<EnvelopePoint> &env, double t) -> double {
+        if (env.isEmpty()) return 0.5;
+        if (env.size() == 1) return env[0].value;
+        if (t <= env.first().time) return env.first().value;
+        if (t >= env.last().time)  return env.last().value;
+        for (int i = 0; i < env.size() - 1; ++i) {
+            if (t >= env[i].time && t <= env[i + 1].time) {
+                double dt = env[i + 1].time - env[i].time;
+                if (dt <= 0.0) return env[i + 1].value;
+                double segT = (t - env[i].time) / dt;
+                if (env[i].curveType == 1) {
+                    double smoothT = (1.0 - std::cos(segT * M_PI)) * 0.5;
+                    return env[i].value + smoothT * (env[i + 1].value - env[i].value);
+                } else if (env[i].curveType == 2) {
+                    return env[i].value;
+                } else {
+                    return env[i].value + segT * (env[i + 1].value - env[i].value);
+                }
+            }
+        }
+        return env.last().value;
+    };
+
+    // --- Sample shape into 10 band values by averaging over each 1/10th slice ---
+    double bandValues[10];
+    const int SUB = 8;  // sub-samples per band for a smooth average
+    for (int b = 0; b < 10; ++b) {
+        double t0 = b / 10.0;
+        double t1 = (b + 1) / 10.0;
+        double sum = 0.0;
+        for (int s = 0; s < SUB; ++s) {
+            double t = t0 + (t1 - t0) * (s + 0.5) / SUB;
+            sum += evalEnvelope(m_shape, t);
+        }
+        bandValues[b] = sum / SUB;
+    }
+
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    // --- On first redo, snapshot prior state for undo ---
+    if (m_firstTime) {
+        m_priorStates.clear();
+        for (int idx : m_noteIndices) {
+            if (idx < 0 || idx >= notes.size()) continue;
+            PriorNoteState pns;
+            pns.noteIdx = idx;
+            pns.bands.reserve(10);
+            for (int b = 0; b < 10; ++b) {
+                const QString &name = m_bandNames[b];
+                PriorBandState ps;
+                int existingIdx = notes[idx].findExpressiveCurveIndexByName(name);
+                if (existingIdx >= 1) {
+                    ps.hadCurve = true;
+                    ps.oldCurve = notes[idx].getExpressiveCurve(existingIdx);
+                    ps.oldControlPoints = notes[idx].getEnvelopeControlPoints(name);
+                } else {
+                    ps.hadCurve = false;
+                }
+                pns.bands.append(ps);
+            }
+            pns.hadShape = notes[idx].hasEnvelopeControlPoints(QStringLiteral("EQ Shape"));
+            if (pns.hadShape)
+                pns.oldShape = notes[idx].getEnvelopeControlPoints(QStringLiteral("EQ Shape"));
+            pns.hadIntensity = notes[idx].hasEnvelopeControlPoints(QStringLiteral("EQ Intensity"));
+            if (pns.hadIntensity)
+                pns.oldIntensity = notes[idx].getEnvelopeControlPoints(QStringLiteral("EQ Intensity"));
+            m_priorStates.append(pns);
+        }
+        m_firstTime = false;
+    }
+
+    const bool perNoteMode = m_perNote || (m_priorStates.size() == 1);
+
+    // --- Selection time span (only needed for phrase mode) ---
+    double selStart = 0.0, selEnd = 0.0, selDuration = 0.0;
+    if (!perNoteMode) {
+        selStart = std::numeric_limits<double>::max();
+        selEnd   = std::numeric_limits<double>::lowest();
+        for (const PriorNoteState &pns : m_priorStates) {
+            int idx = pns.noteIdx;
+            if (idx < 0 || idx >= notes.size()) continue;
+            selStart = qMin(selStart, notes[idx].getStartTime());
+            selEnd   = qMax(selEnd,   notes[idx].getStartTime() + notes[idx].getDuration());
+        }
+        selDuration = selEnd - selStart;
+        if (selDuration <= 0.0) return;
+    }
+
+    const int SAMPLE_COUNT = 30;
+
+    for (const PriorNoteState &pns : m_priorStates) {
+        int idx = pns.noteIdx;
+        if (idx < 0 || idx >= notes.size()) continue;
+        Note &note = notes[idx];
+
+        // Determine per-note scalar intensity (used only in phrase mode)
+        double noteIntensity = 1.0;
+        if (!perNoteMode) {
+            double noteCenter = note.getStartTime() + note.getDuration() / 2.0;
+            double nPos = qBound(0.0, (noteCenter - selStart) / selDuration, 1.0);
+            noteIntensity = evalEnvelope(m_intensity, nPos);
+        }
+
+        for (int b = 0; b < 10; ++b) {
+            const QString &name = m_bandNames[b];
+            const double delta = bandValues[b] - 0.5;  // band offset from flat
+
+            Curve c;
+            QVector<EnvelopePoint> eps;
+
+            if (perNoteMode) {
+                // Intensity curve spans this note's duration; sample it.
+                for (int s = 0; s <= SAMPLE_COUNT; ++s) {
+                    double t = static_cast<double>(s) / SAMPLE_COUNT;
+                    double intensity_t = evalEnvelope(m_intensity, t);
+                    double v = 0.5 + delta * intensity_t * m_weight;
+                    v = qBound(0.0, v, 1.0);
+                    c.addPoint(t, v, 1.0);
+                    eps.append(EnvelopePoint(t, v, 0));
+                }
+            } else {
+                // Static EQ per note, scaled by this note's position on intensity curve.
+                double v = qBound(0.0, 0.5 + delta * noteIntensity * m_weight, 1.0);
+                c.addPoint(0.0, v, 1.0);
+                c.addPoint(1.0, v, 1.0);
+                eps.append(EnvelopePoint(0.0, v, 0));
+                eps.append(EnvelopePoint(1.0, v, 0));
+            }
+
+            note.upsertExpressiveCurve(name, c);
+            note.setEnvelopeControlPoints(name, eps);
+        }
+        // Persist the original author curves so re-editing restores them
+        // verbatim instead of reconstructing from the dense band samples.
+        note.setEnvelopeControlPoints(QStringLiteral("EQ Shape"), m_shape);
+        note.setEnvelopeControlPoints(QStringLiteral("EQ Intensity"), m_intensity);
+        note.setRenderDirty(true);
+    }
+
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "Redo: Apply EQ Curve on" << m_priorStates.size()
+             << "notes (weight=" << m_weight
+             << ", perNote=" << perNoteMode << ")";
 }
 
 // ============================================================================
@@ -3118,4 +3418,244 @@ bool EditNotePropertyCommand::mergeWith(const QUndoCommand *other)
             c.oldValue = oldValMap[c.index];
     }
     return true;
+}
+
+// ============================================================================
+// Retrograde Notes Command
+// ============================================================================
+
+RetrogradeNotesCommand::RetrogradeNotesCommand(Phrase *phrase, const QVector<Note> &selectedNotes,
+                                               double targetTime, int targetTrackIndex,
+                                               ScoreCanvas *canvas, QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_targetTime(targetTime)
+    , m_targetTrackIndex(targetTrackIndex)
+    , m_canvas(canvas)
+{
+    setText("Retrograde");
+
+    if (selectedNotes.isEmpty()) return;
+
+    // Find the selection span: earliest start and latest end
+    double selectionStart = selectedNotes[0].getStartTime();
+    double selectionEnd = selectedNotes[0].getStartTime() + selectedNotes[0].getDuration();
+    for (const Note &note : selectedNotes) {
+        double ns = note.getStartTime();
+        double ne = ns + note.getDuration();
+        if (ns < selectionStart) selectionStart = ns;
+        if (ne > selectionEnd) selectionEnd = ne;
+    }
+    double selectionDuration = selectionEnd - selectionStart;
+
+    // Build retrograded notes: mirror each note's position within the span
+    for (const Note &note : selectedNotes) {
+        Note retNote = note;
+        retNote.regenerateId();
+
+        // Mirror: note that ended at selectionEnd now starts at targetTime
+        // newStart = targetTime + (selectionEnd - (noteStart + noteDuration))
+        double distFromEnd = selectionEnd - (note.getStartTime() + note.getDuration());
+        retNote.setStartTime(m_targetTime + distFromEnd);
+        if (note.getTrackIndex() != m_targetTrackIndex) {
+            retNote.setVariationIndex(0);
+        }
+        retNote.setTrackIndex(m_targetTrackIndex);
+        retNote.setRenderDirty(true);
+
+        // Reverse internal curves
+        retNote.getDynamicsCurve() = reverseCurve(note.getDynamicsCurve());
+        if (note.hasPitchCurve()) {
+            retNote.getPitchCurve() = reverseCurve(note.getPitchCurve());
+        }
+        // Reverse additional expressive curves (index 0 is dynamics, already handled)
+        for (int i = 1; i < retNote.getExpressiveCurveCount(); ++i) {
+            retNote.getExpressiveCurve(i) = reverseCurve(note.getExpressiveCurve(i));
+        }
+
+        m_retrogradeNotes.append(retNote);
+    }
+}
+
+Curve RetrogradeNotesCommand::reverseCurve(const Curve &curve)
+{
+    const QVector<Curve::Point> &pts = curve.getPoints();
+    if (pts.size() <= 1) return curve;
+
+    Curve reversed;
+    // Add points in reverse order with mirrored time
+    for (int i = pts.size() - 1; i >= 0; --i) {
+        reversed.addPoint(1.0 - pts[i].time, pts[i].value, pts[i].pressure);
+    }
+    return reversed;
+}
+
+void RetrogradeNotesCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (int i = m_insertedIndices.size() - 1; i >= 0; --i) {
+        int index = m_insertedIndices[i];
+        if (index >= 0 && index < notes.size()) {
+            notes.removeAt(index);
+        }
+    }
+    m_canvas->update();
+}
+
+void RetrogradeNotesCommand::redo()
+{
+    if (m_retrogradeNotes.isEmpty()) return;
+
+    QVector<Note> &phraseNotes = m_phrase->getNotes();
+    m_insertedIndices.clear();
+
+    for (const Note &note : m_retrogradeNotes) {
+        int insertIndex = phraseNotes.size();
+        m_phrase->addNote(note);
+        m_insertedIndices.append(insertIndex);
+    }
+
+    m_canvas->update();
+}
+
+// ============================================================================
+// Set Note Curves Batch Command
+// ============================================================================
+
+namespace {
+// Sample a points array (time/value/curveType per point) into a dense Curve.
+// Mirrors the evaluation used by ApplyDynamicsCurveCommand and
+// ApplyExpressiveCurveToSelectionCommand so the shape matches existing tools.
+static Curve sampleEnvelopeToCurve(const QVector<EnvelopePoint> &env, double weight)
+{
+    Curve out;
+    if (env.isEmpty()) return out;
+
+    auto eval = [&](double t) -> double {
+        if (env.size() == 1) return env[0].value;
+        if (t <= env.first().time) return env.first().value;
+        if (t >= env.last().time)  return env.last().value;
+        for (int i = 0; i < env.size() - 1; ++i) {
+            if (t >= env[i].time && t <= env[i + 1].time) {
+                double segT = (t - env[i].time)
+                            / (env[i + 1].time - env[i].time);
+                if (env[i].curveType == 1) {
+                    double smoothT = (1.0 - std::cos(segT * M_PI)) * 0.5;
+                    return env[i].value
+                         + smoothT * (env[i + 1].value - env[i].value);
+                } else if (env[i].curveType == 2) {
+                    return env[i].value;
+                } else {
+                    return env[i].value
+                         + segT * (env[i + 1].value - env[i].value);
+                }
+            }
+        }
+        return env.last().value;
+    };
+
+    const int SAMPLE_COUNT = 30;
+    for (int s = 0; s <= SAMPLE_COUNT; ++s) {
+        double t = static_cast<double>(s) / SAMPLE_COUNT;
+        double v = qBound(0.0, eval(t) * weight, 1.0);
+        out.addPoint(t, v, 1.0);
+    }
+    return out;
+}
+} // anonymous namespace
+
+SetNoteCurvesBatchCommand::SetNoteCurvesBatchCommand(
+    Phrase *phrase,
+    const QVector<int> &noteIndices,
+    const QVector<QVector<EnvelopePoint>> &pointsPerNote,
+    const QString &name,
+    double weight,
+    ScoreCanvas *canvas,
+    QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_noteIndices(noteIndices)
+    , m_pointsPerNote(pointsPerNote)
+    , m_name(name.isEmpty() ? QStringLiteral("Dynamics") : name)
+    , m_weight(weight)
+    , m_isDynamics(m_name == QStringLiteral("Dynamics"))
+    , m_firstTime(true)
+    , m_canvas(canvas)
+{
+    setText(m_isDynamics ? "Set Dynamics Curves (batch)"
+                         : QString("Set '%1' Curves (batch)").arg(m_name));
+}
+
+void SetNoteCurvesBatchCommand::redo()
+{
+    if (m_noteIndices.isEmpty() || m_pointsPerNote.isEmpty()) return;
+    if (m_noteIndices.size() != m_pointsPerNote.size()) return;
+
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    if (m_firstTime) {
+        m_priorStates.clear();
+        m_priorStates.reserve(m_noteIndices.size());
+        for (int idx : m_noteIndices) {
+            PriorState ps;
+            ps.noteIdx = idx;
+            ps.hadCurve = false;
+            if (idx < 0 || idx >= notes.size()) {
+                m_priorStates.append(ps);
+                continue;
+            }
+            if (m_isDynamics) {
+                ps.oldCurve = notes[idx].getDynamicsCurve();
+                ps.hadCurve = true;  // dynamics always present
+            } else {
+                int existingIdx = notes[idx].findExpressiveCurveIndexByName(m_name);
+                if (existingIdx >= 1) {
+                    ps.hadCurve = true;
+                    ps.oldCurve = notes[idx].getExpressiveCurve(existingIdx);
+                }
+            }
+            m_priorStates.append(ps);
+        }
+        m_firstTime = false;
+    }
+
+    for (int i = 0; i < m_noteIndices.size(); ++i) {
+        int idx = m_noteIndices[i];
+        if (idx < 0 || idx >= notes.size()) continue;
+        const QVector<EnvelopePoint> &env = m_pointsPerNote[i];
+        if (env.isEmpty()) continue;
+        Curve shaped = sampleEnvelopeToCurve(env, m_weight);
+        if (m_isDynamics) {
+            notes[idx].setDynamicsCurve(shaped);
+        } else {
+            notes[idx].upsertExpressiveCurve(m_name, shaped);
+        }
+        notes[idx].setRenderDirty(true);
+    }
+
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "Redo: Set Note Curves Batch '" << m_name << "' on"
+             << m_noteIndices.size() << "notes";
+}
+
+void SetNoteCurvesBatchCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (const PriorState &ps : m_priorStates) {
+        int idx = ps.noteIdx;
+        if (idx < 0 || idx >= notes.size()) continue;
+        if (m_isDynamics) {
+            notes[idx].setDynamicsCurve(ps.oldCurve);
+        } else if (ps.hadCurve) {
+            notes[idx].upsertExpressiveCurve(m_name, ps.oldCurve);
+        } else {
+            notes[idx].removeExpressiveCurveByName(m_name);
+        }
+        notes[idx].setRenderDirty(true);
+    }
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "Undo: Set Note Curves Batch '" << m_name << "' on"
+             << m_priorStates.size() << "notes";
 }

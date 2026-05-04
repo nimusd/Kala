@@ -257,21 +257,22 @@ int AudioEngine::audioCallback(void *outputBuffer, void *inputBuffer,
         for (Track *track : engine->playbackTracks) {
             if (!track || track->isMuted()) continue;
 
-            // Get mixed buffer from track for this time range
+            // Get mixed buffer from track (stereo interleaved: L0,R0,L1,R1,...)
             std::vector<float> trackBuffer = track->getMixedBuffer(currentTimeMs, bufferDurationMs);
 
-            // Calculate pan gains (linear pan law)
+            // Calculate track-level pan gains (linear pan law)
             // pan: -1.0 = full left, 0.0 = center, 1.0 = full right
             float pan = track->getPan();
             float leftGain = std::min(1.0f, 1.0f - pan);   // 1.0 at center/left, fades at right
             float rightGain = std::min(1.0f, 1.0f + pan);  // 1.0 at center/right, fades at left
 
-            // Mix into output buffer with pan
-            size_t samplesToMix = std::min(static_cast<size_t>(nFrames), trackBuffer.size());
+            // Mix stereo track buffer into output with track-level pan on top
+            size_t samplesToMix = std::min(static_cast<size_t>(nFrames), trackBuffer.size() / 2);
             for (size_t i = 0; i < samplesToMix; i++) {
-                float sample = trackBuffer[i];
-                buffer[i * 2] += sample * leftGain;      // Left channel
-                buffer[i * 2 + 1] += sample * rightGain;  // Right channel
+                float left  = trackBuffer[i * 2];
+                float right = trackBuffer[i * 2 + 1];
+                buffer[i * 2]     += left  * leftGain;
+                buffer[i * 2 + 1] += right * rightGain;
             }
         }
 
@@ -981,18 +982,26 @@ void AudioEngine::renderNotes(const QVector<Note>& notes, int maxNotes)
 
             // Build score curve values: index 0 = dynamics (with vibrato), 1+ = additional named curves
             QVector<double> scoreCurveValues;
+            QStringList scoreCurveNames;
             scoreCurveValues.append(currentDynamics);  // index 0: dynamics (already has vibrato applied)
+            scoreCurveNames.append(QStringLiteral("Dynamics"));
             for (int ci = 1; ci < note.getExpressiveCurveCount(); ++ci) {
                 const Curve &c = note.getExpressiveCurve(ci);
-                double val = inTail ? 1.0 : (c.isEmpty() ? 0.5 : c.valueAt(std::min(noteProgress, 1.0)));
+                // In tail mode, freeze to the curve's final value (not unity) so any
+                // parameter being driven by the curve carries smoothly into the tail
+                // instead of snapping to 1.0 at the note→tail boundary.
+                double val = c.isEmpty()
+                    ? 0.5
+                    : c.valueAt(inTail ? 1.0 : std::min(noteProgress, 1.0));
                 scoreCurveValues.append(val);
+                scoreCurveNames.append(note.getExpressiveCurveName(ci));
             }
 
             // Generate sample using note's track graph
             double sample;
             try {
                 if (noteHasGraph) {
-                    sample = trackGraphs[noteTrackIndex]->generateSample(currentPitch, noteProgress, false, inTail, currentDynamics, scoreCurveValues);
+                    sample = trackGraphs[noteTrackIndex]->generateSample(currentPitch, noteProgress, false, inTail, currentDynamics, scoreCurveValues, scoreCurveNames);
                 } else {
                     generator.setFundamentalHz(currentPitch);
                     sample = generator.generateSample();

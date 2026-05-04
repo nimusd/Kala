@@ -39,17 +39,27 @@ void VibratoEditorDialog::setupUI()
     presetLayout->addWidget(new QLabel("Preset:"));
     comboVibratoPreset = new QComboBox();
     comboVibratoPreset->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    updatePresetCombo();
     presetLayout->addWidget(comboVibratoPreset);
     btnSavePreset = new QPushButton("Save...");
     btnSavePreset->setToolTip("Save current settings as a new preset");
     presetLayout->addWidget(btnSavePreset);
+    btnDeletePreset = new QPushButton("Delete");
+    btnDeletePreset->setToolTip("Delete the selected user preset");
+    presetLayout->addWidget(btnDeletePreset);
+    btnSetDefault = new QPushButton("Set Default");
+    btnSetDefault->setToolTip("Use this preset as the default when opening the vibrato editor");
+    presetLayout->addWidget(btnSetDefault);
     mainLayout->addLayout(presetLayout);
+    updatePresetCombo();
 
     connect(comboVibratoPreset, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &VibratoEditorDialog::onVibratoPresetChanged);
     connect(btnSavePreset, &QPushButton::clicked,
             this, &VibratoEditorDialog::onSaveVibratoPresetClicked);
+    connect(btnDeletePreset, &QPushButton::clicked,
+            this, &VibratoEditorDialog::onDeleteVibratoPresetClicked);
+    connect(btnSetDefault, &QPushButton::clicked,
+            this, &VibratoEditorDialog::onSetDefaultPresetClicked);
 
     // Parameters group
     QGroupBox *paramsGroup = new QGroupBox("Parameters");
@@ -170,6 +180,24 @@ void VibratoEditorDialog::setVibrato(const Vibrato &v)
 {
     currentVibrato = v;
 
+    // If vibrato is inactive (fresh note) and we have a default preset, apply it
+    if (!v.active && !defaultPresetName.isEmpty()) {
+        for (const auto &preset : userPresets) {
+            if (preset.name.compare(defaultPresetName, Qt::CaseInsensitive) == 0) {
+                currentVibrato = preset.vibrato;
+                currentVibrato.active = false;
+                break;
+            }
+        }
+        for (const auto &preset : factoryPresets) {
+            if (preset.name.compare(defaultPresetName, Qt::CaseInsensitive) == 0) {
+                currentVibrato = preset.vibrato;
+                currentVibrato.active = false;
+                break;
+            }
+        }
+    }
+
     // Block signals while updating UI
     spinRate->blockSignals(true);
     spinPitchDepth->blockSignals(true);
@@ -177,25 +205,63 @@ void VibratoEditorDialog::setVibrato(const Vibrato &v)
     spinOnset->blockSignals(true);
     sliderRegularity->blockSignals(true);
 
-    spinRate->setValue(v.rate);
-    spinPitchDepth->setValue(v.pitchDepth * 100.0);  // Convert to percentage
-    spinAmplitudeDepth->setValue(v.amplitudeDepth * 100.0);
-    spinOnset->setValue(v.onset * 100.0);
-    sliderRegularity->setValue(static_cast<int>(v.regularity * 100.0));
+    spinRate->setValue(currentVibrato.rate);
+    spinPitchDepth->setValue(currentVibrato.pitchDepth * 100.0);
+    spinAmplitudeDepth->setValue(currentVibrato.amplitudeDepth * 100.0);
+    spinOnset->setValue(currentVibrato.onset * 100.0);
+    sliderRegularity->setValue(static_cast<int>(currentVibrato.regularity * 100.0));
     updateRegularityLabel();
 
-    envelopeCanvas->setPoints(v.envelope);
+    envelopeCanvas->setPoints(currentVibrato.envelope);
 
     spinRate->blockSignals(false);
     spinPitchDepth->blockSignals(false);
     spinAmplitudeDepth->blockSignals(false);
     spinOnset->blockSignals(false);
     sliderRegularity->blockSignals(false);
+
+    // Try to match current vibrato against presets and select in combo
+    int matchIndex = findMatchingPreset(currentVibrato);
+    updatingFromPreset = true;
+    comboVibratoPreset->setCurrentIndex(matchIndex);
+    updatingFromPreset = false;
+    updatePresetButtons();
 }
 
 Vibrato VibratoEditorDialog::getVibrato() const
 {
     return currentVibrato;
+}
+
+bool VibratoEditorDialog::getDefaultPreset(Vibrato &out)
+{
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString filePath = appDataPath + "/vibrato_presets.json";
+
+    QFile file(filePath);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly))
+        return false;
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    if (!doc.isObject()) return false;
+
+    QJsonObject root = doc.object();
+    QString defaultName = root["defaultPreset"].toString();
+    if (defaultName.isEmpty()) return false;
+
+    // Search user presets
+    QJsonArray arr = root["presets"].toArray();
+    for (const QJsonValue &val : arr) {
+        QJsonObject obj = val.toObject();
+        if (obj["name"].toString().compare(defaultName, Qt::CaseInsensitive) == 0) {
+            out = Vibrato::fromJson(obj["vibrato"].toObject());
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void VibratoEditorDialog::onRateChanged(double value)
@@ -253,14 +319,19 @@ void VibratoEditorDialog::onVibratoPresetChanged(int index)
     // Index 0 is "Custom" - no action
     if (index == 0) return;
 
+    updatePresetButtons();
+
     int adjustedIndex = index - 1;  // Account for "Custom" entry
 
-    if (adjustedIndex < factoryPresets.size()) {
-        applyPreset(factoryPresets[adjustedIndex].vibrato);
+    // User presets come first
+    if (adjustedIndex < userPresets.size()) {
+        applyPreset(userPresets[adjustedIndex].vibrato);
     } else {
-        int userIndex = adjustedIndex - factoryPresets.size();
-        if (userIndex < userPresets.size()) {
-            applyPreset(userPresets[userIndex].vibrato);
+        // Skip separator (1 item) then factory presets
+        int factoryIndex = adjustedIndex - userPresets.size();
+        if (!userPresets.isEmpty()) factoryIndex--;  // account for separator
+        if (factoryIndex >= 0 && factoryIndex < factoryPresets.size()) {
+            applyPreset(factoryPresets[factoryIndex].vibrato);
         }
     }
 }
@@ -306,6 +377,103 @@ void VibratoEditorDialog::onSaveVibratoPresetClicked()
 
     // Select the newly saved preset
     comboVibratoPreset->setCurrentText(name);
+}
+
+void VibratoEditorDialog::onDeleteVibratoPresetClicked()
+{
+    int userIndex;
+    if (!isUserPresetSelected(&userIndex)) return;
+
+    QString name = userPresets[userIndex].name;
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, "Delete Preset",
+        QString("Delete preset '%1'?").arg(name),
+        QMessageBox::Yes | QMessageBox::No);
+    if (reply != QMessageBox::Yes) return;
+
+    // If deleting the default, clear the default
+    if (defaultPresetName.compare(name, Qt::CaseInsensitive) == 0) {
+        defaultPresetName.clear();
+    }
+
+    userPresets.removeAt(userIndex);
+    saveUserPresets();
+    updatePresetCombo();
+}
+
+void VibratoEditorDialog::onSetDefaultPresetClicked()
+{
+    int comboIndex = comboVibratoPreset->currentIndex();
+    if (comboIndex <= 0) {
+        // "Custom" selected — clear the default
+        defaultPresetName.clear();
+        saveUserPresets();
+        updatePresetCombo();
+        return;
+    }
+
+    int userIndex;
+    if (isUserPresetSelected(&userIndex)) {
+        defaultPresetName = userPresets[userIndex].name;
+    } else {
+        // Factory preset selected — allow setting factory as default too
+        int adjustedIndex = comboIndex - 1;
+        int factoryIndex = adjustedIndex - userPresets.size();
+        if (!userPresets.isEmpty()) factoryIndex--;
+        if (factoryIndex >= 0 && factoryIndex < factoryPresets.size()) {
+            defaultPresetName = factoryPresets[factoryIndex].name;
+        }
+    }
+
+    saveUserPresets();
+    updatePresetCombo();
+}
+
+bool VibratoEditorDialog::isUserPresetSelected(int *userIndex) const
+{
+    int comboIndex = comboVibratoPreset->currentIndex();
+    if (comboIndex <= 0) return false;
+
+    int adjustedIndex = comboIndex - 1;
+    if (adjustedIndex < userPresets.size()) {
+        if (userIndex) *userIndex = adjustedIndex;
+        return true;
+    }
+    return false;
+}
+
+int VibratoEditorDialog::findMatchingPreset(const Vibrato &v) const
+{
+    auto matches = [&](const Vibrato &p) {
+        return qFuzzyCompare(v.rate, p.rate) &&
+               qFuzzyCompare(v.pitchDepth, p.pitchDepth) &&
+               qFuzzyCompare(v.amplitudeDepth, p.amplitudeDepth) &&
+               qFuzzyCompare(v.onset, p.onset) &&
+               qFuzzyCompare(v.regularity, p.regularity);
+    };
+
+    // Check user presets first (combo indices 1..userPresets.size())
+    for (int i = 0; i < userPresets.size(); ++i) {
+        if (matches(userPresets[i].vibrato))
+            return i + 1;  // +1 for "Custom"
+    }
+
+    // Check factory presets (after user presets + separator)
+    int factoryStart = 1 + userPresets.size() + (userPresets.isEmpty() ? 0 : 1);
+    for (int i = 0; i < factoryPresets.size(); ++i) {
+        if (matches(factoryPresets[i].vibrato))
+            return factoryStart + i;
+    }
+
+    return 0;  // "Custom"
+}
+
+void VibratoEditorDialog::updatePresetButtons()
+{
+    bool isUser = isUserPresetSelected();
+    btnDeletePreset->setEnabled(isUser);
+    // Set Default works for any preset (user or factory), just not "Custom"
+    btnSetDefault->setEnabled(comboVibratoPreset->currentIndex() > 0);
 }
 
 void VibratoEditorDialog::loadFactoryPresets()
@@ -400,6 +568,7 @@ void VibratoEditorDialog::loadFactoryPresets()
 void VibratoEditorDialog::loadUserPresets()
 {
     userPresets.clear();
+    defaultPresetName.clear();
 
     QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QString filePath = appDataPath + "/vibrato_presets.json";
@@ -413,9 +582,20 @@ void VibratoEditorDialog::loadUserPresets()
     file.close();
 
     QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isArray()) return;
 
-    QJsonArray arr = doc.array();
+    QJsonArray arr;
+    if (doc.isObject()) {
+        // New format: { "defaultPreset": "name", "presets": [...] }
+        QJsonObject root = doc.object();
+        defaultPresetName = root["defaultPreset"].toString();
+        arr = root["presets"].toArray();
+    } else if (doc.isArray()) {
+        // Old format: plain array — migrate on next save
+        arr = doc.array();
+    } else {
+        return;
+    }
+
     for (const QJsonValue &val : arr) {
         if (!val.isObject()) continue;
         QJsonObject obj = val.toObject();
@@ -452,7 +632,11 @@ void VibratoEditorDialog::saveUserPresets()
         arr.append(obj);
     }
 
-    QJsonDocument doc(arr);
+    QJsonObject root;
+    root["defaultPreset"] = defaultPresetName;
+    root["presets"] = arr;
+
+    QJsonDocument doc(root);
 
     QFile file(filePath);
     if (file.open(QIODevice::WriteOnly)) {
@@ -464,22 +648,45 @@ void VibratoEditorDialog::saveUserPresets()
 void VibratoEditorDialog::updatePresetCombo()
 {
     updatingFromPreset = true;
+    int previousIndex = comboVibratoPreset->currentIndex();
     comboVibratoPreset->clear();
 
     comboVibratoPreset->addItem("Custom");
 
-    // Add factory presets
-    for (const auto &preset : factoryPresets) {
-        comboVibratoPreset->addItem(preset.name + " (Factory)");
-    }
-
-    // Add user presets
+    // User presets first
     for (const auto &preset : userPresets) {
-        comboVibratoPreset->addItem(preset.name);
+        QString label = preset.name;
+        if (!defaultPresetName.isEmpty() &&
+            preset.name.compare(defaultPresetName, Qt::CaseInsensitive) == 0) {
+            label += "  \u2605";  // star to mark default
+        }
+        comboVibratoPreset->addItem(label);
     }
 
-    comboVibratoPreset->setCurrentIndex(0);
+    // Separator between user and factory presets
+    if (!userPresets.isEmpty()) {
+        comboVibratoPreset->insertSeparator(comboVibratoPreset->count());
+    }
+
+    // Factory presets after
+    for (const auto &preset : factoryPresets) {
+        QString label = preset.name;
+        if (!defaultPresetName.isEmpty() &&
+            preset.name.compare(defaultPresetName, Qt::CaseInsensitive) == 0) {
+            label += "  \u2605";
+        }
+        comboVibratoPreset->addItem(label);
+    }
+
+    // Restore selection or go to Custom
+    if (previousIndex >= 0 && previousIndex < comboVibratoPreset->count()) {
+        comboVibratoPreset->setCurrentIndex(previousIndex);
+    } else {
+        comboVibratoPreset->setCurrentIndex(0);
+    }
+
     updatingFromPreset = false;
+    updatePresetButtons();
 }
 
 void VibratoEditorDialog::applyPreset(const Vibrato &preset)

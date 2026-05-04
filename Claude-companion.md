@@ -163,7 +163,7 @@ Uses `SounitBuilder::onAddContainer()` to create the container with all defaults
 then applies any param overrides. Finds the new container by diffing instance names
 before/after. Returns the assigned instance name (e.g. `"Envelope Engine 2"`).
 
-Valid types: all 25 container types (see system prompt CONTAINER TYPES section).
+Valid types: all 26 container types (see system prompt CONTAINER TYPES section).
 
 ---
 
@@ -633,8 +633,16 @@ make the variation the new base. Use this whenever the user asks to "promote", "
 #### `apply_dynamics_curve`
 Parameters: `points` (array of `{time, value, curveType}`), `noteIds` (optional),
 `weight` (0–1, default 1.0), `perNote` (bool, default false).
-Pushes `ApplyDynamicsCurveCommand`. Points use time=0→first note, time=1→last note.
+Pushes `ApplyDynamicsCurveCommand`. Points use time=0→first note, time=1→last note. When notes have flat dynamics (e.g., from MIDI import), the curve is scaled proportionally to preserve relative loudness.
 `perNote=true` applies the curve within each individual note's own timeline.
+
+#### `select_flat_dynamics_notes`
+Parameters: `threshold` (optional, default 0.05).
+Selects all notes whose dynamics curve is flat (max-min difference ≤ threshold). This includes notes created with mouse input (no dynamics curve) and notes with manually flattened curves. Useful for targeting notes that need expressive shaping.
+
+#### `load_envelope_as_dynamics`
+Parameters: `filePath` (required), `noteIds` (optional), `weight` (0–1, default 1.0), `perNote` (bool, default false).
+Loads an envelope file (.env.json) from the envelopes library and applies its curve as dynamics to selected notes. Equivalent to `apply_dynamics_curve` with points loaded from file. Pushes `ApplyDynamicsCurveCommand`. When notes have flat dynamics (e.g., from MIDI import), the envelope curve is scaled proportionally to preserve relative loudness. Otherwise, the envelope is applied as-is.
 
 #### `scale_dynamics`
 Parameters: `factor` (required, > 0), `noteIds` (optional).
@@ -715,6 +723,57 @@ Sets note duration(s). Single `duration` applies the same value to all targeted 
 
 ---
 
+#### `transform_notes` mode `"strum"` — rake a chord stack
+Parameters: `direction` (`"down"` (default) | `"up"`), `speedMs` (default `30`),
+`dynamicsShape` (optional `"flat"` | `"accent_low"` | `"accent_high"`),
+`cycleVariations` (bool, default `false`), `noteIds` (optional).
+
+Turns a stack of stacked-on-the-same-beat notes into a guitar-style strum.
+Needs at least 2 notes. Single macro undo (timing + dynamics together).
+
+**Timing.** The earliest current start time among the targeted notes is the
+strum anchor. Notes are sorted by pitch; for `direction="down"` the lowest
+pitch lands at the anchor and higher pitches stagger later by
+`speedMs / (n − 1)` each. For `"up"` the highest pitch lands at the anchor
+and lower pitches stagger later. Typical `speedMs`: 15 = tight pick,
+30 = default snappy, 80–120 = slow rake, 200+ = arpeggio-like.
+
+**Dynamics.** Optional. `"flat"` sets all to 0.70.
+`"accent_low"` ramps 0.85 → 0.55 across the stroke order — first-played
+string loudest (the natural downstroke feel: bass dominates).
+`"accent_high"` ramps 0.55 → 0.85 — last-played string loudest. Omit
+the parameter to leave dynamics untouched. Applied via
+`SetBeatDynamicsCommand` so it undoes with the rest of the strum.
+
+**Variation cycling** (when `cycleVariations=true`). Distributes the track's
+loaded sounits across the chord by **pitch order**, not stroke order — so a
+given pitch always routes through the same sounit regardless of whether
+you're up- or down-stroking. Convention: **highest pitch → variation 0
+(Base), descending → 1, 2, … N**, wrapping with `k % (variationCount + 1)`
+if there are more notes than slots. Variation assignment is non-undoable
+(matches `apply_variation`).
+
+**Why this works.** Per-note rendering uses each note's own variation graph
+(`Track::getMixedBuffer` is polyphonic across variations), and KS string
+damping is scoped per-variation in the mixer — so six notes routed to six
+different sounits coexist without cross-damping. If you load six guitar
+sounits as Base + variations 1–5 on one track, a strum becomes a
+genuinely polyphonic chord through six sound sources, not a mono
+re-pluck.
+
+**Typical usage.**
+```
+1. Place the chord notes stacked on the same beat (any pitches).
+2. (Optional) load extra sounits as variations on the track.
+3. Select the chord, then ask Anima:
+   "strum down, 80 ms, accent the bass, cycle my variations."
+4. transform_notes is called with
+     transform="strum", direction="down", speedMs=80,
+     dynamicsShape="accent_low", cycleVariations=true.
+```
+
+---
+
 #### `duplicate_notes`
 Parameters: `offsetMs` (required), `pitchRatio` (optional, default 1.0), `trackIndex` (optional),
 `noteIds` (optional).
@@ -767,6 +826,29 @@ Any other name creates/replaces a named expressive curve which modulates whateve
 parameter is routed to that name. Same `points` format as `set_envelope_shape`.
 Supports undo via `AddExpressiveCurveCommand` / `ApplyDynamicsCurveCommand`.
 
+Surfaced as `set_dynamics` with `mode="expressive"`. Same curve goes to every note —
+for distinct per-note curves use `expressive_batch` instead.
+
+---
+
+#### `set_dynamics` mode `"expressive_batch"` — per-note curves, single undo
+Parameters: `noteIds` (required), `pointsPerNote` (required, same length as `noteIds`),
+`name` (default `"Dynamics"`), `weight` (default 1.0).
+
+Each `noteIds[i]` receives the envelope `pointsPerNote[i]` (array of
+`{time, value, curveType}` points, same format as `set_envelope_shape`). Caller
+ordering is preserved — indices are not reordered by phrase order. Unknown or
+duplicate ids produce an error so misaligned curves can't silently land on the
+wrong notes.
+
+Pushes a **single** `SetNoteCurvesBatchCommand` onto the undo stack — one Ctrl+Z
+reverts every note. For expressive (non-`Dynamics`) curves, notes that had no
+curve with this name before redo get the curve removed on undo.
+
+Intended for number-pattern templates that compute a distinct envelope per note
+(see `anima-templates.md` template 12). The older per-note loop using
+`set_note_curve` produced one undo entry *per note* — this replaces it.
+
 ---
 
 #### `get_selected_notes`
@@ -776,11 +858,18 @@ Returns `{ selectedCount, noteIds[], message }`.
 The returned `noteIds` can be passed to any tool that accepts a `noteIds` array.
 
 #### `select_notes`
-Parameters: `pitchMinHz` (optional), `pitchMaxHz` (optional), `trackIndex` (optional).
+Parameters: `mode` (`range`|`flat_dynamics`|`current`, required; `range` is assumed if
+filter params are passed). Range-mode filters (all optional, compose via AND):
+`pitchMinHz`, `pitchMaxHz`, `durationMinMs`, `durationMaxMs`, `trackIndex`,
+`indices` (string like `"0-29"` or `"all"`), `noteIds` (array of UUIDs — selects exactly
+those; combined with pitch/duration/track filters if given).
 
-Selects notes by pitch range and/or track. At least one filter should be provided.
 Calls `sc->selectNotes()` — notes are visually highlighted on the canvas.
 Returns `{ matchedCount, noteIds[], message }` so IDs can be piped into other tools.
+
+`noteIds` is the path for "I already computed the set in the LLM, make these the visual
+selection" — e.g. after filtering `get_composition_state` by a complex predicate, or
+after a pattern-pick template that returns indices/ids.
 
 #### `select_flat_dynamics_notes`
 Parameters: `trackIndex` (optional).

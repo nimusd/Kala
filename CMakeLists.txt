@@ -37,6 +37,7 @@ qt_add_executable(Kala
     trackselect.h trackselect.cpp
     scorecanvas.h scorecanvas.cpp
     scorecanvascommands.h scorecanvascommands.cpp
+    variationtoolbar.h variationtoolbar.cpp
     sounitbuildercommands.h sounitbuildercommands.cpp
     trackcommands.h trackcommands.cpp
     timeline.h timeline.cpp
@@ -47,6 +48,7 @@ qt_add_executable(Kala
     phrase.h phrase.cpp
     dynamicscurvedialog.h dynamicscurvedialog.cpp
     expressivecurveapplydialog.h expressivecurveapplydialog.cpp
+    eqcurvedialog.h eqcurvedialog.cpp
     curve.h curve.cpp
     scale.h scale.cpp
     harmonicgenerator.h harmonicgenerator.cpp
@@ -85,6 +87,7 @@ qt_add_executable(Kala
     saxophonemodel.h saxophonemodel.cpp
     saxophonemodel2.h saxophonemodel2.cpp
     percussionmodel.h percussionmodel.cpp
+    panprocessor.h
     tailprocessor.h tailprocessor.cpp
     sounitgraph.h sounitgraph.cpp
     sounitvariation.h sounitvariation.cpp
@@ -112,6 +115,7 @@ qt_add_executable(Kala
     kalatools.h kalatools.cpp
     kalaagent.h kalaagent.cpp
     companionpanel.h companionpanel.cpp
+    animapalette.h animapalette.cpp
 
 )
 
@@ -165,6 +169,14 @@ add_custom_command(TARGET Kala POST_BUILD
         "${CMAKE_SOURCE_DIR}/help"
         "$<TARGET_FILE_DIR:Kala>/help"
     COMMENT "Copying help documentation..."
+)
+
+# Copy Anima template palette source to build output
+add_custom_command(TARGET Kala POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/anima-templates.md"
+        "$<TARGET_FILE_DIR:Kala>/anima-templates.md"
+    COMMENT "Copying anima-templates.md..."
 )
 
 include(GNUInstallDirs)

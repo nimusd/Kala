@@ -274,6 +274,15 @@ public:
     SounitGraph* getGraphForVariation(int index);
 
     /**
+     * Get the canvas for a specific variation (for reading metadata like
+     * declared expressive-curve names). Variations are immutable snapshots,
+     * so callers must not mutate the returned canvas.
+     * @param index 0 = base sounit, 1+ = variation index
+     * @return Canvas pointer, or nullptr if index is out of range
+     */
+    Canvas* getCanvasForVariation(int index) const;
+
+    /**
      * Get list of all variation names (for populating UI menus)
      * Does NOT include base sounit.
      */
@@ -460,7 +469,7 @@ public:
      *
      * @param startTimeMs Start time in milliseconds
      * @param durationMs Duration in milliseconds
-     * @return Mixed audio buffer
+     * @return Mixed audio buffer (stereo interleaved: L0,R0,L1,R1,... size = numSamples * 2)
      */
     std::vector<float> getMixedBuffer(double startTimeMs, double durationMs);
 

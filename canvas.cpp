@@ -604,6 +604,23 @@ void Canvas::setSounitComment(const QString &comment)
     emit sounitCommentChanged(comment);
 }
 
+bool Canvas::addExpressiveCurveName(const QString &name)
+{
+    QString trimmed = name.trimmed();
+    if (trimmed.isEmpty()) return false;
+    if (trimmed.compare(QStringLiteral("Dynamics"), Qt::CaseInsensitive) == 0) return false;
+    if (expressiveCurveNames.contains(trimmed)) return false;
+    expressiveCurveNames.append(trimmed);
+    emit expressiveCurveNamesChanged();
+    return true;
+}
+
+void Canvas::setExpressiveCurveNames(const QStringList &names)
+{
+    expressiveCurveNames = names;
+    emit expressiveCurveNamesChanged();
+}
+
 QJsonObject Canvas::serializeContainer(const Container *container) const
 {
     QJsonObject json;
@@ -629,6 +646,16 @@ QJsonObject Canvas::serializeContainer(const Container *container) const
         }
     }
     json["parameters"] = params;
+
+    // String parameters (e.g. scoreCurveName on Envelope Engine)
+    QMap<QString, QString> containerStringParams = container->getStringParameters();
+    if (!containerStringParams.isEmpty()) {
+        QJsonObject strParams;
+        for (auto it = containerStringParams.begin(); it != containerStringParams.end(); ++it) {
+            strParams[it.key()] = it.value();
+        }
+        json["stringParameters"] = strParams;
+    }
 
     // Custom DNA (only if using custom mode)
     if (containerParams.value("dnaSelect", 0.0) == -1.0) {
@@ -723,6 +750,9 @@ bool Canvas::saveToJson(const QString &filePath, const QString &sounitName)
     sounitMeta["version"] = "1.0";
     sounitMeta["created"] = QDateTime::currentDateTime().toString(Qt::ISODate);
     sounitMeta["comment"] = sounitComment;
+    QJsonArray curveNamesArray;
+    for (const QString &n : expressiveCurveNames) curveNamesArray.append(n);
+    sounitMeta["expressiveCurveNames"] = curveNamesArray;
     root["sounit"] = sounitMeta;
 
     // CRITICAL: Ensure all containers have unique instance names before saving
@@ -879,6 +909,9 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
         inputs = {"strikePosition", "strikeDuration", "inharmonicity",
                   "decayTime", "noiseGain", "pitchMultiplier"};
         outputs = {"signalOut"};
+    } else if (type == "Pan") {
+        inputs = {"signalIn", "controlIn"};
+        outputs = {"signalOut", "panOut"};
     } else {
         qWarning() << "Unknown container type:" << type;
     }
@@ -925,6 +958,14 @@ Container* Canvas::deserializeContainer(const QJsonObject &json, QWidget *parent
     QJsonObject params = json["parameters"].toObject();
     for (auto it = params.begin(); it != params.end(); ++it) {
         container->setParameter(it.key(), it.value().toDouble());
+    }
+
+    // Restore string parameters
+    if (json.contains("stringParameters")) {
+        QJsonObject strParams = json["stringParameters"].toObject();
+        for (auto it = strParams.begin(); it != strParams.end(); ++it) {
+            container->setStringParameter(it.key(), it.value().toString());
+        }
     }
 
     // Restore custom DNA if present
@@ -1044,6 +1085,15 @@ bool Canvas::loadFromJson(const QString &filePath, QString &outSounitName)
     // Load comment
     QString comment = sounitMeta["comment"].toString("");
     setSounitComment(comment);
+
+    // Load expressive curve names (absent on older files = empty list)
+    QStringList loadedCurveNames;
+    QJsonArray curveNamesArray = sounitMeta["expressiveCurveNames"].toArray();
+    for (const QJsonValue &v : curveNamesArray) {
+        QString s = v.toString();
+        if (!s.isEmpty()) loadedCurveNames.append(s);
+    }
+    setExpressiveCurveNames(loadedCurveNames);
 
     // CRITICAL: Don't delete existing containers - just hide them and clear connections
     // Deleting containers invalidates all SounitGraph pointers for other tracks!

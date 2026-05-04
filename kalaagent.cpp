@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QDir>
 #include <QFile>
+#include <QDateTime>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Construction
@@ -17,6 +18,7 @@ KalaAgent::KalaAgent(const LLMConfig &config,
                      QObject         *parent)
     : QObject(parent)
     , m_client(new LLMClient(this))
+    , m_config(config)
     , m_tools(tools)
 {
     m_client->setConfig(config);
@@ -25,7 +27,28 @@ KalaAgent::KalaAgent(const LLMConfig &config,
 
 void KalaAgent::setConfig(const LLMConfig &config)
 {
+    m_config = config;
     m_client->setConfig(config);
+}
+
+QJsonObject KalaAgent::exportSession(const QString &rating) const
+{
+    QString providerName;
+    switch (m_config.provider) {
+        case LLMProvider::OpenAICompatible: providerName = "OpenAICompatible"; break;
+        case LLMProvider::Anthropic:        providerName = "Anthropic"; break;
+    }
+
+    return QJsonObject{
+        {"timestamp",    QDateTime::currentDateTime().toString(Qt::ISODate)},
+        {"model",        m_config.model},
+        {"provider",     providerName},
+        {"baseUrl",      m_config.baseUrl},
+        {"temperature",  m_config.temperature},
+        {"rating",       rating},
+        {"systemPrompt", buildSystemPrompt()},
+        {"messages",     m_messages}
+    };
 }
 
 void KalaAgent::clearHistory()
@@ -64,56 +87,9 @@ void KalaAgent::cancel()
 
 QJsonArray KalaAgent::trimForRequest(const QJsonArray &msgs) const
 {
-    // Identify "tool blocks": an assistant message with tool_calls followed by
-    // one or more role:"tool" messages. We keep all non-tool-block messages
-    // and only the LAST complete tool block.
-
-    // First pass: find all tool block ranges [start, end) in the array
-    struct Block { int start; int end; };
-    QVector<Block> toolBlocks;
-
-    int i = 0;
-    while (i < msgs.size()) {
-        const QJsonObject msg = msgs[i].toObject();
-        const bool isToolCall = msg["role"].toString() == "assistant"
-                                && !msg["tool_calls"].toArray().isEmpty();
-        if (isToolCall) {
-            int blockStart = i;
-            ++i;
-            // Consume following tool result messages
-            while (i < msgs.size()
-                   && msgs[i].toObject()["role"].toString() == "tool") {
-                ++i;
-            }
-            toolBlocks.append({blockStart, i});
-        } else {
-            ++i;
-        }
-    }
-
-    // If there are 0 or 1 tool blocks, nothing to trim
-    if (toolBlocks.size() <= 1)
-        return msgs;
-
-    // Keep all messages that are NOT in an older (non-last) tool block
-    const int lastBlockStart = toolBlocks.last().start;
-    const int lastBlockEnd   = toolBlocks.last().end;
-
-    // Build a set of indices to drop (all tool blocks except the last)
-    QSet<int> drop;
-    for (int b = 0; b < toolBlocks.size() - 1; ++b) {
-        for (int j = toolBlocks[b].start; j < toolBlocks[b].end; ++j)
-            drop.insert(j);
-    }
-    Q_UNUSED(lastBlockStart)
-    Q_UNUSED(lastBlockEnd)
-
-    QJsonArray result;
-    for (int j = 0; j < msgs.size(); ++j) {
-        if (!drop.contains(j))
-            result.append(msgs[j]);
-    }
-    return result;
+    // Keep all messages — tool blocks must be preserved so the LLM can see
+    // the full history of what it already did in multi-step operations.
+    return msgs;
 }
 
 QJsonArray KalaAgent::buildRequestMessages() const
@@ -277,8 +253,7 @@ void KalaAgent::loadHistory()
 QString KalaAgent::buildSystemPrompt()
 {
     return QStringLiteral(
-R"(/no_think
-You are Anima — AI assistant for Kala, a music composition app.
+R"(You are Anima — AI assistant for Kala, a music composition app.
 Kala uses pen-tablet input (no MIDI). Sound is built from "containers" in a graph called a "sounit".
 Every graph must end with a signal-output container. Spectrum to Signal converts additive spectrum → audio.
 Be concise. When building, narrate briefly as you work.
@@ -311,6 +286,7 @@ LFO — out: valueOut | params: frequency(Hz), amplitude(0–1), waveType(0=Sine
 Physics System — in: targetValue | out: currentValue
 Easing Applicator — in: startValue | out: easedValue
 Frequency Mapper — in: pitchMultiplier | out: controlOut
+Pan — in: controlIn | out: panOut | params: pan(-1.0 to +1.0, default 0.0). Stereo position. Connect Frequency Mapper (outputMin=-1, outputMax=1) → controlIn for pitch-dependent panning (low=left, high=right).
 
 FILTERS/FX (Purple):
 10-Band EQ — in: signalIn, band1–band10, q1–q10 | out: signalOut | values: 0=mute, 1=full
@@ -328,24 +304,24 @@ modulate — dest + (source − 0.5) × weight × 2.0 (bipolar LFO→param)
 
 ━━━ BEHAVIOUR RULES ━━━
 1. Follow quantity instructions literally. "Build one variation" = create exactly one variation. Never create extra variations as checkpoints or safety saves.
-2. Only call create_variation when the user explicitly asks for it.
-3. Always call get_graph_state before connect_containers or remove_connection to verify exact instance names (e.g. "Signal Mixer 1", not "Signal Mixer").
+2. Only call variation(action:"create") when the user explicitly asks for it.
+3. Always call get_graph_state before edit_graph(action:"connect"|"disconnect"|"rename") to verify exact instance names (e.g. "Signal Mixer 1", not "Signal Mixer"). EXCEPTION: when you have just added a container via edit_graph(action:"add"), the returned name is authoritative — rename it directly without re-fetching the graph.
 4. When a tool call fails, read the error, adjust, and retry — do not save a variation and start over.
 5. Always use set_parameters (plural) to batch all parameter changes into one call. Never call set_parameter in a loop.
 6. To add a fade-out to the end of notes without destroying existing expressive curves, use fade_out_notes (startTime=0.85 by default). Do NOT use set_note_curve for this — it replaces the whole curve.
 
 ━━━ VARIATION WORKFLOW ━━━
 The canvas already contains the full base sounit. A variation is a DELTA on top of it.
-The base sounit is ALWAYS at variationIndex 0. Do not call get_variation_list to look it up.
+The base sounit is ALWAYS at variationIndex 0. Do not call variation(action:"list") to look it up.
 When building a variation:
-1. Call switch_variation(0) — no need to check the list first.
+1. Call variation(action:"switch", variationIndex:0) — no need to check the list first.
 2. Call get_graph_state ONCE to see what containers already exist.
 3. Only add containers that are NOT already in the graph and genuinely needed for this variation.
 4. Use set_parameters to adjust existing containers.
-5. Call create_variation once at the end to snapshot the result.
-NEVER re-add containers that are already in the graph. NEVER rebuild the whole graph from scratch. NEVER call clear_graph when building a variation.
-NEVER call get_graph_state or get_variation_list more than once without making a change in between — if you already have the state, use it and proceed.
-To copy/promote a variation to the base sounit: call copy_variation_to_base(variationIndex). NEVER do this by adding containers one by one — it is a single atomic operation.
+5. Call variation(action:"create", name:"...") once at the end to snapshot the result.
+NEVER re-add containers that are already in the graph. NEVER rebuild the whole graph from scratch. NEVER call edit_graph(action:"clear") when building a variation.
+NEVER call get_graph_state or variation(action:"list") more than once without making a change in between — if you already have the state, use it and proceed.
+To copy/promote a variation to the base sounit: call variation(action:"copy_to_base", variationIndex:N). NEVER do this by adding containers one by one — it is a single atomic operation.
 
 ━━━ SYNTHESIS RULES ━━━
 1. Every graph must end with a signal output. Spectrum to Signal, Karplus Strong, Bowed, Recorder, Reed, Wavetable Synth, Attack all produce signal.
@@ -354,7 +330,7 @@ To copy/promote a variation to the base sounit: call copy_variation_to_base(vari
 4. LFO output is BIPOLAR. Use function=modulate for pitch/timbre. Use function=add for offset. NEVER use modulate on a 0–1 input port.
 5. ONE OUTPUT → ONE INPUT. Each output port of a container can only be connected to ONE input port total. You CANNOT connect the same output to two different inputs — not even on different containers and especially not on the same container (e.g. you cannot connect lfoOut → lowRolloff AND lfoOut → highRolloff of the same Rolloff container). Use a second LFO (or other source) for each additional target input.
 6. PADsynth safe params: padBandwidth 4–7 cents, padBandwidthScale 0.09–0.25. Higher causes out-of-tune doubling in upper register.
-7. IR Convolution: call get_ir_list, then load_ir after adding the container.
+7. IR Convolution: call browse_library(type:"ir"), then load_ir after adding the container.
 8. Connected port overrides the static parameter value. Static value is the fallback.
 9. Sounit files save to C:\Users\nimus\Music\kala\sounit\
 

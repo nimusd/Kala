@@ -14,10 +14,12 @@
 class TrackManager;
 class Track;
 class KalaMain;
+class Canvas;
 #include <QLabel>
 #include <QActionGroup>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QComboBox>
 #include <QProgressBar>
 
 namespace Ui {
@@ -60,6 +62,7 @@ private slots:
     void onCompositionSettingsTriggered();
     void onAddTrackTriggered();
     void onTrackSelected(int trackIndex);
+    void onCurveSelectorChanged(int index);
 
     // Render progress slots
     void onRenderStarted();
@@ -107,9 +110,17 @@ private:
     // Composition settings widgets (Phase 3)
     QPushButton *timeModeToggle;      // Absolute ↔ Musical
     QPushButton *slideModeBtn;        // Slide mode toggle (time-only movement)
+    QPushButton *transformModeBtn;    // Transform mode toggle (pitch-curve perimeter handles)
     QSpinBox *tempoSpinBox;           // BPM
     QSpinBox *timeSigNumerator;       // Top number (beats per bar)
     QSpinBox *timeSigDenominator;     // Bottom number (note value)
+
+    // Expressive curve selector — picks which named curve is rendered on the score
+    QComboBox *curveSelectorCombo = nullptr;
+    // Track we're currently listening to for curve-name changes. The combo shows
+    // the union of names declared by the base sounit + every variation.
+    Track *m_curveNamesTrack = nullptr;
+    QList<QMetaObject::Connection> m_curveNamesConnections;
 
     // Composition state
     enum TimeMode {
@@ -165,6 +176,9 @@ private:
     void setupToolbarColors();
     void setupDrawingTools();
     void setupCompositionSettings();
+    void setupCurveSelector();
+    void refreshCurveSelector();
+    void bindCurveNamesFromTrack(Track *track);
     void setupTrackSelector();
     void setupScoreCanvas();
     void setupZoom();
@@ -174,6 +188,7 @@ private:
     void applyHorizontalZoom(double pixelsPerSecond);
     void onTimeModeToggled();
     void onSlideModeChanged(bool active);
+    void onTransformModeChanged(bool active);
     void onTempoChanged(int bpm);
     void onTimeSignatureChanged();
     void onNowMarkerChanged(double timeMs);  // Sync spinboxes with timeline position

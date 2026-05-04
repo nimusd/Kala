@@ -29,6 +29,10 @@ public:
     void setConfig(const LLMConfig &config);
     void clearHistory();   // Start a fresh conversation
 
+    // Export the full session trace as a JSON object for fine-tuning data.
+    // Includes system prompt, messages, model info, timestamp, and rating.
+    QJsonObject exportSession(const QString &rating) const;
+
 public slots:
     void sendUserMessage(const QString &text);
 
@@ -75,9 +79,10 @@ private:
     void loadHistory();
     static QString sessionFilePath();
 
-    static constexpr int kMaxToolRounds = 40;
+    static constexpr int kMaxToolRounds = 250;
 
     LLMClient  *m_client;
+    LLMConfig   m_config;
     KalaTools  *m_tools;
     QJsonArray  m_messages;  // Conversation history (system message NOT stored here)
     bool        m_aborted = false;

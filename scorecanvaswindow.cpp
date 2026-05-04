@@ -5,6 +5,7 @@
 #include "gotodialog.h"
 #include "trackmanager.h"
 #include "track.h"
+#include "canvas.h"
 #include "tempotimesignature.h"
 #include <QToolButton>
 #include <QLabel>
@@ -146,6 +147,7 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
     setupToolbarColors();
     setupDrawingTools();
     setupCompositionSettings();
+    setupCurveSelector();
     setupTrackSelector();
     setupScoreCanvas();
     setupZoom();
@@ -327,6 +329,33 @@ void ScoreCanvasWindow::setupCompositionSettings()
     );
     ui->toolBar->addWidget(slideModeBtn);
 
+    // Transform Mode Toggle Button (pitch-curve perimeter handles for the selected note)
+    transformModeBtn = new QPushButton("Transform", this);
+    transformModeBtn->setCheckable(true);
+    transformModeBtn->setMinimumWidth(80);
+    transformModeBtn->setFocusPolicy(Qt::NoFocus);
+    transformModeBtn->setToolTip("Transform mode: scale/rotate/stretch the pitch curve of the selected note (shortcut: T)");
+    transformModeBtn->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #B39DDB;"  // Soft purple when inactive
+        "    padding: 5px 10px;"
+        "    border: 1px solid #7E57C2;"
+        "    border-radius: 3px;"
+        "}"
+        "QPushButton:checked {"
+        "    background-color: #5E35B1;"  // Deep purple when active
+        "    color: white;"
+        "    border-color: #311B92;"
+        "}"
+        "QPushButton:disabled {"
+        "    background-color: #ECEFF1;"
+        "    color: #B0BEC5;"
+        "    border-color: #CFD8DC;"
+        "}"
+    );
+    transformModeBtn->setEnabled(false);  // Requires a single-note selection
+    ui->toolBar->addWidget(transformModeBtn);
+
     ui->toolBar->addSeparator();
 
     // Tempo Label and SpinBox
@@ -383,6 +412,126 @@ void ScoreCanvasWindow::setupCompositionSettings()
     qDebug() << "ScoreCanvasWindow: Composition settings configured";
 }
 
+void ScoreCanvasWindow::setupCurveSelector()
+{
+    ui->toolBar->addSeparator();
+
+    QLabel *curveLabel = new QLabel(" Show curve: ", this);
+    ui->toolBar->addWidget(curveLabel);
+
+    curveSelectorCombo = new QComboBox(this);
+    curveSelectorCombo->setMinimumWidth(140);
+    curveSelectorCombo->setFocusPolicy(Qt::StrongFocus);
+    curveSelectorCombo->setToolTip("Which expressive curve is drawn under the notes");
+    curveSelectorCombo->addItem(QStringLiteral("Dynamics"), QStringLiteral("Dynamics"));
+    ui->toolBar->addWidget(curveSelectorCombo);
+
+    connect(curveSelectorCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ScoreCanvasWindow::onCurveSelectorChanged);
+}
+
+void ScoreCanvasWindow::refreshCurveSelector()
+{
+    if (!curveSelectorCombo) return;
+
+    // Preserve the current selection by name so switching tracks doesn't jolt the display
+    QString previousName = curveSelectorCombo->currentData().toString();
+    if (previousName.isEmpty()) previousName = QStringLiteral("Dynamics");
+
+    curveSelectorCombo->blockSignals(true);
+    curveSelectorCombo->clear();
+    curveSelectorCombo->addItem(QStringLiteral("Dynamics"), QStringLiteral("Dynamics"));
+    // Union of names declared by the base sounit + every variation's canvas,
+    // so notes on any variation can still have their curve rendered.
+    // resolveActiveCurveIndex() falls back to Dynamics per-note if a given
+    // note doesn't carry the chosen name.
+    QStringList unionNames;
+    if (m_curveNamesTrack) {
+        QStringList seen;
+        auto addFrom = [&](Canvas *c) {
+            if (!c) return;
+            for (const QString &name : c->getExpressiveCurveNames()) {
+                if (name.isEmpty() || seen.contains(name)) continue;
+                seen.append(name);
+                unionNames.append(name);
+            }
+        };
+        addFrom(m_curveNamesTrack->getCanvas());
+        int varCount = m_curveNamesTrack->getVariationCount();
+        for (int i = 1; i <= varCount; ++i) {
+            addFrom(m_curveNamesTrack->getCanvasForVariation(i));
+        }
+    }
+
+    // If the union contains all 10 "band 1".."band 10" names (case/whitespace
+    // insensitive), insert the "EQ Curve" pseudo-entry right after Dynamics.
+    // It groups the 10 band curves so the user can view/edit them as one EQ.
+    auto hasAllBands = [&unionNames]() {
+        for (int b = 1; b <= 10; ++b) {
+            QString expected = QString("band %1").arg(b);
+            bool found = false;
+            for (const QString &n : unionNames) {
+                if (n.simplified().toLower() == expected) { found = true; break; }
+            }
+            if (!found) return false;
+        }
+        return true;
+    };
+    if (hasAllBands()) {
+        curveSelectorCombo->addItem(QStringLiteral("EQ Curve"), QStringLiteral("EQ Curve"));
+    }
+
+    for (const QString &name : unionNames) {
+        curveSelectorCombo->addItem(name, name);
+    }
+    int idx = curveSelectorCombo->findData(previousName);
+    curveSelectorCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+    curveSelectorCombo->blockSignals(false);
+
+    // Sync the score to whatever we ended up showing
+    if (scoreCanvas) {
+        int activeIdx = curveSelectorCombo->currentIndex();
+        QString activeName = curveSelectorCombo->currentData().toString();
+        scoreCanvas->setActiveExpressiveCurveIndex(activeIdx, activeName);
+    }
+}
+
+void ScoreCanvasWindow::bindCurveNamesFromTrack(Track *track)
+{
+    if (m_curveNamesTrack == track) return;
+    // Drop previous wiring
+    for (const QMetaObject::Connection &c : m_curveNamesConnections) disconnect(c);
+    m_curveNamesConnections.clear();
+    m_curveNamesTrack = track;
+    if (m_curveNamesTrack) {
+        // Base canvas still emits when user edits names in the Envelope inspector
+        if (Canvas *base = m_curveNamesTrack->getCanvas()) {
+            m_curveNamesConnections.append(
+                connect(base, &Canvas::expressiveCurveNamesChanged,
+                        this, &ScoreCanvasWindow::refreshCurveSelector));
+        }
+        // Variations are immutable after creation, so create/delete/rename are
+        // the only events that can change the union.
+        m_curveNamesConnections.append(
+            connect(m_curveNamesTrack, &Track::variationCreated,
+                    this, [this](int, const QString&) { refreshCurveSelector(); }));
+        m_curveNamesConnections.append(
+            connect(m_curveNamesTrack, &Track::variationDeleted,
+                    this, [this](int) { refreshCurveSelector(); }));
+        m_curveNamesConnections.append(
+            connect(m_curveNamesTrack, &Track::variationRenamed,
+                    this, [this](int, const QString&) { refreshCurveSelector(); }));
+    }
+    refreshCurveSelector();
+}
+
+void ScoreCanvasWindow::onCurveSelectorChanged(int index)
+{
+    if (!curveSelectorCombo || !scoreCanvas) return;
+    QString name = curveSelectorCombo->itemData(index).toString();
+    scoreCanvas->setActiveExpressiveCurveIndex(index, name);
+}
+
 void ScoreCanvasWindow::setupTrackSelector()
 {
     // Note: old UI widgets will be deleted in setupScoreCanvas()
@@ -405,6 +554,7 @@ void ScoreCanvasWindow::setupScoreCanvas()
     // Create ScoreCanvas widget
     scoreCanvas = new ScoreCanvas();
     connect(slideModeBtn, &QPushButton::clicked, scoreCanvas, &ScoreCanvas::toggleSlideMode);
+    connect(transformModeBtn, &QPushButton::clicked, scoreCanvas, &ScoreCanvas::toggleTransformMode);
 
     // Set minimum size for ScoreCanvas to enable scrolling
     // Width: calculated from composition length and pixels per second
@@ -608,9 +758,30 @@ void ScoreCanvasWindow::setupScoreCanvas()
 
     // Sync slide mode button with ScoreCanvas state (keyboard shortcut keeps button in sync)
     connect(scoreCanvas, &ScoreCanvas::slideModeChanged, this, &ScoreCanvasWindow::onSlideModeChanged);
+    connect(scoreCanvas, &ScoreCanvas::transformModeChanged, this, &ScoreCanvasWindow::onTransformModeChanged);
+
+    // Enable transform button only when exactly one note is selected
+    connect(scoreCanvas, &ScoreCanvas::noteSelectionChanged, this, [this]() {
+        transformModeBtn->setEnabled(scoreCanvas->getSelectedNoteIndices().size() == 1);
+    });
 
     // Keep toolbar spinboxes and status labels in sync when tempo/time sig changes externally
     connect(scoreCanvas, &ScoreCanvas::tempoSettingsChanged, this, &ScoreCanvasWindow::refreshToolbar);
+
+    // When a curve is applied via the right-click dialog, sync the toolbar "Show curve"
+    // dropdown so it reflects the newly applied curve, not whatever was last selected.
+    connect(scoreCanvas, &ScoreCanvas::expressiveCurveApplied, this,
+            [this](const QString &curveName) {
+        if (!curveSelectorCombo) return;
+        int idx = curveSelectorCombo->findData(curveName);
+        if (idx < 0) {
+            refreshCurveSelector();
+            idx = curveSelectorCombo->findData(curveName);
+        }
+        if (idx >= 0 && idx != curveSelectorCombo->currentIndex()) {
+            curveSelectorCombo->setCurrentIndex(idx);
+        }
+    });
 
     // Connect track selector to score canvas for active track changes
     connect(trackSelector, &TrackSelector::trackSelected, scoreCanvas, &ScoreCanvas::setActiveTrack);
@@ -725,6 +896,20 @@ void ScoreCanvasWindow::applyZoom(double minHz, double maxHz)
     if (maxHz > 8000.0) maxHz = 8000.0;
     if (maxHz <= minHz) return;  // Invalid range
 
+    // Enforce minimum vertical range so zoom can always recover
+    static constexpr double MIN_OCTAVE_RANGE = 1.0;
+    double octaveRange = std::log2(maxHz / minHz);
+    if (octaveRange < MIN_OCTAVE_RANGE) {
+        double center = std::sqrt(minHz * maxHz);
+        minHz = center / std::pow(2.0, MIN_OCTAVE_RANGE / 2.0);
+        maxHz = center * std::pow(2.0, MIN_OCTAVE_RANGE / 2.0);
+        // Re-clamp after expansion
+        if (minHz < 20.0) { minHz = 20.0; maxHz = 20.0 * std::pow(2.0, MIN_OCTAVE_RANGE); }
+        if (maxHz > 8000.0) { maxHz = 8000.0; minHz = 8000.0 / std::pow(2.0, MIN_OCTAVE_RANGE); }
+    }
+
+    double oldMinHz = currentMinHz;
+    double oldMaxHz = currentMaxHz;
     currentMinHz = minHz;
     currentMaxHz = maxHz;
 
@@ -732,6 +917,42 @@ void ScoreCanvasWindow::applyZoom(double minHz, double maxHz)
     scoreCanvas->setFrequencyRange(minHz, maxHz);
     trackSelector->setFrequencyRange(minHz, maxHz);
     frequencyLabels->setFrequencyRange(minHz, maxHz);
+
+    // Resize widgets so the full frequency range is scrollable.
+    // The visible Hz range maps to the viewport; the full range maps to the widget.
+    int viewportHeight = scoreScrollArea->viewport()->height();
+    if (viewportHeight <= 0) return;
+
+    double fullOctaveRange = std::log2(8000.0 / 20.0);
+    double visibleOctaveRange = std::log2(maxHz / minHz);
+    int canvasHeight = static_cast<int>(viewportHeight * (fullOctaveRange / visibleOctaveRange));
+    canvasHeight = qMax(canvasHeight, viewportHeight);
+
+    scoreCanvas->setFixedHeight(canvasHeight);
+    trackSelector->setFixedHeight(canvasHeight);
+    frequencyLabels->setFixedHeight(canvasHeight);
+    frequencyLabels->setCanvasHeight(canvasHeight);
+
+    // Adjust scroll position to keep the same frequency region visible.
+    // The old visible range center should stay at the viewport center.
+    double oldVisibleOctaveRange = std::log2(oldMaxHz / oldMinHz);
+    if (oldVisibleOctaveRange > 0) {
+        double fullMinOctave = std::log2(20.0 / 25.0);  // base freq = 25 Hz
+        double fullMaxOctave = std::log2(8000.0 / 25.0);
+        double fullRange = fullMaxOctave - fullMinOctave;
+
+        // The visible center frequency in octave-space
+        double centerOctave = (std::log2(minHz / 25.0) + std::log2(maxHz / 25.0)) / 2.0;
+
+        // Pixel position of center in the new canvas (from top)
+        double normalizedCenter = (centerOctave - fullMinOctave) / fullRange;
+        int centerPixel = canvasHeight - static_cast<int>(normalizedCenter * canvasHeight);
+
+        // Scroll so that centerPixel is at the middle of the viewport
+        int newScroll = centerPixel - viewportHeight / 2;
+        newScroll = qBound(0, newScroll, scoreScrollArea->verticalScrollBar()->maximum());
+        scoreScrollArea->verticalScrollBar()->setValue(newScroll);
+    }
 }
 
 void ScoreCanvasWindow::applyHorizontalZoom(double pixelsPerSecond)
@@ -740,11 +961,25 @@ void ScoreCanvasWindow::applyHorizontalZoom(double pixelsPerSecond)
     if (pixelsPerSecond < 10.0) pixelsPerSecond = 10.0;
     if (pixelsPerSecond > 1000.0) pixelsPerSecond = 1000.0;
 
+    double oldPixelsPerSecond = currentPixelsPerSecond;
     currentPixelsPerSecond = pixelsPerSecond;
 
     // Apply to both ScoreCanvas and Timeline
     scoreCanvas->setPixelsPerSecond(pixelsPerSecond);
     timeline->setPixelsPerSecond(pixelsPerSecond);
+
+    // Resize canvas and timeline to match the new zoom level
+    int canvasWidth = static_cast<int>(currentPixelsPerSecond * (compositionSettings.lengthMs / 1000.0));
+    canvasWidth = qMax(canvasWidth, scoreScrollArea->viewport()->width());
+    scoreCanvas->setFixedWidth(canvasWidth);
+    timeline->resize(canvasWidth, timeline->height());
+
+    // Adjust scroll position proportionally so the same content stays visible
+    if (oldPixelsPerSecond > 0) {
+        int oldScroll = scoreScrollArea->horizontalScrollBar()->value();
+        int newScroll = static_cast<int>(oldScroll * (pixelsPerSecond / oldPixelsPerSecond));
+        scoreScrollArea->horizontalScrollBar()->setValue(newScroll);
+    }
 }
 
 void ScoreCanvasWindow::onZoomToggled(bool checked)
@@ -1034,7 +1269,7 @@ bool ScoreCanvasWindow::eventFilter(QObject *obj, QEvent *event)
         if (event->type() == QEvent::TabletPress && zoomModeActive) {
             QTabletEvent *tabletEvent = static_cast<QTabletEvent*>(event);
             isDraggingZoom = true;
-            dragStartPos = tabletEvent->position().toPoint();
+            dragStartPos = tabletEvent->globalPosition().toPoint();
             dragStartMinHz = currentMinHz;
             dragStartMaxHz = currentMaxHz;
             dragStartPixelsPerSecond = currentPixelsPerSecond;
@@ -1055,11 +1290,10 @@ bool ScoreCanvasWindow::eventFilter(QObject *obj, QEvent *event)
         if (event->type() == QEvent::TabletMove && zoomModeActive && isDraggingZoom) {
             QTabletEvent *tabletEvent = static_cast<QTabletEvent*>(event);
 
-            // Calculate vertical drag distance (for frequency zoom)
-            int deltaY = dragStartPos.y() - tabletEvent->position().y();
-
-            // Calculate horizontal drag distance (for time zoom)
-            int deltaX = dragStartPos.x() - tabletEvent->position().x();
+            // Calculate drag distance using global coordinates (immune to widget resize/scroll)
+            QPoint globalPos = tabletEvent->globalPosition().toPoint();
+            int deltaY = dragStartPos.y() - globalPos.y();
+            int deltaX = dragStartPos.x() - globalPos.x();
 
             // VERTICAL ZOOM (Frequency)
             double verticalZoomFactor = std::pow(2.0, deltaY / 100.0);
@@ -1188,7 +1422,7 @@ bool ScoreCanvasWindow::eventFilter(QObject *obj, QEvent *event)
             QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
                 isDraggingZoom = true;
-                dragStartPos = mouseEvent->pos();
+                dragStartPos = mouseEvent->globalPosition().toPoint();
                 dragStartMinHz = currentMinHz;
                 dragStartMaxHz = currentMaxHz;
                 dragStartPixelsPerSecond = currentPixelsPerSecond;
@@ -1209,11 +1443,10 @@ bool ScoreCanvasWindow::eventFilter(QObject *obj, QEvent *event)
         if (event->type() == QEvent::MouseMove && zoomModeActive && isDraggingZoom) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
 
-            // Calculate vertical drag distance (for frequency zoom)
-            int deltaY = dragStartPos.y() - mouseEvent->pos().y();
-
-            // Calculate horizontal drag distance (for time zoom)
-            int deltaX = dragStartPos.x() - mouseEvent->pos().x();
+            // Calculate drag distance using global coordinates (immune to widget resize/scroll)
+            QPoint globalPos = mouseEvent->globalPosition().toPoint();
+            int deltaY = dragStartPos.y() - globalPos.y();
+            int deltaX = dragStartPos.x() - globalPos.x();
 
             // VERTICAL ZOOM (Frequency)
             // Drag up = zoom in, drag down = zoom out
@@ -1519,6 +1752,11 @@ void ScoreCanvasWindow::play()
 void ScoreCanvasWindow::onSlideModeChanged(bool active)
 {
     slideModeBtn->setChecked(active);
+}
+
+void ScoreCanvasWindow::onTransformModeChanged(bool active)
+{
+    transformModeBtn->setChecked(active);
 }
 
 void ScoreCanvasWindow::onTimeModeToggled()
@@ -1846,6 +2084,11 @@ void ScoreCanvasWindow::updateFromSettings(const CompositionSettings &settings)
     timeline->setTimeMode(currentTimeMode == MusicalTime ? Timeline::Musical : Timeline::Absolute);
     timeline->setTempo(currentTempo);
     timeline->setTimeSignature(currentTimeSigTop, currentTimeSigBottom);
+    // drawBarLines uses defaultTempo/defaultTimeSigNum/Denom (via getTempoTimeSignatureAtTime);
+    // setMusicalMode only stores unused mirror fields, so the defaults must be set explicitly
+    // or bar lines stay at 120/4/4 until the user edits tempo/timesig.
+    scoreCanvas->setDefaultTempo(currentTempo);
+    scoreCanvas->setDefaultTimeSignature(currentTimeSigTop, currentTimeSigBottom);
     scoreCanvas->setMusicalMode(currentTimeMode == MusicalTime, currentTempo, currentTimeSigTop, currentTimeSigBottom);
 
     // Note: We don't call onTempoChanged here because:
@@ -1913,6 +2156,7 @@ void ScoreCanvasWindow::onTrackSelected(int trackIndex)
     if (trackManager) {
         Track* track = trackManager->getTrack(trackIndex);
         scoreCanvas->setCurrentTrack(track);
+        bindCurveNamesFromTrack(track);
         qDebug() << "ScoreCanvasWindow: Set current track pointer for variations -"
                  << (track ? track->getVariationCount() : 0) << "variations available";
     }
@@ -2115,6 +2359,7 @@ void ScoreCanvasWindow::setTrackManager(TrackManager *manager)
         Track *currentTrack = trackManager->getCurrentTrack();
         if (currentTrack) {
             scoreCanvas->setCurrentTrack(currentTrack);
+            bindCurveNamesFromTrack(currentTrack);
             qDebug() << "ScoreCanvasWindow: Set initial current track -"
                      << currentTrack->getVariationCount() << "variations";
         }
@@ -2122,6 +2367,7 @@ void ScoreCanvasWindow::setTrackManager(TrackManager *manager)
         // Keep ScoreCanvas current track in sync when track selection changes
         connect(trackManager, &TrackManager::currentTrackChanged, this, [this](Track *track, int) {
             scoreCanvas->setCurrentTrack(track);
+            bindCurveNamesFromTrack(track);
             qDebug() << "ScoreCanvasWindow: Current track changed -"
                      << (track ? track->getVariationCount() : 0) << "variations";
         });

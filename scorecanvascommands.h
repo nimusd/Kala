@@ -113,6 +113,7 @@ public:
     enum CurveType {
         DynamicsCurve,
         BottomCurve,
+        PitchCurve,
         ExpressiveCurveN  // Additional expressive curve at m_curveIndex
     };
 
@@ -188,6 +189,33 @@ private:
 };
 
 // ============================================================================
+// Resize Multiple Notes Command (for multi-selection resize)
+// ============================================================================
+class ResizeMultipleNotesCommand : public QUndoCommand
+{
+public:
+    struct NoteState {
+        int index;
+        double startTime;
+        double duration;
+    };
+
+    ResizeMultipleNotesCommand(Phrase *phrase,
+                               const QVector<NoteState> &oldStates,
+                               const QVector<NoteState> &newStates,
+                               ScoreCanvas *canvas, QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    Phrase *m_phrase;
+    QVector<NoteState> m_oldStates;
+    QVector<NoteState> m_newStates;
+    ScoreCanvas *m_canvas;
+};
+
+// ============================================================================
 // Apply Dynamics Curve Command
 // ============================================================================
 class ApplyDynamicsCurveCommand : public QUndoCommand
@@ -211,6 +239,7 @@ private:
     double m_weight;  // 0.0-2.0, where 1.0 is neutral
     bool m_perNote;   // true: curve applied per-note; false: across whole selection
     QVector<Curve> m_oldDynamicsCurves;  // For undo
+    QVector<QVector<EnvelopePoint>> m_oldEnvelopeControlPoints;  // For undo
     ScoreCanvas *m_canvas;
 };
 
@@ -549,38 +578,6 @@ private:
 };
 
 // ============================================================================
-// Add Expressive Curve Command
-// ============================================================================
-class AddExpressiveCurveCommand : public QUndoCommand
-{
-public:
-    AddExpressiveCurveCommand(Phrase *phrase,
-                               const QVector<int> &noteIndices,
-                               const QString &name,
-                               const QVector<EnvelopePoint> &envelopeCurve,
-                               double weight,
-                               bool perNote,
-                               ScoreCanvas *canvas,
-                               QUndoCommand *parent = nullptr);
-
-    void undo() override;
-    void redo() override;
-
-private:
-    Phrase *m_phrase;
-    QVector<int> m_noteIndices;
-    QString m_name;
-    QVector<EnvelopePoint> m_envelopeCurve;
-    double m_weight;
-    bool m_perNote;
-    QVector<int> m_addedAtIndex;  // Index where curve was added per note (for undo)
-    ScoreCanvas *m_canvas;
-
-    Curve evaluateToCurve(double noteStart, double noteDuration,
-                          double selStart, double selDuration) const;
-};
-
-// ============================================================================
 // Apply Named Curve Command (reuse an existing named curve on a selection)
 // ============================================================================
 class ApplyNamedCurveCommand : public QUndoCommand
@@ -644,8 +641,12 @@ private:
 class RemoveNamedExpressiveCurveCommand : public QUndoCommand
 {
 public:
+    // Removes the named curve from the specified notes only. Pass an empty
+    // noteIndices list to scope the removal to every note in the phrase that
+    // carries this curve (legacy behaviour).
     RemoveNamedExpressiveCurveCommand(Phrase *phrase,
                                       const QString &curveName,
+                                      const QVector<int> &noteIndices,
                                       ScoreCanvas *canvas,
                                       QUndoCommand *parent = nullptr);
 
@@ -661,21 +662,30 @@ private:
 };
 
 // ============================================================================
-// Apply Expressive Curve Shape Command
-// Applies a dynamics-style envelope shape progressively across a selection,
-// scaling the values of a named expressive curve (same multiplier algorithm
-// as ApplyDynamicsCurveCommand multi-note mode).  No per-note option.
+// Apply Expressive Curve To Selection Command
+// Applies a named expressive curve shape with three modes, mirroring
+// ApplyDynamicsCurveCommand semantics:
+//   * perNote=true            → the drawn shape becomes each note's curve
+//     (independent per-note application over the note's own duration).
+//   * perNote=false, single   → the shape is applied across the single note.
+//   * perNote=false, multi    → the shape spans the whole selection.
+//       - notes that already have this named curve keep their per-note shape,
+//         scaled by evalEnvelope(noteCenter-in-selection).
+//       - notes without the curve receive the drawn shape as-is.
+// Undo restores each note's prior state (either the old shape + control points,
+// or removes the curve if the note didn't have one).
 // ============================================================================
-class ApplyExpressiveCurveShapeCommand : public QUndoCommand
+class ApplyExpressiveCurveToSelectionCommand : public QUndoCommand
 {
 public:
-    ApplyExpressiveCurveShapeCommand(Phrase *phrase,
-                                      const QVector<int> &noteIndices,
-                                      const QString &curveName,
-                                      const QVector<EnvelopePoint> &envelope,
-                                      double weight,
-                                      ScoreCanvas *canvas,
-                                      QUndoCommand *parent = nullptr);
+    ApplyExpressiveCurveToSelectionCommand(Phrase *phrase,
+                                            const QVector<int> &noteIndices,
+                                            const QString &curveName,
+                                            const QVector<EnvelopePoint> &envelope,
+                                            double weight,
+                                            bool perNote,
+                                            ScoreCanvas *canvas,
+                                            QUndoCommand *parent = nullptr);
 
     void undo() override;
     void redo() override;
@@ -686,13 +696,75 @@ private:
     QString m_curveName;
     QVector<EnvelopePoint> m_envelope;
     double m_weight;
+    bool m_perNote;
 
-    struct SavedState {
+    struct PriorState {
         int noteIdx;
-        int curveIdx;   // index in note's expressive curve list (-1 = note skipped)
+        bool hadCurve;
         Curve oldCurve;
+        QVector<EnvelopePoint> oldControlPoints;
     };
-    QVector<SavedState> m_savedStates;  // Populated on first redo
+    QVector<PriorState> m_priorStates;
+    bool m_firstTime;
+
+    ScoreCanvas *m_canvas;
+};
+
+// ============================================================================
+// Apply EQ Curve Command
+// Writes per-band envelopes for the 10-Band EQ to each selected note.
+//   - shape envelope (X = band 1..10, Y = band gain with 0.5 = flat) is
+//     averaged over each band's 1/10th slice of X to get 10 band values.
+//   - intensity envelope (X = time, Y = 0..1) scales the shape toward flat:
+//     0 = flat EQ, 1 = full shape.
+//   - per-band value at time t:
+//     v(t) = 0.5 + (bandShape - 0.5) * intensity(t) * weight
+//   - perNote=true  → intensity spans each note's duration (EQ morphs within note)
+//     perNote=false → intensity spans the whole selection; each note gets a
+//                     static EQ scaled by intensity at its centre (morph over phrase)
+// m_bandNames is the list of 10 actual curve names (in band order) found on
+// the selection's variations — e.g. ["band 1", "band 2", ...] or the
+// user's actual casing.  Undo restores prior per-band state per note.
+// ============================================================================
+class ApplyEqCurveCommand : public QUndoCommand
+{
+public:
+    ApplyEqCurveCommand(Phrase *phrase,
+                        const QVector<int> &noteIndices,
+                        const QStringList &bandNames,        // size == 10
+                        const QVector<EnvelopePoint> &shape,
+                        const QVector<EnvelopePoint> &intensity,
+                        double weight,
+                        bool perNote,
+                        ScoreCanvas *canvas,
+                        QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    Phrase *m_phrase;
+    QVector<int> m_noteIndices;
+    QStringList m_bandNames;
+    QVector<EnvelopePoint> m_shape;
+    QVector<EnvelopePoint> m_intensity;
+    double m_weight;
+    bool m_perNote;
+
+    struct PriorBandState {
+        bool hadCurve;
+        Curve oldCurve;
+        QVector<EnvelopePoint> oldControlPoints;
+    };
+    struct PriorNoteState {
+        int noteIdx;
+        QVector<PriorBandState> bands;  // size == 10, aligned with m_bandNames
+        bool hadShape = false;
+        bool hadIntensity = false;
+        QVector<EnvelopePoint> oldShape;
+        QVector<EnvelopePoint> oldIntensity;
+    };
+    QVector<PriorNoteState> m_priorStates;
     bool m_firstTime;
 
     ScoreCanvas *m_canvas;
@@ -944,6 +1016,74 @@ private:
     ScoreCanvas *m_canvas;
 
     void applyValues(bool useNew);
+};
+
+// ============================================================================
+// Retrograde Notes Command
+// ============================================================================
+// Copies selected notes in reverse temporal order starting at the target time.
+// Internal curves (dynamics, pitch, expressive) are also time-reversed.
+class RetrogradeNotesCommand : public QUndoCommand
+{
+public:
+    RetrogradeNotesCommand(Phrase *phrase, const QVector<Note> &selectedNotes,
+                          double targetTime, int targetTrackIndex, ScoreCanvas *canvas,
+                          QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+    const QVector<int>& getInsertedIndices() const { return m_insertedIndices; }
+
+private:
+    Phrase *m_phrase;
+    QVector<Note> m_retrogradeNotes;   // Pre-computed retrograded notes
+    double m_targetTime;
+    int m_targetTrackIndex;
+    QVector<int> m_insertedIndices;
+    ScoreCanvas *m_canvas;
+
+    static Curve reverseCurve(const Curve &curve);
+};
+
+// ============================================================================
+// Set Note Curves Batch Command
+// ============================================================================
+// Applies a named expressive curve (or the Dynamics curve when name=="Dynamics")
+// to a set of notes, with a DISTINCT envelope per note (pointsPerNote[i] goes
+// to noteIndices[i]). Single undo entry restores every note's prior curve —
+// or removes the named curve if the note didn't carry one before.
+class SetNoteCurvesBatchCommand : public QUndoCommand
+{
+public:
+    SetNoteCurvesBatchCommand(Phrase *phrase,
+                              const QVector<int> &noteIndices,
+                              const QVector<QVector<EnvelopePoint>> &pointsPerNote,
+                              const QString &name,
+                              double weight,
+                              ScoreCanvas *canvas,
+                              QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    struct PriorState {
+        int   noteIdx;
+        bool  hadCurve;    // expressive mode only: whether the named curve existed
+        Curve oldCurve;    // dynamics: always the previous dynamics curve
+                           // expressive: valid iff hadCurve is true
+    };
+
+    Phrase *m_phrase;
+    QVector<int> m_noteIndices;
+    QVector<QVector<EnvelopePoint>> m_pointsPerNote;
+    QString m_name;
+    double  m_weight;
+    bool    m_isDynamics;
+    QVector<PriorState> m_priorStates;
+    bool    m_firstTime;
+    ScoreCanvas *m_canvas;
 };
 
 #endif // SCORECANVASCOMMANDS_H

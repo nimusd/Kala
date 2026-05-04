@@ -13,12 +13,9 @@ class QSlider;
 class EnvelopeCurveCanvas;
 
 /**
- * ExpressiveCurveApplyDialog - Apply a shape curve progressively across selected
- * notes for a chosen named expressive curve.
- *
- * Similar to DynamicsCurveDialog but:
- *   - A dropdown selects which named expressive curve to target.
- *   - No "Per note" toggle — always spans the whole selection (progressive mode).
+ * ExpressiveCurveApplyDialog - Choose an expressive curve name from the sounit
+ * and draw a shape; the same shape is applied to every selected note under that
+ * name (creating the curve on notes that don't have it yet).
  */
 class ExpressiveCurveApplyDialog : public QDialog
 {
@@ -35,8 +32,17 @@ public:
     // Weight (0.0 – 2.0, 1.0 = neutral)
     double getWeight() const;
 
+    // Per-note mode toggle state
+    bool getPerNoteMode() const;
+
     // Which named expressive curve to apply to
     QString getSelectedCurveName() const;
+
+    // Pre-load an existing curve into the editor (switches preset to "Custom")
+    void setInitialCurve(const QVector<EnvelopePoint> &points);
+
+    // Pre-select a curve name in the target dropdown
+    void setSelectedCurveName(const QString &name);
 
 private slots:
     void onPresetChanged(int index);
@@ -55,6 +61,7 @@ private:
     QLabel *selectionLabel;
     QSlider *weightSlider;
     QLabel *weightValueLabel;
+    QPushButton *perNoteToggle;
     QPushButton *saveButton;
     QPushButton *loadButton;
     QPushButton *applyButton;

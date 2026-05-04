@@ -38,6 +38,9 @@ public:
     // Get per-note mode toggle state
     bool getPerNoteMode() const;
 
+    // Pre-load an existing curve into the editor (switches preset to "Custom")
+    void setInitialCurve(const QVector<EnvelopePoint> &points);
+
 private slots:
     void onPresetChanged(int index);
     void onSaveClicked();

@@ -69,6 +69,10 @@ private:
     CompanionPanel *m_companionPanel = nullptr;
     QDockWidget    *m_companionDock  = nullptr;
 
+    // Variation toolbar (floating, exposes per-note variation routing)
+    class VariationToolbar *m_variationToolbar = nullptr;
+    QAction               *m_actionVariationToolbar = nullptr;
+
     // Inspector state
     Container *currentContainer = nullptr;
 
@@ -138,9 +142,11 @@ private:
     void populateReedInspector();
     void populateSaxophoneInspector();
     void populatePercussionInspector();
+    void populatePanInspector();
     void updateSpectrumVisualization();
     void updateEnvelopeParameters(int envelopeType);  // Update contextual envelope params
     void updateEnvelopePreview();  // Update envelope preview visualization
+    void repopulateScoreCurveCombo();  // Rebuild envelope inspector's Score Curve dropdown from sounit's name list
     QString getContainerDescription(const QString &containerType);
 
     // Helper to add a simple parameter slider
@@ -185,6 +191,9 @@ public slots:
     bool saveProjectFile(const QString &filePath);  // AI companion: save to path
     QString getProjectFilePath() const { return m_currentProjectPath; }
     void setCompanionToolMode(ToolMode mode);  // Set tool mode and update panel label
+
+private:
+    void saveAnimaSession(const QString &rating);
 
 private slots:
     void onTabChanged(int index);
@@ -266,9 +275,7 @@ private slots:
 
     // Expressive curves inspector slots
     void onExpressiveCurveChanged(int index);
-    void onExpressiveCurveAdd();
     void onExpressiveCurveDelete();
-    void onExpressiveCurveApply();
     void updateExpressiveCurvesDropdown();
 
     // *** Manual update method ***

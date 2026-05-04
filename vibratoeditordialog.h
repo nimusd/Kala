@@ -33,6 +33,9 @@ public:
     void setVibrato(const Vibrato &v);
     Vibrato getVibrato() const;
 
+    // Returns the user's default vibrato preset. Returns true if a default is configured.
+    static bool getDefaultPreset(Vibrato &out);
+
 private slots:
     void onRateChanged(double value);
     void onPitchDepthChanged(double value);
@@ -43,6 +46,8 @@ private slots:
     void onLoadEnvelopeClicked();
     void onVibratoPresetChanged(int index);
     void onSaveVibratoPresetClicked();
+    void onDeleteVibratoPresetClicked();
+    void onSetDefaultPresetClicked();
 
 private:
     void setupUI();
@@ -51,7 +56,10 @@ private:
     void loadUserPresets();
     void saveUserPresets();
     void updatePresetCombo();
+    void updatePresetButtons();
     void applyPreset(const Vibrato &preset);
+    bool isUserPresetSelected(int *userIndex = nullptr) const;
+    int findMatchingPreset(const Vibrato &v) const;
 
     // Controls
     QDoubleSpinBox *spinRate;
@@ -64,6 +72,8 @@ private:
     QPushButton *btnLoadEnvelope;
     QComboBox *comboVibratoPreset;
     QPushButton *btnSavePreset;
+    QPushButton *btnDeletePreset;
+    QPushButton *btnSetDefault;
 
     // Current vibrato data
     Vibrato currentVibrato;
@@ -76,6 +86,7 @@ private:
     };
     QVector<VibratoPreset> factoryPresets;
     QVector<VibratoPreset> userPresets;
+    QString defaultPresetName;
     bool updatingFromPreset = false;
 };
 

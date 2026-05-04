@@ -90,12 +90,12 @@ int FrequencyLabels::frequencyToPixel(double hz) const
     }
 
     double octaveNumber = std::log2(hz / BASE_FREQUENCY);
-    double minOctave = std::log2(visibleMinHz / BASE_FREQUENCY);
-    double maxOctave = std::log2(visibleMaxHz / BASE_FREQUENCY);
-    double visibleOctaveRange = maxOctave - minOctave;
+    double fullMinOctave = std::log2(FULL_MIN_HZ / BASE_FREQUENCY);
+    double fullMaxOctave = std::log2(FULL_MAX_HZ / BASE_FREQUENCY);
+    double fullOctaveRange = fullMaxOctave - fullMinOctave;
 
-    double normalizedPos = (octaveNumber - minOctave) / visibleOctaveRange;
-    int pixel = canvasHeight - static_cast<int>(normalizedPos * canvasHeight);
+    double normalizedPos = (octaveNumber - fullMinOctave) / fullOctaveRange;
+    int pixel = height() - static_cast<int>(normalizedPos * height());
     return pixel;
 }
 

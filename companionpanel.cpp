@@ -1,4 +1,5 @@
 #include "companionpanel.h"
+#include "animapalette.h"
 
 #include <QTextBrowser>
 #include <QPlainTextEdit>
@@ -136,12 +137,42 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     m_modeLabel->setVisible(false);
     m_modeLabel->installEventFilter(this);
 
+    // ── Save session buttons (thumbs up / thumbs down) ───────────────────────
+    const QString thumbBtnStyle =
+        "QPushButton {"
+        "  background: #f5f5f5;"
+        "  border: 1px solid #cccccc;"
+        "  border-radius: 4px;"
+        "  font-size: 11pt;"
+        "  padding: 0px;"
+        "}"
+        "QPushButton:hover   { background: #e5e5e5; }"
+        "QPushButton:pressed { background: #d4d4d4; }";
+
+    m_thumbsUpBtn = new QPushButton(QString::fromUcs4(U"\U0001F44D", 1), this);
+    m_thumbsUpBtn->setFixedSize(28, 22);
+    m_thumbsUpBtn->setToolTip("Save session as good training data");
+    m_thumbsUpBtn->setStyleSheet(thumbBtnStyle);
+    connect(m_thumbsUpBtn, &QPushButton::clicked, this, [this]() {
+        emit saveSessionRequested("good");
+    });
+
+    m_thumbsDownBtn = new QPushButton(QString::fromUcs4(U"\U0001F44E", 1), this);
+    m_thumbsDownBtn->setFixedSize(28, 22);
+    m_thumbsDownBtn->setToolTip("Save session as bad training data");
+    m_thumbsDownBtn->setStyleSheet(thumbBtnStyle);
+    connect(m_thumbsDownBtn, &QPushButton::clicked, this, [this]() {
+        emit saveSessionRequested("bad");
+    });
+
     auto *statusRow = new QHBoxLayout;
     statusRow->setContentsMargins(0, 0, 0, 0);
     statusRow->setSpacing(6);
     statusRow->addWidget(m_statusLabel, 1);
     statusRow->addWidget(m_historyLabel, 0, Qt::AlignVCenter);
     statusRow->addWidget(m_modeLabel, 0, Qt::AlignVCenter);
+    statusRow->addWidget(m_thumbsUpBtn, 0, Qt::AlignVCenter);
+    statusRow->addWidget(m_thumbsDownBtn, 0, Qt::AlignVCenter);
     statusRow->addWidget(m_stopBtn, 0, Qt::AlignVCenter);
 
     // ── Root layout ───────────────────────────────────────────────────────────
@@ -151,6 +182,13 @@ CompanionPanel::CompanionPanel(QWidget *parent)
     root->addWidget(m_log, 1);
     root->addLayout(statusRow);
     root->addLayout(inputRow);
+
+    // ── Slash template palette ──────────────────────────────────────────────
+    // Installed AFTER CompanionPanel::eventFilter so the palette's filter
+    // runs first (Qt invokes filters in reverse-install order). That lets
+    // the palette intercept Enter/Tab while its popup is visible before the
+    // Enter-to-send shortcut fires.
+    m_palette = new AnimaPalette(m_input, this);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -28,7 +28,15 @@ ExpressiveCurveApplyDialog::ExpressiveCurveApplyDialog(int noteCount, double tim
     setupPresets();
     setupUi(curveNames);
 
-    loadPreset(0);
+    int swellIndex = -1;
+    for (int i = 0; i < presets.size(); ++i) {
+        if (presets[i].name == "Swell") { swellIndex = i; break; }
+    }
+    if (swellIndex >= 0) {
+        presetCombo->setCurrentIndex(swellIndex);
+    } else {
+        loadPreset(0);
+    }
 }
 
 void ExpressiveCurveApplyDialog::setupUi(const QStringList &curveNames)
@@ -117,6 +125,34 @@ void ExpressiveCurveApplyDialog::setupUi(const QStringList &curveNames)
     connect(weightSlider, &QSlider::valueChanged,
             this, &ExpressiveCurveApplyDialog::onWeightChanged);
 
+    // Per-note mode toggle — matches DynamicsCurveDialog layout
+    perNoteToggle = new QPushButton("Per note", this);
+    perNoteToggle->setCheckable(true);
+    perNoteToggle->setChecked(false);
+    perNoteToggle->setToolTip(
+        "On: the shape is applied to each note's full duration independently.\n"
+        "Off: the shape spans the whole selection — notes that already have\n"
+        "this expressive curve keep their per-note shape and are scaled by the\n"
+        "envelope at their position in the selection; notes without the curve\n"
+        "receive the slice of the envelope that lines up with their own time\n"
+        "span in the selection.");
+    perNoteToggle->setStyleSheet(
+        "QPushButton {"
+        "  padding: 4px 12px;"
+        "  border: 1px solid #aaa;"
+        "  border-radius: 4px;"
+        "  background-color: #e8e8e8;"
+        "  color: #333;"
+        "}"
+        "QPushButton:checked {"
+        "  background-color: #1976D2;"
+        "  border-color: #1565C0;"
+        "  color: white;"
+        "}"
+        "QPushButton:hover:!checked { background-color: #d8d8d8; }"
+        "QPushButton:hover:checked  { background-color: #1565C0; }");
+    mainLayout->addWidget(perNoteToggle);
+
     // Selection info
     QString timeStr;
     if (m_timeSpanMs >= 1000) {
@@ -162,8 +198,8 @@ void ExpressiveCurveApplyDialog::setupPresets()
       presets.append(p); }
 
     { Preset p; p.name = "Swell";
-      p.curve.append(EnvelopePoint(0.0, 0.4, 0));
-      p.curve.append(EnvelopePoint(0.5, 1.0, 0));
+      p.curve.append(EnvelopePoint(0.0, 0.4, 1));
+      p.curve.append(EnvelopePoint(0.5, 1.0, 1));
       p.curve.append(EnvelopePoint(1.0, 0.4, 0));
       presets.append(p); }
 
@@ -219,9 +255,33 @@ double ExpressiveCurveApplyDialog::getWeight() const
     return weightSlider->value() / 100.0;
 }
 
+bool ExpressiveCurveApplyDialog::getPerNoteMode() const
+{
+    return perNoteToggle->isChecked();
+}
+
 QString ExpressiveCurveApplyDialog::getSelectedCurveName() const
 {
     return curveNameCombo->currentText();
+}
+
+void ExpressiveCurveApplyDialog::setInitialCurve(const QVector<EnvelopePoint> &points)
+{
+    curveCanvas->setPoints(points);
+
+    int customIndex = presetCombo->findText("Custom");
+    if (customIndex >= 0) {
+        presetCombo->blockSignals(true);
+        presetCombo->setCurrentIndex(customIndex);
+        presetCombo->blockSignals(false);
+    }
+}
+
+void ExpressiveCurveApplyDialog::setSelectedCurveName(const QString &name)
+{
+    int idx = curveNameCombo->findText(name);
+    if (idx >= 0)
+        curveNameCombo->setCurrentIndex(idx);
 }
 
 void ExpressiveCurveApplyDialog::onWeightChanged(int value)

@@ -39,6 +39,8 @@ private:
     static constexpr double BASE_FREQUENCY = 25.0;
     static constexpr int PIXELS_PER_OCTAVE = 100;
     static constexpr int LABEL_WIDTH = 60;
+    static constexpr double FULL_MIN_HZ = 20.0;
+    static constexpr double FULL_MAX_HZ = 8000.0;
 
     int frequencyToPixel(double hz) const;
     void generateScaleLines();

@@ -15,7 +15,8 @@
  * The render is associated with a note by ID in Track's noteRenders map.
  */
 struct NoteRender {
-    std::vector<float> samples;   // Pre-rendered audio samples for this note
+    std::vector<float> samples;   // Pre-rendered audio samples for this note (mono)
+    std::vector<float> panValues; // Per-sample pan position (-1.0 left to +1.0 right), same length as samples
     double sampleRate;            // Sample rate used for rendering
     uint64_t graphHash;           // Graph state hash when rendered (for invalidation)
     uint64_t noteHash;            // Note properties hash when rendered (for change detection)
@@ -33,6 +34,7 @@ struct NoteRender {
      */
     void clear() {
         samples.clear();
+        panValues.clear();
         sampleRate = 0.0;
         graphHash = 0;
         noteHash = 0;

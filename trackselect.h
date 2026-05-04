@@ -73,6 +73,8 @@ private:
     static constexpr int ACTIVE_OPACITY = 255;       // 100%
     static constexpr double BASE_FREQUENCY = 25.0;   // Hz - base frequency for just intonation
     static constexpr int PIXELS_PER_OCTAVE = 100;    // Fixed vertical size for each octave
+    static constexpr double FULL_MIN_HZ = 20.0;
+    static constexpr double FULL_MAX_HZ = 8000.0;
 
     // Helper methods
     int frequencyToPixel(double hz) const;

@@ -48,6 +48,7 @@ SounitGraph* SounitGraph::clone() const
     copy->hasValidSignalOutput = hasValidSignalOutput;
     copy->m_currentIsLegato = m_currentIsLegato;
     copy->m_hasTailProcessor = m_hasTailProcessor;
+    copy->m_panContainer = m_panContainer;
     copy->m_needsIRPreroll = m_needsIRPreroll;
     copy->cachedConnections = cachedConnections;
     copy->m_postRenderIRContainer = m_postRenderIRContainer;
@@ -88,6 +89,7 @@ SounitGraph* SounitGraph::clone() const
         if (src.saxophoneModel)  dst.saxophoneModel = new SaxophoneModel2(*src.saxophoneModel);
         if (src.tailProc)             dst.tailProc          = new TailProcessor(*src.tailProc);
         if (src.percussionModel)      dst.percussionModel   = new PercussionModel(*src.percussionModel);
+        if (src.panProc)              dst.panProc           = new PanProcessor(*src.panProc);
 
         // Copy output values
         dst.spectrumOut = src.spectrumOut;
@@ -122,6 +124,7 @@ void SounitGraph::buildFromCanvas(Canvas *canvas)
     hasValidSignalOutput = false;
     m_postRenderIRContainer = nullptr;
     m_postRenderIRConv = nullptr;
+    m_panContainer = nullptr;
 
     if (!canvas) {
         qDebug() << "SounitGraph::buildFromCanvas - canvas is null!";
@@ -162,7 +165,7 @@ void SounitGraph::buildFromCanvas(Canvas *canvas)
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container &&
                     (conn.toPort == "spectrumIn" || conn.toPort == "spectrumA")) {
-                    if (processors.contains(conn.fromContainer)) {
+                    if (isSourceActive(conn.fromContainer)) {
                         const ProcessorData &src = processors[conn.fromContainer];
                         if (!src.padWavetable.empty() && proc.padWavetable.empty()) {
                             proc.padWavetable = src.padWavetable;
@@ -217,7 +220,7 @@ void SounitGraph::setupPostRenderIR()
     Container *preIRContainer = nullptr;
     for (const Canvas::Connection &conn : cachedConnections) {
         if (conn.toContainer == signalOutputContainer && conn.toPort == "signalIn") {
-            if (processors.contains(conn.fromContainer)) {
+            if (isSourceActive(conn.fromContainer)) {
                 preIRContainer = conn.fromContainer;
                 break;
             }
@@ -294,7 +297,7 @@ void SounitGraph::computeExecutionOrder(Canvas *canvas)
     const QVector<Canvas::Connection>& connections = canvas->getConnections();
     for (const Canvas::Connection &conn : connections) {
         // Connection goes from output to input, so fromContainer must execute before toContainer
-        if (processors.contains(conn.fromContainer) && processors.contains(conn.toContainer)) {
+        if (isSourceActive(conn.fromContainer) && processors.contains(conn.toContainer)) {
             // Add edge: fromContainer → toContainer
             dependents[conn.fromContainer].insert(conn.toContainer);
             incomingEdgeCount[conn.toContainer]++;
@@ -619,6 +622,11 @@ void SounitGraph::createProcessors()
             data.freqMapper->setCurveType(static_cast<int>(container->getParameter("curveType", 1.0)));
             data.freqMapper->setInvert(container->getParameter("invert", 0.0) > 0.5);
 
+        } else if (container->getName() == "Pan") {
+            data.panProc = new PanProcessor();
+            data.panProc->setPan(container->getParameter("pan", 0.0));
+            m_panContainer = container;
+
         } else if (container->getName() == "Signal Mixer") {
             data.signalMixer = new SignalMixer();
             data.signalMixer->setGainA(container->getParameter("gainA", 1.0));
@@ -863,6 +871,9 @@ void SounitGraph::reset(bool isLegato)
         if (data.tailProc) {
             data.tailProc->reset();
         }
+        if (data.panProc) {
+            data.panProc->reset();
+        }
         // RolloffProcessor and BreathTurbulence have no state to reset
     }
 
@@ -876,6 +887,17 @@ void SounitGraph::reset(bool isLegato)
             }
         }
     }
+}
+
+double SounitGraph::getPanValue() const
+{
+    if (m_panContainer) {
+        auto it = processors.constFind(m_panContainer);
+        if (it != processors.constEnd()) {
+            return it->controlOut;
+        }
+    }
+    return 0.0;
 }
 
 bool SounitGraph::hasSaxophoneModel() const
@@ -947,7 +969,7 @@ void SounitGraph::runIRPreroll(double pitch)
 
     // Run the pre-roll; the auto-commit in pushIRSample() fires once the threshold is reached
     for (int i = 0; i < captureSamples; i++) {
-        preroll->generateSample(pitch, 0.5, false, false, 1.0, {});
+        preroll->generateSample(pitch, 0.5, false, false, 1.0, {}, {});
     }
 
     // Copy committed IRs from the pre-roll clone back into this graph
@@ -964,7 +986,7 @@ void SounitGraph::runIRPreroll(double pitch)
     delete preroll;
 }
 
-double SounitGraph::generateSample(double pitch, double noteProgress, bool isLegato, bool tailMode, double currentDynamics, const QVector<double> &scoreCurveValues)
+double SounitGraph::generateSample(double pitch, double noteProgress, bool isLegato, bool tailMode, double currentDynamics, const QVector<double> &scoreCurveValues, const QStringList &scoreCurveNames)
 {
     if (!hasValidSignalOutput) {
         return 0.0;
@@ -982,6 +1004,7 @@ double SounitGraph::generateSample(double pitch, double noteProgress, bool isLeg
     m_tailMode = tailMode;
     m_currentDynamics = currentDynamics;
     m_scoreCurveValues = scoreCurveValues;
+    m_scoreCurveNames = scoreCurveNames;
     if (!tailMode) {
         m_lastNormalDynamics = currentDynamics;  // Snapshot dynamics before tail mode begins
     }
@@ -1015,7 +1038,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
         if (name == "Recorder" && proc.recorderModel) {
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             for (const Canvas::Connection &c : cachedConnections)
-                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.recorderModel->tick(pitch * pitchMult, 1.0,
                                                       m_currentIsLegato, true);
@@ -1025,7 +1048,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
         if (name == "Bowed" && proc.bowedModel) {
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             for (const Canvas::Connection &c : cachedConnections)
-                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.bowedModel->tick(pitch * pitchMult, 1.0,
                                                    m_currentIsLegato, true);
@@ -1035,7 +1058,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
         if (name == "Reed" && proc.reedModel) {
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             for (const Canvas::Connection &c : cachedConnections)
-                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.reedModel->tick(pitch * pitchMult, 1.0,
                                                        m_currentIsLegato, true);
@@ -1045,7 +1068,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
         if (name == "Percussion" && proc.percussionModel) {
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             for (const Canvas::Connection &c : cachedConnections)
-                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.percussionModel->setPitchMultiplier(pitchMult);
             proc.signalOut = proc.percussionModel->tick(pitch, true);
@@ -1055,7 +1078,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
         if (name == "Clarinet" && proc.saxophoneModel) {
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             for (const Canvas::Connection &c : cachedConnections)
-                if (c.toContainer == container && c.toPort == "pitchMultiplier" && processors.contains(c.fromContainer))
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.saxophoneModel->tick(pitch * pitchMult, 1.0,
                                                         m_currentIsLegato, true);
@@ -1106,7 +1129,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "purity") {
                         // Get purity modulation from source container (control output 0.0-1.0)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             purityValue = applyConnectionFunction(purityValue, sourceValue,
                                                                 conn.function, conn.weight);
@@ -1115,7 +1138,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "drift") {
                         // Get drift modulation from source container (control output)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale to drift range (0.0 to 0.1)
                             double sourceValue = processors[conn.fromContainer].controlOut * 0.1;
                             driftValue = applyConnectionFunction(driftValue, sourceValue,
@@ -1136,7 +1159,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 double offsetValue = container->getParameter("digitWindowOffset", 0.0);
                 for (const Canvas::Connection &conn : cachedConnections) {
                     if (conn.toContainer == container && conn.toPort == "digitWindowOffset") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             offsetValue = applyConnectionFunction(offsetValue, sourceValue,
                                                                   conn.function, conn.weight);
@@ -1175,12 +1198,12 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "spectrumIn") {
                         // Get spectrum from source container (passthrough only for spectrum data)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             inputSpectrum = processors[conn.fromContainer].spectrumOut;
                         }
                     } else if (conn.toPort == "lowRolloff") {
                         // Get lowRolloff modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to rolloff range (0.0-2.0)
                             double sourceValue = processors[conn.fromContainer].controlOut * 2.0;
                             lowRolloff = applyConnectionFunction(lowRolloff, sourceValue,
@@ -1189,7 +1212,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "highRolloff") {
                         // Get highRolloff modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to rolloff range (0.0-3.0)
                             double sourceValue = processors[conn.fromContainer].controlOut * 3.0;
                             highRolloff = applyConnectionFunction(highRolloff, sourceValue,
@@ -1198,7 +1221,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "crossover") {
                         // Get crossover modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to harmonic range (1-32)
                             double sourceValue = 1.0 + processors[conn.fromContainer].controlOut * 31.0;
                             double crossoverDouble = applyConnectionFunction(crossoverHarmonic, sourceValue,
@@ -1207,7 +1230,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "transition") {
                         // Get transition width modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to width range (0-16)
                             double sourceValue = processors[conn.fromContainer].controlOut * 16.0;
                             double transitionDouble = applyConnectionFunction(transitionWidth, sourceValue,
@@ -1233,15 +1256,15 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "spectrumA") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             spectrumA = processors[conn.fromContainer].spectrumOut;
                         }
                     } else if (conn.toPort == "spectrumB") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             spectrumB = processors[conn.fromContainer].spectrumOut;
                         }
                     } else if (conn.toPort == "position") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             position = applyConnectionFunction(position, sourceValue,
                                                               conn.function, conn.weight);
@@ -1269,7 +1292,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "spectrumIn") {
                         // Get spectrum from source container (passthrough only for spectrum data)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             inputSpectrum = processors[conn.fromContainer].spectrumOut;
 
                             // Check if source has a PAD wavetable
@@ -1279,7 +1302,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                             }
                         }
                     } else if (conn.toPort == "pitchMultiplier") {
-                        if (processors.contains(conn.fromContainer))
+                        if (isSourceActive(conn.fromContainer))
                             pitchMult = processors[conn.fromContainer].controlOut;
                     }
                 }
@@ -1306,12 +1329,12 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "signalIn") {
                         // Get signal from source container (passthrough only for signal data)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             inputSignal = processors[conn.fromContainer].signalOut;
                         }
                     } else if (conn.toPort == "f1Freq") {
                         // Get f1Freq modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to f1Freq range (200-1000 Hz)
                             double sourceValue = 200.0 + processors[conn.fromContainer].controlOut * 800.0;
                             f1Freq = applyConnectionFunction(f1Freq, sourceValue,
@@ -1320,7 +1343,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "f2Freq") {
                         // Get f2Freq modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to f2Freq range (500-3000 Hz)
                             double sourceValue = 500.0 + processors[conn.fromContainer].controlOut * 2500.0;
                             f2Freq = applyConnectionFunction(f2Freq, sourceValue,
@@ -1329,7 +1352,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "f1Q") {
                         // Get f1Q modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to Q range (1.0-20.0)
                             double sourceValue = 1.0 + processors[conn.fromContainer].controlOut * 19.0;
                             f1Q = applyConnectionFunction(f1Q, sourceValue,
@@ -1338,7 +1361,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "f2Q") {
                         // Get f2Q modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to Q range (1.0-20.0)
                             double sourceValue = 1.0 + processors[conn.fromContainer].controlOut * 19.0;
                             f2Q = applyConnectionFunction(f2Q, sourceValue,
@@ -1347,7 +1370,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "directMix") {
                         // Get directMix modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             directMix = applyConnectionFunction(directMix, sourceValue,
                                                               conn.function, conn.weight);
@@ -1355,7 +1378,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "f1f2Balance") {
                         // Get f1f2Balance modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             f1f2Balance = applyConnectionFunction(f1f2Balance, sourceValue,
                                                                 conn.function, conn.weight);
@@ -1390,17 +1413,17 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "voiceIn") {
                         // Get signal from source container (passthrough only for signal data)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             voiceIn = processors[conn.fromContainer].signalOut;
                         }
                     } else if (conn.toPort == "noiseIn") {
                         // Get noise signal from source container (passthrough only for signal data)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             noiseIn = processors[conn.fromContainer].signalOut;
                         }
                     } else if (conn.toPort == "blend") {
                         // Get blend modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             blend = applyConnectionFunction(blend, sourceValue,
                                                           conn.function, conn.weight);
@@ -1433,13 +1456,13 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "audioIn") {
                         // Get audio signal from source container (passthrough only for signal data)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             audioIn = processors[conn.fromContainer].signalOut;
                             hasAudioIn = true;
                         }
                     } else if (conn.toPort == "color") {
                         // Get color modulation from source container (ignored when followPitch is on)
-                        if (!followPitch && processors.contains(conn.fromContainer)) {
+                        if (!followPitch && isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to color range (100-8000 Hz)
                             double sourceValue = processors[conn.fromContainer].controlOut * 7900.0 + 100.0;
                             color = applyConnectionFunction(color, sourceValue,
@@ -1448,7 +1471,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "filterQ") {
                         // Get filterQ modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to filterQ range (0.5-10.0)
                             double sourceValue = processors[conn.fromContainer].controlOut * 9.5 + 0.5;
                             filterQ = applyConnectionFunction(filterQ, sourceValue,
@@ -1456,7 +1479,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                             filterQ = qBound(0.5, filterQ, 10.0);
                         }
                     } else if (conn.toPort == "pitchMultiplier") {
-                        if (processors.contains(conn.fromContainer))
+                        if (isSourceActive(conn.fromContainer))
                             pitchMult = processors[conn.fromContainer].controlOut;
                     }
                 }
@@ -1506,14 +1529,14 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "targetValue") {
                         // Get control value from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             targetValue = applyConnectionFunction(targetValue, sourceValue,
                                                                 conn.function, conn.weight);
                         }
                     } else if (conn.toPort == "mass") {
                         // Get mass modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to mass range (0.0-10.0)
                             double sourceValue = processors[conn.fromContainer].controlOut * 10.0;
                             mass = applyConnectionFunction(mass, sourceValue,
@@ -1522,7 +1545,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "springK") {
                         // Get springK modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to springK range (0.0001-1.0)
                             double sourceValue = processors[conn.fromContainer].controlOut * 0.9999 + 0.0001;
                             springK = applyConnectionFunction(springK, sourceValue,
@@ -1531,7 +1554,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "damping") {
                         // Get damping modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to damping range (0.5-0.9999)
                             double sourceValue = processors[conn.fromContainer].controlOut * 0.4999 + 0.5;
                             damping = applyConnectionFunction(damping, sourceValue,
@@ -1540,7 +1563,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "impulseAmount") {
                         // Get impulseAmount modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to impulseAmount range (0-1000)
                             double sourceValue = processors[conn.fromContainer].controlOut * 1000.0;
                             impulseAmount = applyConnectionFunction(impulseAmount, sourceValue,
@@ -1549,7 +1572,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "impulse") {
                         // Get impulse trigger from source container (check specific port)
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             impulse = getOutputValue(processors[conn.fromContainer], conn.fromPort);
                         }
                     }
@@ -1586,7 +1609,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "timeScale") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to useful range (0.1-5.0)
                             double sourceValue = 0.1 + processors[conn.fromContainer].controlOut * 4.9;
                             timeScale = applyConnectionFunction(timeScale, sourceValue,
@@ -1594,7 +1617,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                             timeScale = qBound(0.1, timeScale, 5.0);
                         }
                     } else if (conn.toPort == "valueScale") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to 0.0-2.0
                             double sourceValue = processors[conn.fromContainer].controlOut * 2.0;
                             valueScale = applyConnectionFunction(valueScale, sourceValue,
@@ -1602,7 +1625,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                             valueScale = qBound(0.0, valueScale, 2.0);
                         }
                     } else if (conn.toPort == "valueOffset") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale control output (0.0-1.0) to -1.0 to 1.0
                             double sourceValue = processors[conn.fromContainer].controlOut * 2.0 - 1.0;
                             valueOffset = applyConnectionFunction(valueOffset, sourceValue,
@@ -1637,17 +1660,33 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             proc.envelopeEng->setReleaseTime(container->getParameter("envRelease", 0.2));
             proc.envelopeEng->setFadeTime(container->getParameter("envFadeTime", 0.5));
 
-            // Follow Score Curve: bypass the envelope shape and output a named score curve
+            // Follow Score Curve: bypass the envelope shape and output the named score curve
             // value directly (still scaled/offset by valueScale/valueOffset).
-            // scoreCurveIndex 0 = dynamics (default), 1+ = additional named curves.
+            // Name "Dynamics" = note dynamics; any other name = note's matching expressive curve.
+            // When the named curve isn't present on this note (no score context, or the note
+            // simply doesn't carry that curve), the EE marks itself inactive. Downstream
+            // consumers skip the connection so their parameter keeps its design-time value.
             if (container->getParameter("followDynamics", 0.0) > 0.5) {
-                int scoreIdx = static_cast<int>(container->getParameter("scoreCurveIndex", 0.0));
-                double scoreVal = (scoreIdx > 0 && scoreIdx < m_scoreCurveValues.size())
-                                  ? m_scoreCurveValues[scoreIdx]
-                                  : m_currentDynamics;
-                proc.controlOut = qBound(0.0, 1.0, scoreVal * valueScale + valueOffset);
+                QString scoreName = container->getStringParameter("scoreCurveName", QStringLiteral("Dynamics"));
+                double scoreVal = 0.0;
+                bool haveCurve = false;
+                if (scoreName == QStringLiteral("Dynamics")) {
+                    scoreVal = m_currentDynamics;
+                    haveCurve = true;
+                } else if (!m_scoreCurveNames.isEmpty()) {
+                    int idx = m_scoreCurveNames.indexOf(scoreName);
+                    if (idx >= 0 && idx < m_scoreCurveValues.size()) {
+                        scoreVal = m_scoreCurveValues[idx];
+                        haveCurve = true;
+                    }
+                }
+                proc.inactive = !haveCurve;
+                proc.controlOut = haveCurve
+                    ? qBound(0.0, scoreVal * valueScale + valueOffset, 1.0)
+                    : 0.0;
             } else {
                 // Normal mode: process envelope shape with note progress
+                proc.inactive = false;
                 proc.controlOut = proc.envelopeEng->process(effectiveProgress, m_currentIsLegato);
             }
         }
@@ -1664,7 +1703,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 if (conn.toContainer == container) {
                     if (conn.toPort == "amount") {
                         // Get amount modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to amount range (0.0-0.1)
                             double sourceValue = processors[conn.fromContainer].controlOut * 0.1;
                             amount = applyConnectionFunction(amount, sourceValue,
@@ -1673,7 +1712,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         }
                     } else if (conn.toPort == "rate") {
                         // Get rate modulation from source container
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             // Scale controlOut (0-1) to rate range (0.01-10.0)
                             double sourceValue = processors[conn.fromContainer].controlOut * 9.99 + 0.01;
                             rate = applyConnectionFunction(rate, sourceValue,
@@ -1731,19 +1770,19 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "startValue") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             startValue = applyConnectionFunction(startValue, sourceValue,
                                                                conn.function, conn.weight);
                         }
                     } else if (conn.toPort == "endValue") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             endValue = applyConnectionFunction(endValue, sourceValue,
                                                              conn.function, conn.weight);
                         }
                     } else if (conn.toPort == "progress") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             progress = applyConnectionFunction(progress, sourceValue,
                                                              conn.function, conn.weight);
@@ -1789,70 +1828,70 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             // Use cached connections (snapshot at build time) for graph independence
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
-                    if (conn.toPort == "signalIn" && processors.contains(conn.fromContainer)) {
+                    if (conn.toPort == "signalIn" && isSourceActive(conn.fromContainer)) {
                         // Get input signal from upstream container (for Attack mode)
                         inputSignal = processors[conn.fromContainer].signalOut;
-                    } else if (conn.toPort == "trigger" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "trigger" && isSourceActive(conn.fromContainer)) {
                         double trigVal = processors[conn.fromContainer].controlOut;
                         if (trigVal > 0.5) shouldTrigger = true;
-                    } else if (conn.toPort == "mode" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "mode" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveMode = sourceVal > 0.5 ? 1 : 0;
-                    } else if (conn.toPort == "attackPortion" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "attackPortion" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveAttackPortion = applyConnectionFunction(
                             effectiveAttackPortion, sourceVal, conn.function, conn.weight);
                         effectiveAttackPortion = qBound(0.01, effectiveAttackPortion, 1.0);
-                    } else if (conn.toPort == "damping" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "damping" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveDamping = applyConnectionFunction(
                             effectiveDamping, sourceVal, conn.function, conn.weight);
                         effectiveDamping = qBound(0.0, effectiveDamping, 1.0);
-                    } else if (conn.toPort == "pluckPosition" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "pluckPosition" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectivePluckPosition = applyConnectionFunction(
                             effectivePluckPosition, sourceVal, conn.function, conn.weight);
                         effectivePluckPosition = qBound(0.0, effectivePluckPosition, 1.0);
-                    } else if (conn.toPort == "mix" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "mix" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveMix = applyConnectionFunction(
                             effectiveMix, sourceVal, conn.function, conn.weight);
                         effectiveMix = qBound(0.0, effectiveMix, 1.0);
-                    } else if (conn.toPort == "brightness" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "brightness" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveBrightness = applyConnectionFunction(
                             effectiveBrightness, sourceVal, conn.function, conn.weight);
                         effectiveBrightness = qBound(0.0, effectiveBrightness, 1.0);
-                    } else if (conn.toPort == "excitationType" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "excitationType" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveExcitationType = static_cast<int>(std::round(sourceVal));
                         effectiveExcitationType = qBound(0, effectiveExcitationType, 2);
-                    } else if (conn.toPort == "blendRatio" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "blendRatio" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveExcitationSoftness = applyConnectionFunction(
                             effectiveExcitationSoftness, sourceVal, conn.function, conn.weight);
                         effectiveExcitationSoftness = qBound(0.0, effectiveExcitationSoftness, 1.0);
-                    } else if (conn.toPort == "pluckHardness" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "pluckHardness" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectivePluckHardness = applyConnectionFunction(
                             effectivePluckHardness, sourceVal, conn.function, conn.weight);
                         effectivePluckHardness = qBound(0.0, effectivePluckHardness, 1.0);
-                    } else if (conn.toPort == "pickDirection" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "pickDirection" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectivePickDirection = applyConnectionFunction(
                             effectivePickDirection, sourceVal, conn.function, conn.weight);
                         effectivePickDirection = qBound(0.0, effectivePickDirection, 1.0);
-                    } else if (conn.toPort == "bodyResonance" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "bodyResonance" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveBodyResonance = applyConnectionFunction(
                             effectiveBodyResonance, sourceVal, conn.function, conn.weight);
                         effectiveBodyResonance = qBound(0.0, effectiveBodyResonance, 1.0);
-                    } else if (conn.toPort == "bodyFreq" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "bodyFreq" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveBodyFreq = applyConnectionFunction(
                             effectiveBodyFreq, sourceVal, conn.function, conn.weight);
                         effectiveBodyFreq = qBound(80.0, effectiveBodyFreq, 400.0);
-                    } else if (conn.toPort == "pitchMultiplier" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "pitchMultiplier" && isSourceActive(conn.fromContainer)) {
                         pitchMult = processors[conn.fromContainer].controlOut;
                     }
                 }
@@ -1908,68 +1947,68 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             // Use cached connections
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
-                    if (conn.toPort == "signalIn" && processors.contains(conn.fromContainer)) {
+                    if (conn.toPort == "signalIn" && isSourceActive(conn.fromContainer)) {
                         inputSignal = processors[conn.fromContainer].signalOut;
-                    } else if (conn.toPort == "trigger" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "trigger" && isSourceActive(conn.fromContainer)) {
                         double trigVal = processors[conn.fromContainer].controlOut;
                         if (trigVal > 0.5) shouldTrigger = true;
-                    } else if (conn.toPort == "attackType" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "attackType" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveAttackType = static_cast<int>(sourceVal * 6.0);
                         effectiveAttackType = qBound(0, effectiveAttackType, 5);
-                    } else if (conn.toPort == "duration" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "duration" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveDuration = applyConnectionFunction(effectiveDuration, sourceVal * 5.0, conn.function, conn.weight);
                         effectiveDuration = qBound(0.005, effectiveDuration, 5.0);
-                    } else if (conn.toPort == "intensity" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "intensity" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveIntensity = applyConnectionFunction(effectiveIntensity, sourceVal, conn.function, conn.weight);
                         effectiveIntensity = qBound(0.0, effectiveIntensity, 1.0);
-                    } else if (conn.toPort == "mix" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "mix" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveMix = applyConnectionFunction(effectiveMix, sourceVal, conn.function, conn.weight);
                         effectiveMix = qBound(0.0, effectiveMix, 1.0);
-                    } else if (conn.toPort == "noiseAmount" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "noiseAmount" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveNoiseAmount = applyConnectionFunction(effectiveNoiseAmount, sourceVal, conn.function, conn.weight);
                         effectiveNoiseAmount = qBound(0.0, effectiveNoiseAmount, 1.0);
-                    } else if (conn.toPort == "jetRatio" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "jetRatio" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveJetRatio = applyConnectionFunction(effectiveJetRatio, sourceVal, conn.function, conn.weight);
                         effectiveJetRatio = qBound(0.0, effectiveJetRatio, 1.0);
-                    } else if (conn.toPort == "reedStiffness" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "reedStiffness" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveReedStiffness = applyConnectionFunction(effectiveReedStiffness, sourceVal, conn.function, conn.weight);
                         effectiveReedStiffness = qBound(0.0, effectiveReedStiffness, 1.0);
-                    } else if (conn.toPort == "reedAperture" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "reedAperture" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveReedAperture = applyConnectionFunction(effectiveReedAperture, sourceVal, conn.function, conn.weight);
                         effectiveReedAperture = qBound(0.0, effectiveReedAperture, 1.0);
-                    } else if (conn.toPort == "blowPosition" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "blowPosition" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveBlowPosition = applyConnectionFunction(effectiveBlowPosition, sourceVal, conn.function, conn.weight);
                         effectiveBlowPosition = qBound(0.0, effectiveBlowPosition, 1.0);
-                    } else if (conn.toPort == "lipTension" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "lipTension" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveLipTension = applyConnectionFunction(effectiveLipTension, sourceVal, conn.function, conn.weight);
                         effectiveLipTension = qBound(0.0, effectiveLipTension, 1.0);
-                    } else if (conn.toPort == "buzzQ" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "buzzQ" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveBuzzQ = applyConnectionFunction(effectiveBuzzQ, sourceVal * 50.0, conn.function, conn.weight);
                         effectiveBuzzQ = qBound(0.5, effectiveBuzzQ, 50.0);
-                    } else if (conn.toPort == "hardness" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "hardness" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveHardness = applyConnectionFunction(effectiveHardness, sourceVal, conn.function, conn.weight);
                         effectiveHardness = qBound(0.0, effectiveHardness, 1.0);
-                    } else if (conn.toPort == "brightness" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "brightness" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveBrightness = applyConnectionFunction(effectiveBrightness, sourceVal, conn.function, conn.weight);
                         effectiveBrightness = qBound(0.0, effectiveBrightness, 1.0);
-                    } else if (conn.toPort == "tightness" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "tightness" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveTightness = applyConnectionFunction(effectiveTightness, sourceVal, conn.function, conn.weight);
                         effectiveTightness = qBound(0.0, effectiveTightness, 1.0);
-                    } else if (conn.toPort == "tone" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "tone" && isSourceActive(conn.fromContainer)) {
                         double sourceVal = processors[conn.fromContainer].controlOut;
                         effectiveTone = applyConnectionFunction(effectiveTone, sourceVal, conn.function, conn.weight);
                         effectiveTone = qBound(0.0, effectiveTone, 1.0);
@@ -2018,7 +2057,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
 
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer != container) continue;
-                if (!processors.contains(conn.fromContainer)) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
                 double sv = processors[conn.fromContainer].controlOut;
 
                 if (conn.toPort == "pitchMultiplier") {
@@ -2076,7 +2115,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
 
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer != container) continue;
-                if (!processors.contains(conn.fromContainer)) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
                 double sv = processors[conn.fromContainer].controlOut;
 
                 if (conn.toPort == "pitchMultiplier") {
@@ -2337,7 +2376,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
 
             for (const Canvas::Connection &c : cachedConnections) {
                 if (c.toContainer != container) continue;
-                if (!processors.contains(c.fromContainer)) continue;
+                if (!isSourceActive(c.fromContainer)) continue;
                 double srcVal = processors[c.fromContainer].controlOut;
                 if (c.toPort == "strikePosition")  effectiveStrikePosition = applyConnectionFunction(effectiveStrikePosition, srcVal, c.function, c.weight);
                 else if (c.toPort == "strikeDuration")  effectiveStrikeDuration = applyConnectionFunction(effectiveStrikeDuration, srcVal, c.function, c.weight);
@@ -2370,7 +2409,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             // Use cached connections (snapshot at build time) for graph independence
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
-                    if (conn.toPort == "frequency" && processors.contains(conn.fromContainer)) {
+                    if (conn.toPort == "frequency" && isSourceActive(conn.fromContainer)) {
                         // Get frequency modulation from source container
                         double sourceValue = processors[conn.fromContainer].controlOut;
                         // Scale controlOut (0-1) to reasonable LFO frequency range (0.01-20 Hz)
@@ -2378,13 +2417,13 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         frequency = applyConnectionFunction(frequency, sourceValue,
                                                            conn.function, conn.weight);
                         frequency = qBound(0.01, frequency, 100.0);
-                    } else if (conn.toPort == "amplitude" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "amplitude" && isSourceActive(conn.fromContainer)) {
                         // Get amplitude modulation from source container
                         double sourceValue = processors[conn.fromContainer].controlOut;
                         amplitude = applyConnectionFunction(amplitude, sourceValue,
                                                            conn.function, conn.weight);
                         amplitude = qBound(0.0, amplitude, 1.0);
-                    } else if (conn.toPort == "waveType" && processors.contains(conn.fromContainer)) {
+                    } else if (conn.toPort == "waveType" && isSourceActive(conn.fromContainer)) {
                         // Get wave type from source container (quantize to 0-3)
                         double sourceValue = processors[conn.fromContainer].controlOut;
                         waveType = static_cast<int>(sourceValue * 4.0);
@@ -2417,7 +2456,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             double externalCurve = 0.0;
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             for (const Canvas::Connection &conn : cachedConnections) {
-                if (conn.toContainer != container || !processors.contains(conn.fromContainer)) continue;
+                if (conn.toContainer != container || !isSourceActive(conn.fromContainer)) continue;
                 if (conn.toPort == "curve") {
                     externalCurve = processors[conn.fromContainer].controlOut;
                     externalCurve = applyConnectionFunction(0.0, externalCurve,
@@ -2446,6 +2485,34 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             }
         }
 
+    } else if (container->getName() == "Pan") {
+        if (proc.panProc) {
+            double basePan = container->getParameter("pan", 0.0);
+            proc.panProc->setPan(basePan);
+
+            // Check for signalIn and controlIn connections
+            double signalIn = 0.0;
+            double controlIn = 0.0;
+            bool hasControlInput = false;
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer == container && isSourceActive(conn.fromContainer)) {
+                    if (conn.toPort == "signalIn") {
+                        signalIn = processors[conn.fromContainer].signalOut;
+                    } else if (conn.toPort == "controlIn") {
+                        controlIn = processors[conn.fromContainer].controlOut;
+                        controlIn = applyConnectionFunction(0.0, controlIn,
+                                                            conn.function, conn.weight);
+                        hasControlInput = true;
+                    }
+                }
+            }
+
+            proc.controlOut = hasControlInput ? proc.panProc->process(controlIn)
+                                              : proc.panProc->process();
+            // Pass signal through so Pan can sit in the signal chain
+            proc.signalOut = signalIn;
+        }
+
     } else if (container->getName() == "Wavetable Synth") {
         if (proc.wavetableSynth) {
             // Read position and pitchMultiplier inputs from connections
@@ -2455,14 +2522,14 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "position") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             positionVal = applyConnectionFunction(positionVal, sourceValue,
                                                                   conn.function, conn.weight);
                             positionVal = qBound(0.0, positionVal, 1.0);
                         }
                     } else if (conn.toPort == "pitchMultiplier") {
-                        if (processors.contains(conn.fromContainer))
+                        if (isSourceActive(conn.fromContainer))
                             pitchMult = processors[conn.fromContainer].controlOut;
                     }
                 }
@@ -2501,14 +2568,14 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "signalIn") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             inputSignal = processors[conn.fromContainer].signalOut;
                         }
                     } else {
                         // Check band1..band10 modulation inputs
                         for (int i = 0; i < BandpassEQ::NUM_BANDS; i++) {
                             QString portName = QString("band%1").arg(i + 1);
-                            if (conn.toPort == portName && processors.contains(conn.fromContainer)) {
+                            if (conn.toPort == portName && isSourceActive(conn.fromContainer)) {
                                 // Scale control output (0-1) to gain range (0-2)
                                 double sourceValue = processors[conn.fromContainer].controlOut * 2.0;
                                 bandGains[i] = applyConnectionFunction(bandGains[i], sourceValue,
@@ -2537,7 +2604,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             double damping = container->getParameter("damping", 0.0);
 
             for (const Canvas::Connection &conn : cachedConnections) {
-                if (conn.toContainer == container && processors.contains(conn.fromContainer)) {
+                if (conn.toContainer == container && isSourceActive(conn.fromContainer)) {
                     if (conn.toPort == "signalIn") {
                         inputSignal = processors[conn.fromContainer].signalOut;
                     } else if (conn.toPort == "delayTime") {
@@ -2575,7 +2642,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             double resonance = container->getParameter("resonance", 0.707);
 
             for (const Canvas::Connection &conn : cachedConnections) {
-                if (conn.toContainer == container && processors.contains(conn.fromContainer)) {
+                if (conn.toContainer == container && isSourceActive(conn.fromContainer)) {
                     if (conn.toPort == "signalIn") {
                         inputSignal = processors[conn.fromContainer].signalOut;
                     } else if (conn.toPort == "cutoff") {
@@ -2614,7 +2681,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             double lowCut = container->getParameter("lowCut", 20.0);
 
             for (const Canvas::Connection &conn : cachedConnections) {
-                if (conn.toContainer == container && processors.contains(conn.fromContainer)) {
+                if (conn.toContainer == container && isSourceActive(conn.fromContainer)) {
                     if (conn.toPort == "signalIn") {
                         inputSignal = processors[conn.fromContainer].signalOut;
                     } else if (conn.toPort == "irIn") {
@@ -2667,7 +2734,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             double inputSignal = 0.0;
             double effectiveTailLength = container->getParameter("tailLength", 200.0);
             for (const Canvas::Connection &conn : cachedConnections) {
-                if (conn.toContainer == container && processors.contains(conn.fromContainer)) {
+                if (conn.toContainer == container && isSourceActive(conn.fromContainer)) {
                     if (conn.toPort == "signalIn") {
                         inputSignal = processors[conn.fromContainer].signalOut;
                     } else if (conn.toPort == "length") {
@@ -2692,22 +2759,22 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "signalA") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             signalA = processors[conn.fromContainer].signalOut;
                         }
                     } else if (conn.toPort == "signalB") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             signalB = processors[conn.fromContainer].signalOut;
                         }
                     } else if (conn.toPort == "gainA") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             gainA = applyConnectionFunction(gainA, sourceValue,
                                                            conn.function, conn.weight);
                             gainA = qBound(0.0, gainA, 2.0);
                         }
                     } else if (conn.toPort == "gainB") {
-                        if (processors.contains(conn.fromContainer)) {
+                        if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             gainB = applyConnectionFunction(gainB, sourceValue,
                                                            conn.function, conn.weight);

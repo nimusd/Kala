@@ -5,6 +5,7 @@ class QTextBrowser;
 class QPlainTextEdit;
 class QPushButton;
 class QLabel;
+class AnimaPalette;
 
 // CompanionPanel: the chat UI for the AI companion.
 //
@@ -56,6 +57,10 @@ signals:
     // Emitted when the user clicks the mode label to cycle tool modes.
     void toolModeToggleRequested();
 
+    // Emitted when the user clicks thumbs up or thumbs down to save the session.
+    // rating: "good" or "bad"
+    void saveSessionRequested(const QString &rating);
+
 private slots:
     void onSendClicked();
 
@@ -71,4 +76,7 @@ private:
     QLabel        *m_statusLabel;
     QLabel        *m_historyLabel;
     QLabel        *m_modeLabel;
+    QPushButton   *m_thumbsUpBtn;
+    QPushButton   *m_thumbsDownBtn;
+    AnimaPalette  *m_palette = nullptr;
 };

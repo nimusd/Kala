@@ -45,7 +45,20 @@ void BowedModel::setFrequency(double freq)
     if (freq <= 0.0) freq = 20.0;
     lastPitch = freq;
 
-    baseDelay = sampleRate / freq - 4.0;
+    // Compute frequency-dependent phase delay of the one-pole string filter.
+    // H(z) = b0 / (1 - pole·z⁻¹)
+    // Phase delay at ω: arctan(pole·sin(ω) / (1 - pole·cos(ω))) / ω
+    double w = TWO_PI * freq / sampleRate;
+    double sinW = std::sin(w);
+    double cosW = std::cos(w);
+    double filterDelay = std::atan2(stringFilterPole * sinW,
+                                    1.0 - stringFilterPole * cosW) / w;
+
+    // +2 samples for the round-trip pipeline delay: bridgeLastOut set in
+    // tick N is read in tick N+1, and neckLastOut set then is read in N+2.
+    double totalCompensation = filterDelay + 2.0;
+
+    baseDelay = sampleRate / freq - totalCompensation;
     if (baseDelay < 2.0) baseDelay = 2.0;
 
     double beta = clamp(bowPosition, 0.001, 0.999);
@@ -62,7 +75,9 @@ void BowedModel::setNeckDelay(double delaySamples)
     size_t intDelay = static_cast<size_t>(delaySamples);
     neckAlpha    = delaySamples - static_cast<double>(intDelay);
     neckOmAlpha  = 1.0 - neckAlpha;
-    neckOutPoint = (neckInPoint + MAX_DELAY - intDelay) % MAX_DELAY;
+    // Read one extra position back so interpolation spans the correct pair:
+    // buf[outPoint] is (intDelay+1) ticks old, buf[next] is intDelay ticks old.
+    neckOutPoint = (neckInPoint + MAX_DELAY - intDelay - 1) % MAX_DELAY;
 }
 
 void BowedModel::setBridgeDelay(double delaySamples)
@@ -70,7 +85,7 @@ void BowedModel::setBridgeDelay(double delaySamples)
     size_t intDelay = static_cast<size_t>(delaySamples);
     bridgeAlpha    = delaySamples - static_cast<double>(intDelay);
     bridgeOmAlpha  = 1.0 - bridgeAlpha;
-    bridgeOutPoint = (bridgeInPoint + MAX_DELAY - intDelay) % MAX_DELAY;
+    bridgeOutPoint = (bridgeInPoint + MAX_DELAY - intDelay - 1) % MAX_DELAY;
 }
 
 double BowedModel::neckTick(double input)
@@ -79,8 +94,8 @@ double BowedModel::neckTick(double input)
     neckInPoint = (neckInPoint + 1) % MAX_DELAY;
 
     size_t next = (neckOutPoint + 1) % MAX_DELAY;
-    neckLastOut = neckBuffer[neckOutPoint] * neckOmAlpha
-                + neckBuffer[next]         * neckAlpha;
+    neckLastOut = neckBuffer[neckOutPoint] * neckAlpha
+                + neckBuffer[next]         * neckOmAlpha;
     neckOutPoint = (neckOutPoint + 1) % MAX_DELAY;
     return neckLastOut;
 }
@@ -91,8 +106,8 @@ double BowedModel::bridgeTick(double input)
     bridgeInPoint = (bridgeInPoint + 1) % MAX_DELAY;
 
     size_t next = (bridgeOutPoint + 1) % MAX_DELAY;
-    bridgeLastOut = bridgeBuffer[bridgeOutPoint] * bridgeOmAlpha
-                  + bridgeBuffer[next]           * bridgeAlpha;
+    bridgeLastOut = bridgeBuffer[bridgeOutPoint] * bridgeAlpha
+                  + bridgeBuffer[next]           * bridgeOmAlpha;
     bridgeOutPoint = (bridgeOutPoint + 1) % MAX_DELAY;
     return bridgeLastOut;
 }

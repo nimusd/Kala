@@ -42,13 +42,10 @@ public:
     double getWetDry() const { return m_wetDry; }
 
     // Call once when the note transitions into tail mode.
-    // endDynamics: the note's dynamics value at the last non-tail sample
-    //   (pass m_lastNormalDynamics from SounitGraph).
-    // Resets wetDry to the static (non-modulated) value and, when endDynamics
-    // is near-zero (pen note whose dynamics faded to silence), injects a decaying
-    // replay of the last peak-amplitude block so the FDL has energy to ring out
-    // naturally — without triggering on instruments that simply decay on their own
-    // (Karplus Strong "let ring", physical models, etc.).
+    // Restores wetDry to the static (non-modulated) value so an Envelope Engine
+    // driving the wetDry port can't silence the ring-out.  The endDynamics
+    // argument is retained for API compatibility but currently unused — the FDL
+    // rings out from whatever data it already holds at tail-start.
     void prepareForTailMode(double endDynamics = 1.0);
     bool hasIR() const { return !m_ir.empty(); }
 
@@ -127,19 +124,11 @@ private:
     // Overlap-add tail from previous block
     std::vector<float> m_overlapBuffer;
 
-    // Soft-ending tail support:
-    // Track peak input energy during the note so tail mode can inject enough
-    // energy for a natural reverb ring-out when dynamics faded the note to silence.
-    float  m_peakInputRms;              // Highest per-block RMS seen this note
-    float  m_lastInputRms;              // RMS of the most recently processed block
-    std::vector<float> m_lastSignificantBlock;  // Copy of last block with RMS > 1% of peak
-    float  m_lastSignificantBlockRms;   // RMS of that saved block
-    int    m_blocksBelowThreshold;      // Consecutive blocks with RMS < 1% of peak (taper depth)
+    // Tail-mode support: remember the static (graph-build) wetDry so a
+    // followDynamics-driven modulation on the wetDry port can't silence the
+    // convolution's natural ring-out.
     double m_staticWetDry;              // wetDry set at graph-build time; restored in tail mode
     bool   m_tailModeActive;            // True once prepareForTailMode() has run
-    bool   m_tailInjectionActive;       // True while replaying the peak block
-    double m_tailInjectionFactor;       // Current amplitude scale for injected signal
-    double m_tailInjectionDecayPerBlock;// Multiply factor applied each processBlock() in tail
 
     // Live signal capture (ring buffer, max 4 s at current sample rate)
     std::vector<float> m_irCaptureBuffer;
