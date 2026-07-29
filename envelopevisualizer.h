@@ -21,8 +21,8 @@ public:
     void setEnvelope(int envelopeType, double attack, double decay,
                     double sustain, double release, double fadeTime);
 
-    // Set custom envelope data
-    void setCustomEnvelope(const QVector<EnvelopePoint> &points);
+    // Set custom envelope data. isPlaceholder dims the curve to indicate no real data.
+    void setCustomEnvelope(const QVector<EnvelopePoint> &points, bool isPlaceholder = false);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -35,6 +35,7 @@ private:
     double release = 0.2;
     double fadeTime = 0.5;
     QVector<EnvelopePoint> customPoints;  // Custom envelope points
+    bool m_isPlaceholder = false;
 
     // Calculate envelope value at normalized time (0.0-1.0)
     double calculateEnvelopeValue(double normalizedTime);

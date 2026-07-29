@@ -844,7 +844,7 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
         // "Karplus Strong Attack" is legacy name for backwards compatibility
         inputs = {"signalIn", "trigger", "mode", "attackPortion", "damping", "pluckPosition", "mix",
                   "brightness", "excitationType", "blendRatio", "pluckHardness", "bodyResonance", "bodyFreq", "pickDirection",
-                  "stringDamping", "pitchMultiplier"};
+                  "stringDamping", "nonLinearAmount", "pitchMultiplier"};
         outputs = {"signalOut"};
     } else if (type == "Attack") {
         inputs = {"signalIn", "trigger", "attackType", "duration", "intensity", "mix",
@@ -886,6 +886,24 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
         inputs = {"breathPressure", "jetRatio", "noiseGain",
                   "vibratoFreq", "vibratoGain",
                   "endReflection", "jetReflection", "pitchMultiplier"};
+        outputs = {"signalOut"};
+    } else if (type == "Flute") {
+        inputs = {"breathPressure", "noiseGain", "nonlinearity",
+                  "nlAttack", "modFrequency", "modType",
+                  "vibratoFreq", "vibratoGain", "pitchMultiplier"};
+        outputs = {"signalOut"};
+    } else if (type == "Piano") {
+        inputs = {"brightness", "detuning", "hammerHardness",
+                  "stiffness", "softness", "pitchMultiplier"};
+        outputs = {"signalOut"};
+    } else if (type == "Bass") {
+        inputs = {"nonlinearity", "modulationFrequency", "modulationType",
+                  "touchLength", "pitchMultiplier"};
+        outputs = {"signalOut"};
+    } else if (type == "Tibetan Bowl") {
+        inputs = {"nonlinearity", "modulationFrequency", "modulationType",
+                  "baseGain", "bowPressure", "excitationSelector",
+                  "integrationConstant", "pitchMultiplier"};
         outputs = {"signalOut"};
     } else if (type == "Bowed") {
         inputs = {"bowPressure", "bowVelocity", "bowPosition",

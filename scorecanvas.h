@@ -245,7 +245,7 @@ protected:
 private:
     QVector<ScaleLine> scaleLines;
     Scale currentScale;     // Default scale at time 0 (Just Intonation, Pythagorean, etc.)
-    double baseFrequency;   // Default base frequency at time 0 (default: 25 Hz)
+    double baseFrequency;   // Default base frequency at time 0 (default: 18.75 Hz)
     QMap<double, QPair<Scale, double>> scaleChanges;  // Time (ms) -> (Scale, BaseFreq) for modulation
 
     // Tempo/time signature map

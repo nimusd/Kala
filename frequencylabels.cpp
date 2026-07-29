@@ -60,7 +60,7 @@ void FrequencyLabels::generateScaleLines()
 
     const QString noteNames[7] = {"C", "D", "E", "F", "G", "A", "B"};
 
-    // Generate scale lines from 25 Hz to 8000 Hz
+    // Generate scale lines from 18.75 Hz to 8000 Hz
     for (int octave = 0; octave <= 9; ++octave) {
         double octaveBaseFreq = BASE_FREQUENCY * std::pow(2.0, octave);
 

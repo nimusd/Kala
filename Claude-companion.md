@@ -774,6 +774,46 @@ re-pluck.
 
 ---
 
+#### `assign_guitar_strings`
+Parameters: `noteIds` (optional), `tuning` (optional, 6-element array), `maxFret` (default 19),
+`maxStretch` (default 4), `preferOpen` (default false), `woundStrings` (default 3),
+`stringSkipPenalty` (default 0.7).
+
+Assigns each note to a guitar string using Viterbi dynamic-programming pathfinding,
+then maps each string to the corresponding variation index so per-string sounits
+render independently. The algorithm minimizes fret-distance + string-skip-penalty
+to find the most playable fingering.
+
+**Pre-requisite**: load 6 per-string sounits as variations on the track (0=high-E,
+5=low-E) via `create_variation_from_sounit`. Notes already have their variation
+set when this returns — no follow-up `apply_variation` call is needed.
+
+**Default tuning**: EADGBE standard — string 1 (high E) to string 6 (low E). When no explicit
+tuning is passed, open-string frequencies are **snapped to the active scale** at the first
+note's position (via `generateScaleLinesForScale`), so they adapt automatically to Just
+Intonation, Maqam, Raga, or any other scale. Explicit tuning entries accept Hz or MIDI
+numbers (> 900 = MIDI) and are used as-is (ET conversion for MIDI). `woundStrings` defaults
+to 3 (strings 4–6 are wound — brighter/metallic; strings 1–3 are unwound — mellower).
+
+**Returns** `{ result, assignments: [{noteId, pitchHz, string, fret, variation, wound}] }`.
+String numbers are 1-based in the output (user-facing convention). Notes outside the
+playable range on all strings are assigned to the nearest string (closest open pitch).
+
+**Transition cost**: `|fret_a − fret_b| + |string_a − string_b| × stringSkipPenalty`.
+Exceeding `maxStretch` fret span adds a quadratic penalty. Crossing the wound/unwound
+boundary in the mid register (G3–B3, where both are viable) adds a small soft penalty.
+
+**Typical workflow**:
+```
+1. Load 6 string sounits as variations: high-E, B, G, D, A, low-E (indices 0–5).
+2. Write the guitar part on the score canvas — all notes on the same track.
+3. Select the passage, ask Anima: "assign these notes to guitar strings."
+4. Anima calls assign_guitar_strings with the note selection.
+5. (Optional) manually tweak individual notes via the variation toolbar.
+```
+
+---
+
 #### `duplicate_notes`
 Parameters: `offsetMs` (required), `pitchRatio` (optional, default 1.0), `trackIndex` (optional),
 `noteIds` (optional).

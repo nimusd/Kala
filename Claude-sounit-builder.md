@@ -631,8 +631,49 @@ Note Tail IS needed in KS Attack mode (mode=1) since the HG sustain body doesn't
 ```
 
 ---
+### Flute (nonlinear waveguide — Faust model)
+**Type name:** `"Flute"` — uses FluteModel. Nonlinear waveguide flute physical model (Faust-generated DSP by Romain Michon).
+**Ports in:** `breathPressure`, `noiseGain`, `nonlinearity`, `nlAttack`, `modFrequency`, `modType`, `vibratoFreq`, `vibratoGain`, `pitchMultiplier`
+**Ports out:** `signalOut`
 
-### Bowed (bowed string waveguide)
+```json
+"parameters": {
+    "breathPressure": 0.9,   // driving force (0–1)
+    "noiseGain": 0.1,        // breath turbulence (0–1)
+    "nonlinearity": 0.0,     // nonlinear filter drive (0–1)
+    "nlAttack": 0.1,         // nonlinearity ramp-in seconds (0–2)
+    "modFrequency": 220.0,   // modulation oscillator Hz (20–1000)
+    "modType": 0,            // 0=signal, 1=avg signal, 2=squared, 3=sine@modFreq, 4=sine@pitch
+    "vibratoFreq": 5.0,      // Faust built-in vibrato Hz (1–15)
+    "vibratoGain": 0.0,      // vibrato depth (0–1, 0=off)
+    "pitchMultiplier": 1.0
+}
+```
+**Has tail mode** — `hasTail()=true`, gate=0 at note-off lets delay lines ring down naturally. No Note Tail needed.
+**Color:** Pink/magenta `rgb(230, 81, 133)`. **Menu:** Waveguide → Flute.
+**modType guide:** 0=signal-modulated theta (dynamic), 1=averaged signal (smoother), 2=squared signal (aggressive), 3=sine@modFreq (fixed vibrato), 4=sine@pitch (pitch-synced).
+**Vibrato:** Faust's built-in vibrato (not Kala LFO→pitchMultiplier vibrato). Both can coexist — set `vibratoGain=0` to disable Faust vibrato and use Kala LFO externally. Connect LFO→pitchMultiplier for physical waveguide pitch modulation instead.
+
+---
+
+### Piano (nonlinear waveguide — Faust model)
+**Type name:** `"Piano"` — uses PianoModel. Nonlinear waveguide piano physical model (Faust-generated DSP by Romain Michon).
+**Ports in:** `brightness`, `detuning`, `hammerHardness`, `stiffness`, `pitchMultiplier`
+**Ports out:** `signalOut`
+
+```json
+"parameters": {
+    "brightness": 0.0,        // harmonic brightness factor (0–1)
+    "detuning": 0.1,          // unison detuning amount (0–1)
+    "hammerHardness": 0.1,    // hammer stiffness (0–1, higher=brighter attack)
+    "stiffness": 0.28,        // string inharmonicity (0–1)
+    "pitchMultiplier": 1.0
+}
+```
+**Has tail mode** — `hasTail()=true`, gate=0 at note-off lets resonators ring down naturally. No Note Tail needed.
+**Color:** Pink/magenta `rgb(230, 81, 133)`. **Menu:** Waveguide → Piano.
+
+---
 **Ports in:** `bowPressure`, `bowVelocity`, `bowPosition`, `nlType`, `nlAmount`, `nlFreqMod`, `nlAttack`, `pitchMultiplier`
 **Ports out:** `signalOut`
 
@@ -939,6 +980,7 @@ Drive `blend` with Envelope Engine for dynamic breath evolution.
 | Color | Category | Containers |
 |-------|----------|------------|
 | `#3498db` | Blue — Essential | HG, StoS, Signal Mixer, Note Tail, Attack, Karplus Strong, Wavetable Synth, Recorder, Bowed, Reed, Clarinet |
+| `rgb(230, 81, 133)` | Pink — Waveguides | Flute, Piano |
 | `#e67e22` | Orange — Shaping | Rolloff Processor, Spectrum Blender, Formant Body, Noise Color Filter, Breath Turbulence |
 | `#27ae60` | Green — Modifiers | Envelope Engine, Drift Engine, LFO, Physics System, Easing Applicator, Frequency Mapper, Pan |
 | `#9b59b6` | Purple — Filters | 10-Band EQ, Comb Filter, LP/HP Filter, IR Convolution |

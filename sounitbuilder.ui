@@ -89,6 +89,15 @@
     <addaction name="actionPercussion"/>
     <addaction name="actionNote_Tail"/>
    </widget>
+   <widget class="QMenu" name="menuWaveguides">
+    <property name="title">
+     <string>Waveguide</string>
+    </property>
+    <addaction name="actionFlute"/>
+    <addaction name="actionPiano"/>
+    <addaction name="actionBass"/>
+    <addaction name="actionTibetanBowl"/>
+   </widget>
    <widget class="QMenu" name="menuShaping">
     <property name="title">
      <string>Shaping</string>
@@ -121,6 +130,7 @@
     <addaction name="actionIR_Convolution"/>
    </widget>
    <addaction name="menuEssential"/>
+   <addaction name="menuWaveguides"/>
    <addaction name="menuShaping"/>
    <addaction name="menuModifiers"/>
    <addaction name="menuFilters"/>
@@ -344,6 +354,38 @@
   <action name="actionPercussion">
    <property name="text">
     <string>Percussion</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionFlute">
+   <property name="text">
+    <string>Flute</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionPiano">
+   <property name="text">
+    <string>Piano</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionBass">
+   <property name="text">
+    <string>Bass</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionTibetanBowl">
+   <property name="text">
+    <string>Tibetan Bowl</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

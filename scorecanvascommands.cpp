@@ -1637,16 +1637,30 @@ void LinkAsLegatoCommand::undo()
 
     if (m_originalNotes.size() < 2) return;
 
-    // Remove the merged note (it's at the first note's original index)
-    int mergedIdx = m_originalNotes.first().index;
+    // Build sorted index list: m_originalNotes is sorted by start time,
+    // not by index — we need ascending index order for re-insertion.
+    QVector<int> sortedIndices;
+    sortedIndices.reserve(m_originalNotes.size());
+    for (const auto &orig : m_originalNotes)
+        sortedIndices.append(orig.index);
+    std::sort(sortedIndices.begin(), sortedIndices.end());
+
+    // Remove the merged note
+    int mergedIdx = sortedIndices.first();
     if (mergedIdx >= 0 && mergedIdx < notes.size()) {
         notes.removeAt(mergedIdx);
     }
 
     // Re-insert all original notes in ascending index order
-    for (const OriginalNote &orig : m_originalNotes) {
-        int idx = qMin(orig.index, notes.size());
-        notes.insert(idx, orig.note);
+    for (int idx : sortedIndices) {
+        int ins = qMin(idx, notes.size());
+        // Find the OriginalNote with this index
+        for (const auto &orig : m_originalNotes) {
+            if (orig.index == idx) {
+                notes.insert(ins, orig.note);
+                break;
+            }
+        }
     }
 
     m_canvas->update();
@@ -1660,17 +1674,28 @@ void LinkAsLegatoCommand::redo()
 
     if (m_originalNotes.size() < 2) return;
 
-    // Remove all original notes in descending index order (to preserve indices)
-    for (int i = m_originalNotes.size() - 1; i >= 0; --i) {
-        int idx = m_originalNotes[i].index;
+    // m_originalNotes is sorted by start time for the pitch-curve builder.
+    // Removal must be in descending INDEX order — otherwise earlier
+    // removals shift later indices and we delete the wrong notes.
+    QVector<int> sortedIndices;
+    sortedIndices.reserve(m_originalNotes.size());
+    for (const auto &orig : m_originalNotes)
+        sortedIndices.append(orig.index);
+    std::sort(sortedIndices.begin(), sortedIndices.end(), std::greater<int>());
+
+    for (int idx : sortedIndices) {
         if (idx >= 0 && idx < notes.size()) {
             notes.removeAt(idx);
         }
     }
 
-    // Insert the merged note at the first note's original index
-    int insertIdx = qMin(m_originalNotes.first().index, notes.size());
+    // Insert the merged note at the lowest original index
+    int insertIdx = qMin(sortedIndices.last(), notes.size());
     notes.insert(insertIdx, m_mergedNote);
+
+    // Update selection to the merged note only — the old selectedNoteIndices
+    // are now stale and would point to unrelated notes that shifted into those slots.
+    m_canvas->selectNotes({insertIdx});
 
     m_canvas->update();
     emit m_canvas->notesChanged();

@@ -87,6 +87,7 @@ public:
     void setBodyResonance(double r);         // 0.0-1.0
     void setBodyFreq(double f);              // 80-400 Hz
     void setPitch(double pitch);             // Update fractional delay for continuous pitch
+    void setNonLinearAmount(double a);       // 0.0-10.0, amplitude→HF damping (loud = darker)
 
     // Parameter getters
     KSMode getMode() const { return mode; }
@@ -101,6 +102,7 @@ public:
     double getPickDirection() const { return pickDirection; }
     double getBodyResonance() const { return bodyResonance; }
     double getBodyFreq() const { return bodyFreq; }
+    double getNonLinearAmount() const { return nonLinearAmount; }
 
 private:
     double sampleRate;
@@ -120,6 +122,7 @@ private:
     double pickDirection;   // Pick direction (0=down, 0.5=neutral, 1=up)
     double bodyResonance;   // Body resonator wet/dry mix
     double bodyFreq;        // Body resonator center frequency (Hz)
+    double nonLinearAmount; // 0=linear, up to 10=max — pulls S→0.5 (darker) when loud
 
     // Delay line (the "string")
     std::vector<double> delayLine;
@@ -140,6 +143,7 @@ private:
     size_t sampleCount;     // Samples generated since trigger
     size_t attackSamples;   // Total samples for attack portion
     double peakAmplitude;   // For normalization
+    double envFollower;     // Envelope follower for amplitude-dependent effects
 
     // Internal helpers
     void fillDelayLineWithNoise();

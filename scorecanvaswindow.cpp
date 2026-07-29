@@ -937,8 +937,8 @@ void ScoreCanvasWindow::applyZoom(double minHz, double maxHz)
     // The old visible range center should stay at the viewport center.
     double oldVisibleOctaveRange = std::log2(oldMaxHz / oldMinHz);
     if (oldVisibleOctaveRange > 0) {
-        double fullMinOctave = std::log2(20.0 / 25.0);  // base freq = 25 Hz
-        double fullMaxOctave = std::log2(8000.0 / 25.0);
+        double fullMinOctave = std::log2(20.0 / 18.75);  // base freq = 18.75 Hz
+        double fullMaxOctave = std::log2(8000.0 / 18.75);
         double fullRange = fullMaxOctave - fullMinOctave;
 
         // The visible center frequency in octave-space
@@ -1084,8 +1084,8 @@ void ScoreCanvasWindow::onCursorPositionChanged(double timeMs, double pitchHz)
         // For now, use a simple calculation based on just intonation C major
         // TODO: This should query ScoreCanvas for actual scale lines
 
-        // Just intonation major scale ratios starting from BASE_FREQUENCY (25 Hz)
-        const double BASE_FREQ = 25.0;
+        // Just intonation major scale ratios starting from BASE_FREQUENCY (18.75 Hz)
+        const double BASE_FREQ = 18.75;
         const double majorScaleRatios[7] = {1.0, 9.0/8.0, 5.0/4.0, 4.0/3.0, 3.0/2.0, 5.0/3.0, 15.0/8.0};
 
         // Find which scale degree is closest

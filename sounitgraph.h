@@ -29,6 +29,10 @@
 #include "bowedmodel.h"
 #include "saxophonemodel.h"
 #include "saxophonemodel2.h"
+#include "flutemodel.h"
+#include "pianomodel.h"
+#include "bassmodel.h"
+#include "tibetanbowlmodel.h"
 #include "tailprocessor.h"
 #include "percussionmodel.h"
 #include "panprocessor.h"
@@ -138,6 +142,10 @@ private:
         BowedModel      *bowedModel      = nullptr;
         SaxophoneModel  *reedModel       = nullptr;
         SaxophoneModel2 *saxophoneModel  = nullptr;
+        FluteModel      *fluteModel      = nullptr;
+        PianoModel      *pianoModel      = nullptr;
+        BassModel       *bassModel       = nullptr;
+        TibetanBowlModel *tibetanBowlModel = nullptr;
         TailProcessor    *tailProc         = nullptr;
         PercussionModel  *percussionModel  = nullptr;
         PanProcessor     *panProc          = nullptr;
@@ -197,6 +205,10 @@ private:
             delete bowedModel;
             delete reedModel;
             delete saxophoneModel;
+            delete fluteModel;
+            delete pianoModel;
+            delete bassModel;
+            delete tibetanBowlModel;
             delete tailProc;
             delete percussionModel;
             delete panProc;

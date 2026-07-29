@@ -46,7 +46,7 @@ const QColor ScoreCanvas::SCALE_COLORS[10] = {
 ScoreCanvas::ScoreCanvas(QWidget *parent)
     : QWidget(parent)
     , currentScale(Scale::justIntonation())  // Initialize with Just Intonation
-    , baseFrequency(25.0)       // Default base frequency: 25 Hz
+    , baseFrequency(18.75)       // Default base frequency: 25 Hz
     , currentInputMode(DrawModeDiscrete)  // Default to discrete drawing mode
     , activeTrackIndex(0)       // Default to track 0
     , trackSelector(nullptr)    // Will be set by ScoreCanvasWindow

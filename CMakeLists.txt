@@ -83,6 +83,10 @@ qt_add_executable(Kala
     lowhighpassfilter.h lowhighpassfilter.cpp
     irconvolution.h irconvolution.cpp
     recordermodel.h recordermodel.cpp
+    flutemodel.h flutemodel.cpp
+    pianomodel.h pianomodel.cpp
+    bassmodel.h bassmodel.cpp
+    tibetanbowlmodel.h tibetanbowlmodel.cpp
     bowedmodel.h bowedmodel.cpp
     saxophonemodel.h saxophonemodel.cpp
     saxophonemodel2.h saxophonemodel2.cpp

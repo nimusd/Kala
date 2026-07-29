@@ -1,4 +1,4 @@
-#include "karplusstrongattack.h"
+ #include "karplusstrongattack.h"
 #include <cmath>
 #include <random>
 #include <algorithm>
@@ -36,7 +36,9 @@ KarplusStrongAttack::KarplusStrongAttack(double sampleRate)
     , sampleCount(0)
     , attackSamples(0)
     , peakAmplitude(0.001)  // Avoid division by zero
+    , envFollower(0.0)
     , filterState(0.0)
+    , nonLinearAmount(0.0)
 {
 }
 
@@ -86,6 +88,7 @@ void KarplusStrongAttack::trigger(double pitch)
     prevSample = delayLine[delayLength - 1];
     sampleCount = 0;
     peakAmplitude = 0.001;
+    envFollower = 0.0;
     active = true;
 
     // Compute body resonance biquad coefficients
@@ -99,6 +102,18 @@ double KarplusStrongAttack::generateSample(double inputSignal)
     // S: stretching factor — controls frequency-dependent damping
     //    Higher S = more previous sample weight = less HF loss = brighter
     double S = 0.5 + brightness * 0.49;  // Range: 0.50 - 0.99
+
+    // Amplitude-dependent brightness: louder samples pull S toward 0.5
+    // (more averaging = more HF damping = darker). Models stiff-string
+    // thermo-viscous losses where high-amplitude vibrations lose more HF.
+    // nonLinearAmount controls sensitivity: 1 = full-dark at peaks,
+    // 10 = even moderate levels saturate to full-dark.
+    if (nonLinearAmount > 0.0 && peakAmplitude > 0.001) {
+        double normAmp = std::min(1.0, envFollower / (peakAmplitude * 0.5));
+        double drop = nonLinearAmount * normAmp * (S - 0.5);
+        S = S - drop;
+        S = std::clamp(S, 0.5, 0.999);
+    }
 
     // rho: feedback gain — controls frequency-independent decay
     //    damping=0 => rho=0.99998 (~8s natural tail)
@@ -135,6 +150,14 @@ double KarplusStrongAttack::generateSample(double inputSignal)
         double absSample = std::abs(currentSample);
         if (absSample > peakAmplitude) {
             peakAmplitude = absSample;
+        }
+
+        // Envelope follower: fast attack, slow release
+        {
+            double attackCoef  = std::exp(-1.0 / (0.005 * sampleRate));
+            double releaseCoef = std::exp(-1.0 / (0.100 * sampleRate));
+            double coeff = (absSample > envFollower) ? attackCoef : releaseCoef;
+            envFollower = coeff * envFollower + (1.0 - coeff) * absSample;
         }
 
         // Normalize K-S output
@@ -205,6 +228,14 @@ double KarplusStrongAttack::generateSample(double inputSignal)
         peakAmplitude = absSample;
     }
 
+    // Envelope follower: fast attack, slow release
+    {
+        double attackCoef  = std::exp(-1.0 / (0.005 * sampleRate));
+        double releaseCoef = std::exp(-1.0 / (0.100 * sampleRate));
+        double coeff = (absSample > envFollower) ? attackCoef : releaseCoef;
+        envFollower = coeff * envFollower + (1.0 - coeff) * absSample;
+    }
+
     // Normalize output
     double output = 0.0;
     if (peakAmplitude > 0.001) {
@@ -240,6 +271,7 @@ void KarplusStrongAttack::reset()
     writeIndex = 0;
     prevSample = 0.0;
     peakAmplitude = 0.001;
+    envFollower = 0.0;
     filterState = 0.0;
     currentDelay = 0.0;
     maxDelayLength = 0;
@@ -646,4 +678,9 @@ void KarplusStrongAttack::setPitch(double pitch)
     if (maxDelayLength == 0) return;
     currentDelay = sampleRate / std::clamp(pitch, 20.0, 20000.0);
     currentDelay = std::clamp(currentDelay, 2.0, static_cast<double>(maxDelayLength - 1));
+}
+
+void KarplusStrongAttack::setNonLinearAmount(double a)
+{
+    nonLinearAmount = std::clamp(a, 0.0, 10.0);
 }

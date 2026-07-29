@@ -150,6 +150,8 @@ public:
         double bodyFreqMax = 400.0;
         double pickDirectionMin = 0.0;
         double pickDirectionMax = 1.0;
+        double nonLinearAmountMin = 0.0;
+        double nonLinearAmountMax = 10.0;
     } karplusStrong;
 
     // ========== Attack Settings ==========

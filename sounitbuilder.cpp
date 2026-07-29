@@ -125,7 +125,7 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
         onAddContainer("Karplus Strong", QColor("#3498db"),
                        {"signalIn", "trigger", "mode", "attackPortion", "damping", "pluckPosition", "mix",
                         "brightness", "excitationType", "blendRatio", "pluckHardness", "bodyResonance", "bodyFreq", "pickDirection",
-                        "stringDamping", "pitchMultiplier"},
+                        "stringDamping", "nonLinearAmount", "pitchMultiplier"},
                        {"signalOut"});
     });
     connect(ui->actionSignal_Mixer, &QAction::triggered, this, [this]() {
@@ -255,6 +255,34 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
         onAddContainer("Percussion", QColor("#3498db"),
                        {"strikePosition", "strikeDuration", "inharmonicity",
                         "decayTime", "noiseGain", "pitchMultiplier"},
+                       {"signalOut"});
+    });
+
+    // Waveguides - Pink
+    connect(ui->actionFlute, &QAction::triggered, this, [this]() {
+        onAddContainer("Flute", QColor(230, 81, 133),
+                       {"breathPressure", "noiseGain", "nonlinearity",
+                        "nlAttack", "modFrequency", "modType",
+                        "vibratoFreq", "vibratoGain", "pitchMultiplier"},
+                       {"signalOut"});
+    });
+    connect(ui->actionPiano, &QAction::triggered, this, [this]() {
+        onAddContainer("Piano", QColor(230, 81, 133),
+                       {"brightness", "detuning", "hammerHardness",
+                        "stiffness", "softness", "pitchMultiplier"},
+                       {"signalOut"});
+    });
+    connect(ui->actionBass, &QAction::triggered, this, [this]() {
+        onAddContainer("Bass", QColor(230, 81, 133),
+                       {"nonlinearity", "modulationFrequency", "modulationType",
+                        "touchLength", "pitchMultiplier"},
+                       {"signalOut"});
+    });
+    connect(ui->actionTibetanBowl, &QAction::triggered, this, [this]() {
+        onAddContainer("Tibetan Bowl", QColor(230, 81, 133),
+                       {"nonlinearity", "modulationFrequency", "modulationType",
+                        "baseGain", "bowPressure", "excitationSelector",
+                        "integrationConstant", "pitchMultiplier"},
                        {"signalOut"});
     });
 
@@ -540,6 +568,7 @@ void SounitBuilder::onAddContainer(const QString &name, const QColor &color,
         newContainer->setParameter("bodyResonance", 0.0);    // off by default
         newContainer->setParameter("bodyFreq", 200.0);
         newContainer->setParameter("stringDamping", 0.0);   // off by default (harp mode)
+        newContainer->setParameter("nonLinearAmount", 0.0); // off by default (linear KS)
         newContainer->setParameter("pitchMultiplier", 1.0);
     } else if (name == "Attack") {
         newContainer->setParameter("attackType", 0.0);    // Flute Chiff
@@ -622,6 +651,38 @@ void SounitBuilder::onAddContainer(const QString &name, const QColor &color,
         newContainer->setParameter("vibratoGain",    0.0);
         newContainer->setParameter("endReflection",  0.73);
         newContainer->setParameter("jetReflection",  0.59);
+        newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "Flute") {
+        newContainer->setParameter("breathPressure", 0.9);
+        newContainer->setParameter("noiseGain",      0.1);
+        newContainer->setParameter("nonlinearity",   0.0);
+        newContainer->setParameter("nlAttack",       0.1);
+        newContainer->setParameter("modFrequency",   220.0);
+        newContainer->setParameter("modType",        0.0);
+        newContainer->setParameter("vibratoFreq",    5.0);
+        newContainer->setParameter("vibratoGain",    0.0);
+        newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "Piano") {
+        newContainer->setParameter("brightness", 0.0);
+        newContainer->setParameter("detuning", 0.1);
+        newContainer->setParameter("hammerHardness", 0.1);
+        newContainer->setParameter("stiffness", 0.28);
+        newContainer->setParameter("softness", 1.0);
+        newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "Bass") {
+        newContainer->setParameter("nonlinearity", 0.0);
+        newContainer->setParameter("modulationFrequency", 220.0);
+        newContainer->setParameter("modulationType", 0.0);
+        newContainer->setParameter("touchLength", 0.15);
+        newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "Tibetan Bowl") {
+        newContainer->setParameter("nonlinearity", 0.0);
+        newContainer->setParameter("modulationFrequency", 220.0);
+        newContainer->setParameter("modulationType", 0.0);
+        newContainer->setParameter("baseGain", 1.0);
+        newContainer->setParameter("bowPressure", 0.2);
+        newContainer->setParameter("excitationSelector", 0.0);
+        newContainer->setParameter("integrationConstant", 0.0);
         newContainer->setParameter("pitchMultiplier", 1.0);
     } else if (name == "Bowed") {
         newContainer->setParameter("bowPressure",  0.75);

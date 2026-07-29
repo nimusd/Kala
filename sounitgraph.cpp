@@ -84,6 +84,10 @@ SounitGraph* SounitGraph::clone() const
         if (src.lowHighPassFilter)    dst.lowHighPassFilter = new LowHighPassFilter(*src.lowHighPassFilter);
         if (src.irConvolution)        dst.irConvolution = new IRConvolution(*src.irConvolution);
         if (src.recorderModel)        dst.recorderModel   = new RecorderModel(*src.recorderModel);
+        if (src.fluteModel)           dst.fluteModel      = new FluteModel(*src.fluteModel);
+        if (src.pianoModel)          dst.pianoModel      = new PianoModel(*src.pianoModel);
+        if (src.bassModel)           dst.bassModel       = new BassModel(*src.bassModel);
+        if (src.tibetanBowlModel)  dst.tibetanBowlModel = new TibetanBowlModel(*src.tibetanBowlModel);
         if (src.bowedModel)           dst.bowedModel      = new BowedModel(*src.bowedModel);
         if (src.reedModel)       dst.reedModel      = new SaxophoneModel(*src.reedModel);
         if (src.saxophoneModel)  dst.saxophoneModel = new SaxophoneModel2(*src.saxophoneModel);
@@ -518,9 +522,9 @@ void SounitGraph::createProcessors()
             data.envelopeEng = new EnvelopeEngine();
             int envSelect = static_cast<int>(container->getParameter("envelopeSelect", 0.0));
 
-            // If custom envelope is selected (index 5), set envelope type to Custom
+            // If custom envelope is selected (index 7), set envelope type to Custom
             // and load the custom envelope data
-            if (envSelect == 5 && container->hasCustomEnvelopeData()) {
+            if (envSelect == 7 && container->hasCustomEnvelopeData()) {
                 data.envelopeEng->setEnvelopeType(EnvelopeEngine::EnvelopeType::Custom);
                 EnvelopeData customData = container->getCustomEnvelopeData();
                 data.envelopeEng->setCustomEnvelope(customData.points);
@@ -582,6 +586,8 @@ void SounitGraph::createProcessors()
                 container->getParameter("bodyResonance", 0.0));
             data.karplusStrongAttack->setBodyFreq(
                 container->getParameter("bodyFreq", 200.0));
+            data.karplusStrongAttack->setNonLinearAmount(
+                container->getParameter("nonLinearAmount", 0.0));
 
         } else if (container->getName() == "Attack") {
             data.attackGen = new AttackGenerator(sampleRate);
@@ -697,6 +703,46 @@ void SounitGraph::createProcessors()
             data.recorderModel->setVibratoGain(container->getParameter("vibratoGain", 0.0));
             data.recorderModel->setEndReflection(container->getParameter("endReflection", 0.73));
             data.recorderModel->setJetReflection(container->getParameter("jetReflection", 0.59));
+
+        } else if (container->getName() == "Flute") {
+            data.fluteModel = new FluteModel(sampleRate);
+            data.fluteModel->setBreathPressure(container->getParameter("breathPressure", 0.9));
+            data.fluteModel->setNoiseGain(container->getParameter("noiseGain", 0.1));
+            data.fluteModel->setNonlinearity(container->getParameter("nonlinearity", 0.0));
+            data.fluteModel->setNlAttack(container->getParameter("nlAttack", 0.1));
+            data.fluteModel->setModFrequency(container->getParameter("modFrequency", 220.0));
+            data.fluteModel->setModType(static_cast<int>(container->getParameter("modType", 0.0)));
+            data.fluteModel->setVibratoFreq(container->getParameter("vibratoFreq", 5.0));
+            data.fluteModel->setVibratoGain(container->getParameter("vibratoGain", 0.0));
+            data.fluteModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
+
+        } else if (container->getName() == "Piano") {
+            data.pianoModel = new PianoModel(sampleRate);
+            data.pianoModel->setBrightness(container->getParameter("brightness", 0.0));
+            data.pianoModel->setDetuning(container->getParameter("detuning", 0.1));
+            data.pianoModel->setHammerHardness(container->getParameter("hammerHardness", 0.1));
+            data.pianoModel->setStiffness(container->getParameter("stiffness", 0.28));
+            data.pianoModel->setSoftness(container->getParameter("softness", 1.0));
+            data.pianoModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
+
+        } else if (container->getName() == "Bass") {
+            data.bassModel = new BassModel(sampleRate);
+            data.bassModel->setNonlinearity(container->getParameter("nonlinearity", 0.0));
+            data.bassModel->setModulationFrequency(container->getParameter("modulationFrequency", 220.0));
+            data.bassModel->setModulationType(static_cast<int>(container->getParameter("modulationType", 0.0)));
+            data.bassModel->setTouchLength(container->getParameter("touchLength", 0.15));
+            data.bassModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
+
+        } else if (container->getName() == "Tibetan Bowl") {
+            data.tibetanBowlModel = new TibetanBowlModel(sampleRate);
+            data.tibetanBowlModel->setNonlinearity(container->getParameter("nonlinearity", 0.0));
+            data.tibetanBowlModel->setModulationFrequency(container->getParameter("modulationFrequency", 220.0));
+            data.tibetanBowlModel->setModulationType(static_cast<int>(container->getParameter("modulationType", 0.0)));
+            data.tibetanBowlModel->setBaseGain(container->getParameter("baseGain", 1.0));
+            data.tibetanBowlModel->setBowPressure(container->getParameter("bowPressure", 0.2));
+            data.tibetanBowlModel->setExcitationSelector(static_cast<int>(container->getParameter("excitationSelector", 0.0)));
+            data.tibetanBowlModel->setIntegrationConstant(container->getParameter("integrationConstant", 0.0));
+            data.tibetanBowlModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
 
         } else if (container->getName() == "Bowed") {
             data.bowedModel = new BowedModel(sampleRate);
@@ -856,6 +902,18 @@ void SounitGraph::reset(bool isLegato)
         if (data.recorderModel) {
             data.recorderModel->reset(isLegato);
         }
+        if (data.fluteModel) {
+            data.fluteModel->reset(isLegato);
+        }
+        if (data.pianoModel) {
+            data.pianoModel->reset(isLegato);
+        }
+        if (data.bassModel) {
+            data.bassModel->reset(isLegato);
+        }
+        if (data.tibetanBowlModel) {
+            data.tibetanBowlModel->reset(isLegato);
+        }
         if (data.bowedModel) {
             data.bowedModel->reset(isLegato);
         }
@@ -922,6 +980,10 @@ bool SounitGraph::hasTail() const
         if (data.karplusStrongAttack) return true;
         if (data.combFilter) return true;
         if (data.recorderModel) return true;
+        if (data.fluteModel) return true;
+        if (data.pianoModel) return true;
+        if (data.bassModel) return true;
+        if (data.tibetanBowlModel) return true;
         if (data.bowedModel) return true;
         if (data.reedModel) return true;
         if (data.saxophoneModel) return true;
@@ -1042,6 +1104,46 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.recorderModel->tick(pitch * pitchMult, 1.0,
                                                       m_currentIsLegato, true);
+            return;
+        }
+        // Flute: keep running in tail mode with gate=0 so delay lines ring down
+        if (name == "Flute" && proc.fluteModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.fluteModel->tick(pitch * pitchMult, 1.0,
+                                                    m_currentIsLegato, true, m_currentDynamics);
+            return;
+        }
+        // Piano: keep running in tail mode with gate=0 so resonators ring down
+        if (name == "Piano" && proc.pianoModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.pianoModel->tick(pitch * pitchMult, 1.0,
+                                                    m_currentIsLegato, true, m_currentDynamics);
+            return;
+        }
+        // Bass: keep running in tail mode with gate=0 so resonators ring down
+        if (name == "Bass" && proc.bassModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.bassModel->tick(pitch * pitchMult, 1.0,
+                                                   m_currentIsLegato, true, m_currentDynamics);
+            return;
+        }
+        // Tibetan Bowl: keep running in tail mode with gate=0 so resonators ring down
+        if (name == "Tibetan Bowl" && proc.tibetanBowlModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.tibetanBowlModel->tick(pitch * pitchMult, 1.0,
+                                                          m_currentIsLegato, true, m_currentDynamics);
             return;
         }
         // Bowed: keep running in tail mode so string rings down naturally
@@ -1640,7 +1742,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             int envSelect = static_cast<int>(container->getParameter("envelopeSelect", 0.0));
 
             // Handle custom envelope data if selected
-            if (envSelect == 5 && container->hasCustomEnvelopeData()) {
+            if (envSelect == 7 && container->hasCustomEnvelopeData()) {
                 proc.envelopeEng->setEnvelopeType(EnvelopeEngine::EnvelopeType::Custom);
                 EnvelopeData customData = container->getCustomEnvelopeData();
                 proc.envelopeEng->setCustomEnvelope(customData.points);
@@ -1763,7 +1865,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             // Initialize input values from container parameters (inspector defaults)
             double startValue = container->getParameter("startValue", 0.0);
             double endValue = container->getParameter("endValue", 1.0);
-            double progress = 0.5;
+            double progress = noteProgress;
 
             // Find connections to input ports
             // Use cached connections (snapshot at build time) for graph independence
@@ -1822,6 +1924,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             double effectivePickDirection = container->getParameter("pickDirection", 0.5);
             double effectiveBodyResonance = container->getParameter("bodyResonance", 0.0);
             double effectiveBodyFreq = container->getParameter("bodyFreq", 200.0);
+            double effectiveNonLinearAmount = container->getParameter("nonLinearAmount", 0.0);
             double pitchMult = container->getParameter("pitchMultiplier", 1.0);
             bool shouldTrigger = false;
 
@@ -1891,6 +1994,11 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                         effectiveBodyFreq = applyConnectionFunction(
                             effectiveBodyFreq, sourceVal, conn.function, conn.weight);
                         effectiveBodyFreq = qBound(80.0, effectiveBodyFreq, 400.0);
+                    } else if (conn.toPort == "nonLinearAmount" && isSourceActive(conn.fromContainer)) {
+                        double sourceVal = processors[conn.fromContainer].controlOut;
+                        effectiveNonLinearAmount = applyConnectionFunction(
+                            effectiveNonLinearAmount, sourceVal, conn.function, conn.weight);
+                        effectiveNonLinearAmount = qBound(0.0, effectiveNonLinearAmount, 10.0);
                     } else if (conn.toPort == "pitchMultiplier" && isSourceActive(conn.fromContainer)) {
                         pitchMult = processors[conn.fromContainer].controlOut;
                     }
@@ -1911,6 +2019,7 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             proc.karplusStrongAttack->setPickDirection(effectivePickDirection);
             proc.karplusStrongAttack->setBodyResonance(effectiveBodyResonance);
             proc.karplusStrongAttack->setBodyFreq(effectiveBodyFreq);
+            proc.karplusStrongAttack->setNonLinearAmount(effectiveNonLinearAmount);
             proc.karplusStrongAttack->setPitch(effectivePitch);
 
             // Trigger on note start (noteProgress near 0) or explicit trigger
@@ -2100,6 +2209,230 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             proc.recorderModel->setJetReflection(effectiveJetReflection);
 
             proc.signalOut = proc.recorderModel->tick(pitch * pitchMult, noteProgress, m_currentIsLegato, false);
+        }
+
+    } else if (container->getName() == "Flute") {
+        if (proc.fluteModel) {
+            double effectiveBreathPressure = container->getParameter("breathPressure", 0.9);
+            double effectiveNoiseGain      = container->getParameter("noiseGain", 0.1);
+            double effectiveNonlinearity   = container->getParameter("nonlinearity", 0.0);
+            double effectiveNlAttack       = container->getParameter("nlAttack", 0.1);
+            double effectiveModFrequency   = container->getParameter("modFrequency", 220.0);
+            int    effectiveModType        = static_cast<int>(container->getParameter("modType", 0.0));
+            double effectiveVibratoFreq    = container->getParameter("vibratoFreq", 5.0);
+            double effectiveVibratoGain    = container->getParameter("vibratoGain", 0.0);
+            double pitchMult               = container->getParameter("pitchMultiplier", 1.0);
+
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
+                double sv = processors[conn.fromContainer].controlOut;
+
+                if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = sv;
+                } else if (conn.toPort == "breathPressure") {
+                    effectiveBreathPressure = applyConnectionFunction(
+                        effectiveBreathPressure, sv, conn.function, conn.weight);
+                    effectiveBreathPressure = qBound(0.0, effectiveBreathPressure, 1.0);
+                } else if (conn.toPort == "noiseGain") {
+                    effectiveNoiseGain = applyConnectionFunction(
+                        effectiveNoiseGain, sv, conn.function, conn.weight);
+                    effectiveNoiseGain = qBound(0.0, effectiveNoiseGain, 1.0);
+                } else if (conn.toPort == "nonlinearity") {
+                    effectiveNonlinearity = applyConnectionFunction(
+                        effectiveNonlinearity, sv, conn.function, conn.weight);
+                    effectiveNonlinearity = qBound(0.0, effectiveNonlinearity, 1.0);
+                } else if (conn.toPort == "nlAttack") {
+                    double scaled = sv * 2.0;
+                    effectiveNlAttack = applyConnectionFunction(
+                        effectiveNlAttack, scaled, conn.function, conn.weight);
+                    effectiveNlAttack = qBound(0.0, effectiveNlAttack, 2.0);
+                } else if (conn.toPort == "modFrequency") {
+                    double scaled = sv * 980.0 + 20.0;
+                    effectiveModFrequency = applyConnectionFunction(
+                        effectiveModFrequency, scaled, conn.function, conn.weight);
+                    effectiveModFrequency = qBound(20.0, effectiveModFrequency, 1000.0);
+                } else if (conn.toPort == "modType") {
+                    double scaled = std::round(sv * 4.0);
+                    effectiveModType = static_cast<int>(applyConnectionFunction(
+                        static_cast<double>(effectiveModType), scaled, conn.function, conn.weight));
+                    effectiveModType = qBound(0, effectiveModType, 4);
+                } else if (conn.toPort == "vibratoFreq") {
+                    double scaled = 1.0 + sv * 14.0;
+                    effectiveVibratoFreq = applyConnectionFunction(
+                        effectiveVibratoFreq, scaled, conn.function, conn.weight);
+                    effectiveVibratoFreq = qBound(1.0, effectiveVibratoFreq, 15.0);
+                } else if (conn.toPort == "vibratoGain") {
+                    effectiveVibratoGain = applyConnectionFunction(
+                        effectiveVibratoGain, sv, conn.function, conn.weight);
+                    effectiveVibratoGain = qBound(0.0, effectiveVibratoGain, 1.0);
+                }
+            }
+
+            proc.fluteModel->setBreathPressure(effectiveBreathPressure);
+            proc.fluteModel->setNoiseGain(effectiveNoiseGain);
+            proc.fluteModel->setNonlinearity(effectiveNonlinearity);
+            proc.fluteModel->setNlAttack(effectiveNlAttack);
+            proc.fluteModel->setModFrequency(effectiveModFrequency);
+            proc.fluteModel->setModType(effectiveModType);
+            proc.fluteModel->setVibratoFreq(effectiveVibratoFreq);
+            proc.fluteModel->setVibratoGain(effectiveVibratoGain);
+
+            proc.signalOut = proc.fluteModel->tick(pitch * pitchMult, noteProgress,
+                                                    m_currentIsLegato, false, m_currentDynamics);
+        }
+
+    } else if (container->getName() == "Piano") {
+        if (proc.pianoModel) {
+            double effectiveBrightness     = container->getParameter("brightness", 0.0);
+            double effectiveDetuning       = container->getParameter("detuning", 0.1);
+            double effectiveHammerHardness = container->getParameter("hammerHardness", 0.1);
+            double effectiveStiffness      = container->getParameter("stiffness", 0.28);
+            double effectiveSoftness       = container->getParameter("softness", 1.0);
+            double pitchMult               = container->getParameter("pitchMultiplier", 1.0);
+
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
+                double sv = processors[conn.fromContainer].controlOut;
+
+                if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = sv;
+                } else if (conn.toPort == "brightness") {
+                    effectiveBrightness = applyConnectionFunction(
+                        effectiveBrightness, sv, conn.function, conn.weight);
+                    effectiveBrightness = qBound(0.0, effectiveBrightness, 1.0);
+                } else if (conn.toPort == "detuning") {
+                    effectiveDetuning = applyConnectionFunction(
+                        effectiveDetuning, sv, conn.function, conn.weight);
+                    effectiveDetuning = qBound(0.0, effectiveDetuning, 1.0);
+                } else if (conn.toPort == "hammerHardness") {
+                    effectiveHammerHardness = applyConnectionFunction(
+                        effectiveHammerHardness, sv, conn.function, conn.weight);
+                    effectiveHammerHardness = qBound(0.0, effectiveHammerHardness, 1.0);
+                } else if (conn.toPort == "stiffness") {
+                    effectiveStiffness = applyConnectionFunction(
+                        effectiveStiffness, sv, conn.function, conn.weight);
+                    effectiveStiffness = qBound(0.0, effectiveStiffness, 1.0);
+                } else if (conn.toPort == "softness") {
+                    effectiveSoftness = applyConnectionFunction(
+                        effectiveSoftness, sv, conn.function, conn.weight);
+                    effectiveSoftness = qBound(0.0, effectiveSoftness, 1.0);
+                }
+            }
+
+            proc.pianoModel->setBrightness(effectiveBrightness);
+            proc.pianoModel->setDetuning(effectiveDetuning);
+            proc.pianoModel->setHammerHardness(effectiveHammerHardness);
+            proc.pianoModel->setStiffness(effectiveStiffness);
+            proc.pianoModel->setSoftness(effectiveSoftness);
+
+            proc.signalOut = proc.pianoModel->tick(pitch * pitchMult, noteProgress,
+                                                    m_currentIsLegato, false, m_currentDynamics);
+        }
+
+    } else if (container->getName() == "Bass") {
+        if (proc.bassModel) {
+            double effectiveNonlinearity       = container->getParameter("nonlinearity", 0.0);
+            double effectiveModulationFrequency = container->getParameter("modulationFrequency", 220.0);
+            int    effectiveModulationType      = static_cast<int>(container->getParameter("modulationType", 0.0));
+            double effectiveTouchLength         = container->getParameter("touchLength", 0.15);
+            double pitchMult                    = container->getParameter("pitchMultiplier", 1.0);
+
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
+                double sv = processors[conn.fromContainer].controlOut;
+
+                if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = sv;
+                } else if (conn.toPort == "nonlinearity") {
+                    effectiveNonlinearity = applyConnectionFunction(
+                        effectiveNonlinearity, sv, conn.function, conn.weight);
+                    effectiveNonlinearity = qBound(0.0, effectiveNonlinearity, 1.0);
+                } else if (conn.toPort == "modulationFrequency") {
+                    effectiveModulationFrequency = applyConnectionFunction(
+                        effectiveModulationFrequency, sv, conn.function, conn.weight);
+                    effectiveModulationFrequency = qBound(20.0, effectiveModulationFrequency, 1000.0);
+                } else if (conn.toPort == "modulationType") {
+                    effectiveModulationType = static_cast<int>(applyConnectionFunction(
+                        static_cast<double>(effectiveModulationType), sv, conn.function, conn.weight));
+                    effectiveModulationType = qBound(0, effectiveModulationType, 4);
+                } else if (conn.toPort == "touchLength") {
+                    effectiveTouchLength = applyConnectionFunction(
+                        effectiveTouchLength, sv, conn.function, conn.weight);
+                    effectiveTouchLength = qBound(0.0, effectiveTouchLength, 1.0);
+                }
+            }
+
+            proc.bassModel->setNonlinearity(effectiveNonlinearity);
+            proc.bassModel->setModulationFrequency(effectiveModulationFrequency);
+            proc.bassModel->setModulationType(effectiveModulationType);
+            proc.bassModel->setTouchLength(effectiveTouchLength);
+
+            proc.signalOut = proc.bassModel->tick(pitch * pitchMult, noteProgress,
+                                                   m_currentIsLegato, false, m_currentDynamics);
+        }
+
+    } else if (container->getName() == "Tibetan Bowl") {
+        if (proc.tibetanBowlModel) {
+            double effectiveNonlinearity       = container->getParameter("nonlinearity", 0.0);
+            double effectiveModulationFrequency = container->getParameter("modulationFrequency", 220.0);
+            int    effectiveModulationType      = static_cast<int>(container->getParameter("modulationType", 0.0));
+            double effectiveBaseGain            = container->getParameter("baseGain", 1.0);
+            double effectiveBowPressure         = container->getParameter("bowPressure", 0.2);
+            int    effectiveExcitationSelector  = static_cast<int>(container->getParameter("excitationSelector", 0.0));
+            double effectiveIntegrationConstant = container->getParameter("integrationConstant", 0.0);
+            double pitchMult                    = container->getParameter("pitchMultiplier", 1.0);
+
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
+                double sv = processors[conn.fromContainer].controlOut;
+
+                if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = sv;
+                } else if (conn.toPort == "nonlinearity") {
+                    effectiveNonlinearity = applyConnectionFunction(
+                        effectiveNonlinearity, sv, conn.function, conn.weight);
+                    effectiveNonlinearity = qBound(0.0, effectiveNonlinearity, 1.0);
+                } else if (conn.toPort == "modulationFrequency") {
+                    effectiveModulationFrequency = applyConnectionFunction(
+                        effectiveModulationFrequency, sv, conn.function, conn.weight);
+                    effectiveModulationFrequency = qBound(20.0, effectiveModulationFrequency, 1000.0);
+                } else if (conn.toPort == "modulationType") {
+                    effectiveModulationType = static_cast<int>(applyConnectionFunction(
+                        static_cast<double>(effectiveModulationType), sv, conn.function, conn.weight));
+                    effectiveModulationType = qBound(0, effectiveModulationType, 4);
+                } else if (conn.toPort == "baseGain") {
+                    effectiveBaseGain = applyConnectionFunction(
+                        effectiveBaseGain, sv, conn.function, conn.weight);
+                    effectiveBaseGain = qBound(0.0, effectiveBaseGain, 1.0);
+                } else if (conn.toPort == "bowPressure") {
+                    effectiveBowPressure = applyConnectionFunction(
+                        effectiveBowPressure, sv, conn.function, conn.weight);
+                    effectiveBowPressure = qBound(0.0, effectiveBowPressure, 1.0);
+                } else if (conn.toPort == "excitationSelector") {
+                    effectiveExcitationSelector = static_cast<int>(applyConnectionFunction(
+                        static_cast<double>(effectiveExcitationSelector), sv, conn.function, conn.weight));
+                    effectiveExcitationSelector = qBound(0, effectiveExcitationSelector, 1);
+                } else if (conn.toPort == "integrationConstant") {
+                    effectiveIntegrationConstant = applyConnectionFunction(
+                        effectiveIntegrationConstant, sv, conn.function, conn.weight);
+                    effectiveIntegrationConstant = qBound(0.0, effectiveIntegrationConstant, 1.0);
+                }
+            }
+
+            proc.tibetanBowlModel->setNonlinearity(effectiveNonlinearity);
+            proc.tibetanBowlModel->setModulationFrequency(effectiveModulationFrequency);
+            proc.tibetanBowlModel->setModulationType(effectiveModulationType);
+            proc.tibetanBowlModel->setBaseGain(effectiveBaseGain);
+            proc.tibetanBowlModel->setBowPressure(effectiveBowPressure);
+            proc.tibetanBowlModel->setExcitationSelector(effectiveExcitationSelector);
+            proc.tibetanBowlModel->setIntegrationConstant(effectiveIntegrationConstant);
+
+            proc.signalOut = proc.tibetanBowlModel->tick(pitch * pitchMult, noteProgress,
+                                                          m_currentIsLegato, false, m_currentDynamics);
         }
 
     } else if (container->getName() == "Bowed") {

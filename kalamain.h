@@ -138,6 +138,10 @@ private:
     void populateIRConvolutionInspector();
     void populateNoteTailInspector();
     void populateRecorderInspector();
+    void populateFluteInspector();
+    void populatePianoInspector();
+    void populateBassInspector();
+    void populateTibetanBowlInspector();
     void populateBowedInspector();
     void populateReedInspector();
     void populateSaxophoneInspector();

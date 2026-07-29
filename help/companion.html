@@ -200,6 +200,48 @@
       "Duplicate the phrase and put it right after, pitched a fifth higher." </blockquote>
     <p>All operations push to the undo stack, so <kbd>Ctrl+Z</kbd> always
       works.</p>
+    <h3 id="writing-for-guitar">Writing for Guitar</h3>
+    <p>Writing guitar parts on a piano-roll canvas is challenging because a guitar
+      has six strings with different timbres — the three lowest strings (E, A, D)
+      are metal-wound and sound bright/metallic, while the three highest (G, B, E)
+      are plain and mellower. Anima can assign each note to the right string with
+      the right sounit.</p>
+    <p><strong>Setup.</strong> Create one sounit per string — the base sounit
+      plus five variations on the same track, each sculpted for that string's
+      timbre. Index 0 is the base sounit (the track's main sound); indices 1–5
+      are named variations. The full set 0–5 maps to strings 1–6 (high E to low E).
+      You can ask Anima to load them:</p>
+    <blockquote> "Load my guitar high-E sounit as variation 0 on this track."<br>
+      "Load guitar B-string as variation 1, G-string as variation 2, ... up to
+      low-E as variation 5." </blockquote>
+    <p><strong>Chord strums.</strong> Stack chord notes on the same beat, then ask
+      Anima to rake them like a pick stroke. She staggers the start times, shapes
+      dynamics, and optionally cycles through your string variations so each pitch
+      renders through the correct string model.</p>
+    <blockquote> "Strum the chord down over 80 ms, accent the bass."<br>
+      "Rake up with a slow 200 ms arpeggio, flat dynamics."<br>
+      "Strum this chord and cycle my string variations." </blockquote>
+    <p><strong>Automatic string assignment.</strong> Write a guitar passage
+      normally — single notes, chords, arpeggios — then ask Anima to figure out
+      which string each note belongs on. She runs a pathfinding algorithm that
+      finds the most playable fingering across all six strings, then assigns each
+      note to the matching variation so it renders through the correct per-string
+      sounit.</p>
+    <blockquote> "Assign these notes to guitar strings."<br>
+      "Assign to strings with a max stretch of 3 frets."<br>
+      "Favour open strings when possible." </blockquote>
+    <p>The default tuning is scale-aware — open-string frequencies snap to the
+      active scale (Just Intonation, Maqam, Raga, etc.) rather than hardcoded
+      Equal Temperament. The algorithm balances fret distance and string-skip
+      penalties to find a natural hand position. Notes in the mid register where
+      both wound and unwound strings overlap have a soft preference to stay on the
+      same side of the wound/unwound boundary. The returned assignments show each
+      note's string, fret, and wound status — you can override any note manually
+      with the variation toolbar.</p>
+    <p>Because strums and string assignments both use per-note variation routing,
+      you can combine them: write a chord, ask Anima to strum it and assign
+      variations in one operation, and every note renders through its own string
+      model with correct staggered timing.</p>
     <h3 id="time-signatures">Tempo and Time Signature Changes</h3>
     <p>Anima can manage the full tempo map — the opening meter and any mid-piece
       changes.</p>

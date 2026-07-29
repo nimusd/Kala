@@ -1041,6 +1041,14 @@ void KalaMain::onContainerSelected(Container *container)
         populateNoteTailInspector();
     } else if (container->getName() == "Recorder") {
         populateRecorderInspector();
+    } else if (container->getName() == "Flute") {
+        populateFluteInspector();
+    } else if (container->getName() == "Piano") {
+        populatePianoInspector();
+    } else if (container->getName() == "Bass") {
+        populateBassInspector();
+    } else if (container->getName() == "Tibetan Bowl") {
+        populateTibetanBowlInspector();
     } else if (container->getName() == "Bowed") {
         populateBowedInspector();
     } else if (container->getName() == "Reed") {
@@ -1271,6 +1279,24 @@ QString KalaMain::getContainerDescription(const QString &containerType)
     } else if (containerType == "Pan") {
         return "Stereo pan position controller. Outputs a pan value from -1.0 (left) to +1.0 (right). "
                "Connect a Frequency Mapper to controlIn for pitch-dependent panning (low notes left, high notes right).";
+    } else if (containerType == "Flute") {
+        return "Nonlinear waveguide flute physical model. "
+               "Breath pressure, noise gain, and nonlinearity shape the timbre. "
+               "Modulation type and frequency add harmonic animation. "
+               "Has natural tail ring-down — no Note Tail needed.";
+    } else if (containerType == "Piano") {
+        return "Nonlinear waveguide piano physical model. "
+               "Brightness, detuning, hammer hardness, and stiffness shape the timbre. "
+               "Has natural tail ring-down — no Note Tail needed.";
+    } else if (containerType == "Bass") {
+        return "Nonlinear waveguide acoustic bass physical model. "
+               "Nonlinearity, modulation frequency/type, and touch length shape the timbre. "
+               "Has natural tail ring-down — no Note Tail needed.";
+    } else if (containerType == "Tibetan Bowl") {
+        return "Nonlinear waveguide Tibetan bowl physical model. "
+               "Nonlinearity, modulation frequency/type, base gain, bow pressure, "
+               "excitation selector (bow/strike), and integration constant shape the timbre. "
+               "Has natural tail ring-down — no Note Tail needed.";
     }
     return "";
 }
@@ -2735,6 +2761,11 @@ void KalaMain::populateKarplusStrongInspector()
     dampingDescLabel->setWordWrap(true);
     formLayout->addRow("", dampingDescLabel);
 
+    addParameterSlider(formLayout, "Non-Linear Amount", "nonLinearAmount", ks.nonLinearAmountMin, ks.nonLinearAmountMax, 0.0, 0.01, 2);
+    QLabel *nlDescLabel1 = new QLabel("0 = linear KS, 1 = full amp-dependent HF damping");
+    nlDescLabel1->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", nlDescLabel1);
+
     addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
     QLabel *pitchMultDescKS = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDescKS->setStyleSheet("color: gray; font-size: 10px;");
@@ -3448,6 +3479,167 @@ void KalaMain::populateRecorderInspector()
     mainLayout->addStretch();
 }
 
+// Flute Inspector
+void KalaMain::populateFluteInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    addParameterSlider(formLayout, "Breath Pressure", "breathPressure",
+                       0.0, 1.0, 0.9, 0.01, 2);
+
+    addParameterSlider(formLayout, "Noise Gain", "noiseGain",
+                       0.0, 1.0, 0.1, 0.01, 2);
+
+    addParameterSlider(formLayout, "Nonlinearity", "nonlinearity",
+                       0.0, 1.0, 0.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "NL Attack (s)", "nlAttack",
+                       0.0, 2.0, 0.1, 0.01, 2);
+
+    addParameterSlider(formLayout, "Mod Frequency (Hz)", "modFrequency",
+                       20.0, 1000.0, 220.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Mod Type (0–4)", "modType",
+                       0.0, 4.0, 0.0, 1.0, 0);
+
+    addParameterSlider(formLayout, "Vibrato Freq (Hz)", "vibratoFreq",
+                       1.0, 15.0, 5.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Vibrato Gain", "vibratoGain",
+                       0.0, 1.0, 0.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
+    QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchMultDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Piano Inspector
+void KalaMain::populatePianoInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    addParameterSlider(formLayout, "Brightness", "brightness",
+                       0.0, 1.0, 0.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Detuning", "detuning",
+                       0.0, 1.0, 0.1, 0.01, 2);
+
+    addParameterSlider(formLayout, "Hammer Hardness", "hammerHardness",
+                       0.0, 1.0, 0.1, 0.01, 2);
+
+    addParameterSlider(formLayout, "Stiffness", "stiffness",
+                       0.0, 1.0, 0.28, 0.01, 2);
+
+    addParameterSlider(formLayout, "Softness", "softness",
+                       0.0, 1.0, 1.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
+    QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchMultDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Bass Inspector
+void KalaMain::populateBassInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    addParameterSlider(formLayout, "Nonlinearity", "nonlinearity",
+                       0.0, 1.0, 0.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Modulation Frequency", "modulationFrequency",
+                       20.0, 1000.0, 220.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Modulation Type", "modulationType",
+                       0.0, 4.0, 0.0, 1.0, 0);
+    QLabel *modTypeDesc = new QLabel("0=incoming 1=averaged 2=squared 3=sine(freqMod) 4=sine(freq)");
+    modTypeDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", modTypeDesc);
+
+    addParameterSlider(formLayout, "Touch Length", "touchLength",
+                       0.0, 1.0, 0.15, 0.01, 2);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
+    QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchMultDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Tibetan Bowl Inspector
+void KalaMain::populateTibetanBowlInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    addParameterSlider(formLayout, "Nonlinearity", "nonlinearity",
+                       0.0, 1.0, 0.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Modulation Frequency", "modulationFrequency",
+                       20.0, 1000.0, 220.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Modulation Type", "modulationType",
+                       0.0, 4.0, 0.0, 1.0, 0);
+    QLabel *modTypeDesc = new QLabel("0=incoming 1=averaged 2=squared 3=sine(freqMod) 4=sine(freq)");
+    modTypeDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", modTypeDesc);
+
+    addParameterSlider(formLayout, "Base Gain", "baseGain",
+                       0.0, 1.0, 1.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Bow Pressure", "bowPressure",
+                       0.0, 1.0, 0.2, 0.01, 2);
+
+    addParameterSlider(formLayout, "Excitation Selector", "excitationSelector",
+                       0.0, 1.0, 0.0, 1.0, 0);
+    QLabel *excDesc = new QLabel("0 = Bow (continuous) · 1 = Strike (percussive)");
+    excDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", excDesc);
+
+    addParameterSlider(formLayout, "Integration Constant", "integrationConstant",
+                       0.0, 1.0, 0.0, 0.01, 2);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
+    QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchMultDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
 // Bowed Inspector
 void KalaMain::populateBowedInspector()
 {
@@ -3981,11 +4173,11 @@ void KalaMain::updateEnvelopePreview()
             }
             envelopeViz->setCustomEnvelope(vizPoints);
         } else {
-            // No curve data yet — show a flat line at 0.5 as placeholder
+            // No curve data yet — show a dimmed flat line at 0 as placeholder
             QVector<EnvelopePoint> flat;
-            flat.append(EnvelopePoint(0.0, 0.5, 0));
-            flat.append(EnvelopePoint(1.0, 0.5, 0));
-            envelopeViz->setCustomEnvelope(flat);
+            flat.append(EnvelopePoint(0.0, 0.0, 0));
+            flat.append(EnvelopePoint(1.0, 0.0, 0));
+            envelopeViz->setCustomEnvelope(flat, true);
         }
 
         if (envelopeNameLabel) {
@@ -5062,6 +5254,9 @@ void KalaMain::saveCurrentCanvasState(int trackIndex)
     QJsonObject sounitMeta;
     sounitMeta["name"] = canvas->getSounitName();
     sounitMeta["comment"] = canvas->getSounitComment();
+    QJsonArray curveNamesArray;
+    for (const QString &n : canvas->getExpressiveCurveNames()) curveNamesArray.append(n);
+    sounitMeta["expressiveCurveNames"] = curveNamesArray;
     state["sounit"] = sounitMeta;
 
     // Serialize containers
@@ -5085,6 +5280,16 @@ void KalaMain::saveCurrentCanvasState(int trackIndex)
             params[it.key()] = it.value();
         }
         containerJson["parameters"] = params;
+
+        // Save string parameters (e.g. scoreCurveName on Envelope Engine)
+        QJsonObject strParams;
+        const QMap<QString, QString>& stringParams = container->getStringParameters();
+        for (auto it = stringParams.constBegin(); it != stringParams.constEnd(); ++it) {
+            strParams[it.key()] = it.value();
+        }
+        if (!strParams.isEmpty()) {
+            containerJson["stringParameters"] = strParams;
+        }
 
         // Save custom DNA name (for Harmonic Generator containers)
         if (!container->getCustomDnaName().isEmpty()) {
@@ -5185,6 +5390,15 @@ void KalaMain::loadCanvasStateForTrack(int trackIndex)
     canvas->setSounitName(sounitName);
     canvas->setSounitComment(sounitComment);
 
+    // Restore expressive curve names (absent on older saves = empty list)
+    QStringList loadedCurveNames;
+    QJsonArray curveNamesArray = sounitMeta["expressiveCurveNames"].toArray();
+    for (const QJsonValue &v : curveNamesArray) {
+        QString s = v.toString();
+        if (!s.isEmpty()) loadedCurveNames.append(s);
+    }
+    canvas->setExpressiveCurveNames(loadedCurveNames);
+
     // Delete existing containers - they were loaded from sounit file but we're
     // restoring from saved canvas state which has the correct container positions/params
     QList<Container*> existingContainers = canvas->findChildren<Container*>();
@@ -5238,6 +5452,14 @@ void KalaMain::loadCanvasStateForTrack(int trackIndex)
             container->setParameter(it.key(), it.value().toDouble());
         }
         container->endParameterUpdate();
+
+        // Restore string parameters (e.g. scoreCurveName on Envelope Engine)
+        if (containerJson.contains("stringParameters")) {
+            QJsonObject strParams = containerJson["stringParameters"].toObject();
+            for (auto it = strParams.constBegin(); it != strParams.constEnd(); ++it) {
+                container->setStringParameter(it.key(), it.value().toString());
+            }
+        }
 
         // Restore custom DNA name if present
         if (containerJson.contains("customDnaName")) {
@@ -8575,6 +8797,29 @@ void KalaMain::populateKarplusStrongSettings(QFormLayout *layout)
         settings.saveSettings();
     });
     layout->addRow("Body Freq Max:", spinBodyFreqMax);
+
+    // --- Non-Linear Amount ---
+    QDoubleSpinBox *spinNonlinMin = new QDoubleSpinBox();
+    spinNonlinMin->setRange(0.0, 1.0);
+    spinNonlinMin->setDecimals(3);
+    spinNonlinMin->setValue(settings.karplusStrong.nonLinearAmountMin);
+    connect(spinNonlinMin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [&settings](double value) {
+        settings.karplusStrong.nonLinearAmountMin = value;
+        settings.saveSettings();
+    });
+    layout->addRow("Non-Linear Amount Min:", spinNonlinMin);
+
+    QDoubleSpinBox *spinNonlinMax = new QDoubleSpinBox();
+    spinNonlinMax->setRange(0.0, 10.0);
+    spinNonlinMax->setDecimals(3);
+    spinNonlinMax->setValue(settings.karplusStrong.nonLinearAmountMax);
+    connect(spinNonlinMax, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [&settings](double value) {
+        settings.karplusStrong.nonLinearAmountMax = value;
+        settings.saveSettings();
+    });
+    layout->addRow("Non-Linear Amount Max:", spinNonlinMax);
 }
 
 void KalaMain::populateAttackSettings(QFormLayout *layout)

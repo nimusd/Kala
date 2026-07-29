@@ -21,10 +21,11 @@ void EnvelopeVisualizer::setEnvelope(int type, double a, double d, double s, dou
     update();
 }
 
-void EnvelopeVisualizer::setCustomEnvelope(const QVector<EnvelopePoint> &points)
+void EnvelopeVisualizer::setCustomEnvelope(const QVector<EnvelopePoint> &points, bool isPlaceholder)
 {
     envelopeType = 7;
     customPoints = points;
+    m_isPlaceholder = isPlaceholder;
     update();
 }
 
@@ -190,8 +191,12 @@ void EnvelopeVisualizer::paintEvent(QPaintEvent *event)
         }
     }
 
-    // Draw the curve
-    painter.setPen(QPen(QColor("#3498db"), 2));
+    // Draw the curve — dimmed when placeholder (no real data)
+    if (m_isPlaceholder) {
+        painter.setPen(QPen(QColor(52, 152, 219, 60), 2));  // ~24% opacity
+    } else {
+        painter.setPen(QPen(QColor("#3498db"), 2));
+    }
     painter.drawPath(path);
 
     // Draw axis labels

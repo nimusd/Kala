@@ -177,6 +177,7 @@ QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &
     if (toolName == "duplicate_notes")       return toolDuplicateNotes(args);
     if (toolName == "set_note_vibrato")      return toolSetNoteVibrato(args);
     if (toolName == "fade_out_notes")        return toolFadeOutNotes(args);
+    if (toolName == "assign_guitar_strings") return toolAssignGuitarStrings(args);
     return error("Unknown tool: " + toolName);
 }
 
@@ -1901,6 +1902,217 @@ QJsonObject KalaTools::toolStrumNotes(const QJsonObject &args)
     if (varAssigned > 0)  msg += QString(", cycled variations across %1 notes").arg(varAssigned);
     msg += ".";
     return ok(msg);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool: assign_guitar_strings
+// ─────────────────────────────────────────────────────────────────────────────
+// Uses Viterbi dynamic programming to assign each note to a guitar string,
+// then maps each string to a variation index so per-string sounits are used.
+//
+// Default tuning: EADGBE standard — string 1 (high E) through string 6 (low E).
+// When no explicit tuning is passed, open-string frequencies are snapped to the
+// active scale at the first note's time (not hardcoded ET), so they adapt
+// automatically to Just Intonation, Maqam, Raga, etc.
+//
+// Strings 4–6 are wound (bright/metallic), strings 1–3 are unwound (mellow).
+// Per-note variation assignment:
+//   string 1 (high E) → variation 0 (base)
+//   string 2 (B)      → variation 1
+//   ...
+//   string 6 (low E)  → variation 5
+//
+// The algorithm costs fret-distance + string-skip-penalty, so it naturally
+// prefers the most playable fingering. Notes that are out of range on every
+// string are assigned to the nearest string.
+
+QJsonObject KalaTools::toolAssignGuitarStrings(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    QVector<Note> &notes = sc->getPhrase().getNotes();
+    QVector<int> indices = resolveNoteIndices(sc, args["noteIds"].toArray());
+    if (indices.isEmpty()) return error("No matching notes found.");
+
+    // ── Sort by start time so the sequence is chronological ──
+    QVector<int> sorted = indices;
+    std::sort(sorted.begin(), sorted.end(),
+              [&notes](int a, int b) { return notes[a].getStartTime() < notes[b].getStartTime(); });
+
+    // ── Tuning: 6 open-string frequencies, string 1 (high E) to string 6 (low E) ──
+    const QJsonArray tuningArg = args["tuning"].toArray();
+    QVector<double> openHz(6);
+
+    // ET reference MIDI numbers for the default tuning — used ONLY as a lookup
+    // target to find the matching scale line in non-ET scales. Not used as actual
+    // frequencies unless the scale happens to be Equal Temperament.
+    const int defaultMidi[6] = {64, 59, 55, 50, 45, 40};  // high-E, B, G, D, A, low-E
+
+    if (!tuningArg.isEmpty()) {
+        // User-provided tuning — detect Hz vs MIDI
+        bool looksLikeMidi = true;
+        for (int s = 0; s < 6 && s < tuningArg.size(); ++s) {
+            if (tuningArg[s].toDouble() < 900.0) { looksLikeMidi = false; break; }
+        }
+        for (int s = 0; s < 6 && s < tuningArg.size(); ++s) {
+            double v = tuningArg[s].toDouble();
+            openHz[s] = looksLikeMidi ? (440.0 * std::pow(2.0, (v - 69.0) / 12.0)) : v;
+        }
+        // Fill missing entries with ET defaults
+        for (int s = tuningArg.size(); s < 6; ++s)
+            openHz[s] = 440.0 * std::pow(2.0, (defaultMidi[s] - 69.0) / 12.0);
+    } else {
+        // Scale-aware default: snap each string's ET frequency to the nearest
+        // scale line from the scale active at the first note's position.
+        const double firstTime = notes[sorted[0]].getStartTime();
+        const Scale activeScale = sc->getScaleAtTime(firstTime);
+        const double activeBaseFreq = sc->getBaseFrequencyAtTime(firstTime);
+
+        QVector<ScoreCanvas::ScaleLine> scaleLines =
+            sc->generateScaleLinesForScale(activeScale, activeBaseFreq);
+
+        for (int s = 0; s < 6; ++s) {
+            const double etTarget = 440.0 * std::pow(2.0, (defaultMidi[s] - 69.0) / 12.0);
+            double bestHz = etTarget;  // fallback to ET if no scale lines
+            double bestDist = 1e9;
+            for (const auto &line : scaleLines) {
+                const double d = std::abs(line.frequencyHz - etTarget);
+                if (d < bestDist) { bestDist = d; bestHz = line.frequencyHz; }
+            }
+            openHz[s] = bestHz;
+        }
+    }
+
+    const double maxFret    = args.value("maxFret").toDouble(19.0);
+    const double maxStretch = args.value("maxStretch").toDouble(4.0);  // max fret span per hand position
+    const bool   preferOpen = args.value("preferOpen").toBool(false);
+    const int    woundCount = std::clamp(args.value("woundStrings").toInt(3), 0, 6);  // lowest N strings are wound
+    const double stringSkipPenalty = args.value("stringSkipPenalty").toDouble(0.7);
+
+    const int n = indices.size();
+
+    // ── Phase 1: compute valid (string, fret) for each note ──
+    struct Candidate { int s; double fret; };
+    QVector<QVector<Candidate>> cands(n);
+    for (int i = 0; i < n; ++i) {
+        const double pitch = notes[sorted[i]].getPitchHz();
+        for (int s = 0; s < 6; ++s) {
+            if (pitch < openHz[s] * 0.99) continue;  // below open string
+            const double fret = 12.0 * std::log2(pitch / openHz[s]);
+            if (fret > maxFret + 0.01) continue;
+            cands[i].append({s, fret});
+        }
+        if (cands[i].isEmpty()) {
+            // Note is unplayable — force to open string of best-fit string
+            // by pitch proximity. This is better than leaving it unassigned.
+            int bestS = 0;
+            double bestDist = 1e9;
+            for (int s = 0; s < 6; ++s) {
+                double d = std::abs(pitch - openHz[s]);
+                if (d < bestDist) { bestDist = d; bestS = s; }
+            }
+            double forcedFret = 12.0 * std::log2(pitch / openHz[bestS]);
+            if (forcedFret < 0.0) forcedFret = 0.0;
+            cands[i].append({bestS, forcedFret});
+        }
+    }
+
+    // ── Phase 2: Viterbi DP ──
+    // dp[i][k] = { totalCost, prevK } for the k-th candidate of note i
+    struct State { double cost = 1e18; int prev = -1; };
+    QVector<QVector<State>> dp(n);
+    for (int i = 0; i < n; ++i) dp[i].resize(cands[i].size());
+
+    // First note: base cost = 0 for open strings, small fret penalty otherwise
+    for (int k = 0; k < cands[0].size(); ++k) {
+        double cost = cands[0][k].fret * 0.3;  // slight preference for open position
+        if (preferOpen && cands[0][k].fret < 0.01) cost -= 1.0;  // bonus for open
+        dp[0][k].cost = cost;
+    }
+
+    // Forward pass
+    for (int i = 1; i < n; ++i) {
+        for (int k = 0; k < cands[i].size(); ++k) {
+            const Candidate &cur = cands[i][k];
+            double bestCost = 1e18;
+            int    bestPrev = -1;
+
+            for (int pk = 0; pk < cands[i - 1].size(); ++pk) {
+                const Candidate &prev = cands[i - 1][pk];
+                // Fret distance + string skip penalty
+                const double fretDist  = std::abs(cur.fret - prev.fret);
+                const double stringDist = std::abs(cur.s - prev.s);
+                double transition = fretDist + stringDist * stringSkipPenalty;
+
+                // Penalise exceeding max stretch (hand position constraint)
+                if (fretDist > maxStretch)
+                    transition += (fretDist - maxStretch) * 2.0;
+
+                // Soft penalty for crossing wound/unwound boundary
+                // when the note is in the mid register (where both are viable)
+                const bool curWound  = (cur.s >= 6 - woundCount);   // strings 4-6 with woundCount=3
+                const bool prevWound = (prev.s >= 6 - woundCount);
+                const double midPitch = notes[sorted[i]].getPitchHz();
+                if (curWound != prevWound && midPitch > openHz[2] && midPitch < openHz[0] * 2.0)
+                    transition += 0.5;
+
+                const double total = dp[i - 1][pk].cost + transition;
+                if (total < bestCost) { bestCost = total; bestPrev = pk; }
+            }
+            dp[i][k] = {bestCost, bestPrev};
+        }
+    }
+
+    // ── Phase 3: backtrack ──
+    QVector<int> bestCandIdx(n);
+    {
+        double bestFinal = 1e18;
+        int    bestK     = 0;
+        for (int k = 0; k < cands[n - 1].size(); ++k) {
+            if (dp[n - 1][k].cost < bestFinal) { bestFinal = dp[n - 1][k].cost; bestK = k; }
+        }
+        bestCandIdx[n - 1] = bestK;
+        for (int i = n - 1; i >= 1; --i)
+            bestCandIdx[i - 1] = dp[i][bestCandIdx[i]].prev;
+    }
+
+    // ── Phase 4: assign variation indices ──
+    // string s → variation s (0 = high E, 5 = low E)
+    Track *track = currentTrack();
+    const int varCount = track ? (track->getVariationCount() + 1) : 6;  // includes base
+
+    QJsonArray assignments;
+    int changedCount = 0;
+    for (int i = 0; i < n; ++i) {
+        const int noteIdx  = sorted[i];
+        const int string   = cands[i][bestCandIdx[i]].s;  // 0=high-E, 5=low-E
+        const double fret  = cands[i][bestCandIdx[i]].fret;
+        const int varIndex = string;  // 0–5, maps to string 1–6
+
+        if (noteIdx >= 0 && noteIdx < notes.size()) {
+            const int oldVar = notes[noteIdx].getVariationIndex();
+            notes[noteIdx].setVariationIndex(varIndex);
+            notes[noteIdx].setRenderDirty(true);
+            if (oldVar != varIndex) changedCount++;
+
+            QJsonObject a;
+            a["noteId"]    = notes[noteIdx].getId();
+            a["pitchHz"]   = notes[noteIdx].getPitchHz();
+            a["string"]    = string + 1;  // 1-based for readability
+            a["fret"]      = std::round(fret * 10.0) / 10.0;
+            a["variation"] = varIndex;
+            a["wound"]     = (string >= 6 - woundCount);
+            assignments.append(a);
+        }
+    }
+
+    sc->update();
+
+    QString summary = QString("Assigned %1 notes to guitar strings (%2 changed). "
+                              "EADGBE tuning, max fret %3.")
+                          .arg(n).arg(changedCount).arg(maxFret, 0, 'f', 0);
+    return QJsonObject{ {"result", summary}, {"assignments", assignments} };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3978,6 +4190,27 @@ static QJsonArray compositionSchemas()
                     {"startTime", numProp("Normalized time (0–1) where fade begins. Default 0.85.")},
                     {"endValue",  numProp("Target value at t=1. Default 0.0.")},
                     {"noteIds",   QJsonObject{{"type","array"},{"description","Note IDs. Empty = all on current track."}}}
+                }},
+                {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    // ── assign_guitar_strings (standalone) ──
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "assign_guitar_strings"},
+            {"description", "Assign notes to guitar strings via Viterbi pathfinding, then map each string to a variation index. Use after writing a phrase — pre-load 6 per-string sounits as variations (0=high-E, 5=low-E). Default EADGBE tuning snaps to the active scale (not hardcoded ET), so it adapts to Just Intonation, Maqam, Raga, etc. Wound strings (default lowest 3): brighter/metallic. Unwound (highest 3): mellower. Notes out of range are assigned to the nearest string. Returns per-note assignments with string/fret/variation/wound."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"noteIds",           QJsonObject{{"type","array"},{"description","Note IDs. Empty = all on current track."}}},
+                    {"tuning",            QJsonObject{{"type","array"},{"description","Open-string pitches. Hz or MIDI (>900). 6 entries: [high-E,B,G,D,A,low-E]. Default EADGBE standard."}}},
+                    {"maxFret",           numProp("Highest playable fret. Default 19.")},
+                    {"maxStretch",        numProp("Max fret span within one hand position. Default 4.")},
+                    {"preferOpen",        QJsonObject{{"type","boolean"},{"description","Favor open strings when viable. Default false."}}},
+                    {"woundStrings",      QJsonObject{{"type","integer"},{"description","How many lowest strings are wound (timbre distinction). Default 3."}}},
+                    {"stringSkipPenalty", numProp("Cost weight for jumping between non-adjacent strings. Default 0.7.")}
                 }},
                 {"required", QJsonArray{}}
             }}

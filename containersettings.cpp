@@ -130,6 +130,8 @@ void ContainerSettings::saveSettings()
     settings.setValue("bodyFreqMax", karplusStrong.bodyFreqMax);
     settings.setValue("pickDirectionMin", karplusStrong.pickDirectionMin);
     settings.setValue("pickDirectionMax", karplusStrong.pickDirectionMax);
+    settings.setValue("nonLinearAmountMin", karplusStrong.nonLinearAmountMin);
+    settings.setValue("nonLinearAmountMax", karplusStrong.nonLinearAmountMax);
     settings.endGroup();
 
     // Attack
@@ -418,6 +420,8 @@ void ContainerSettings::loadSettings()
     karplusStrong.bodyFreqMax = settings.value("bodyFreqMax", 400.0).toDouble();
     karplusStrong.pickDirectionMin = settings.value("pickDirectionMin", 0.0).toDouble();
     karplusStrong.pickDirectionMax = settings.value("pickDirectionMax", 1.0).toDouble();
+    karplusStrong.nonLinearAmountMin = settings.value("nonLinearAmountMin", 0.0).toDouble();
+    karplusStrong.nonLinearAmountMax = settings.value("nonLinearAmountMax", 10.0).toDouble();
     settings.endGroup();
 
     // Attack
@@ -683,6 +687,8 @@ void ContainerSettings::resetToDefaults()
     karplusStrong.bodyFreqMax = 400.0;
     karplusStrong.pickDirectionMin = 0.0;
     karplusStrong.pickDirectionMax = 1.0;
+    karplusStrong.nonLinearAmountMin = 0.0;
+    karplusStrong.nonLinearAmountMax = 10.0;
 
     // Attack defaults
     attack.durationMin = 0.005;
@@ -931,6 +937,8 @@ QJsonObject ContainerSettings::toJson() const
     ks["bodyFreqMax"] = karplusStrong.bodyFreqMax;
     ks["pickDirectionMin"] = karplusStrong.pickDirectionMin;
     ks["pickDirectionMax"] = karplusStrong.pickDirectionMax;
+    ks["nonLinearAmountMin"] = karplusStrong.nonLinearAmountMin;
+    ks["nonLinearAmountMax"] = karplusStrong.nonLinearAmountMax;
     json["karplusStrong"] = ks;
 
     // Attack
@@ -1207,6 +1215,8 @@ void ContainerSettings::fromJson(const QJsonObject &json)
         karplusStrong.bodyFreqMax = ks["bodyFreqMax"].toDouble(400.0);
         karplusStrong.pickDirectionMin = ks["pickDirectionMin"].toDouble(0.0);
         karplusStrong.pickDirectionMax = ks["pickDirectionMax"].toDouble(1.0);
+        karplusStrong.nonLinearAmountMin = ks["nonLinearAmountMin"].toDouble(0.0);
+        karplusStrong.nonLinearAmountMax = ks["nonLinearAmountMax"].toDouble(10.0);
     }
 
     // Attack

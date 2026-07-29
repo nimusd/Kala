@@ -95,6 +95,7 @@ private:
     QJsonObject toolDuplicateNotes     (const QJsonObject &args);
     QJsonObject toolSetNoteVibrato     (const QJsonObject &args);
     QJsonObject toolFadeOutNotes       (const QJsonObject &args);
+    QJsonObject toolAssignGuitarStrings(const QJsonObject &args);
     QJsonObject toolPlayPreview        ();
 
     // ── Sub-implementations called by consolidated dispatchers ───────────────
