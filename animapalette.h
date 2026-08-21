@@ -8,7 +8,7 @@ class QWidget;
 class QListWidget;
 class QLabel;
 
-// AnimaPalette: slash-triggered template palette for the companion input.
+//  nimaPalette: slash-triggered template palette for the companion input.
 //
 // Behaviour:
 //   - Parses anima-templates.md from the application directory at startup.

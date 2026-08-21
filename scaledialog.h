@@ -2,6 +2,12 @@
 #define SCALEDIALOG_H
 
 #include <QDialog>
+#include <QDoubleSpinBox>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QSlider>
+#include <QLabel>
 #include "scale.h"
 
 namespace Ui {
@@ -40,7 +46,22 @@ private:
     int currentScaleId = -1;
     QVector<QPushButton*> keyButtons;
 
+    // Inflection UI
+    QGroupBox *inflectionGroup = nullptr;
+    QVBoxLayout *inflectionLayout = nullptr;
+    QVector<QSlider*> inflectionSliders;
+    QVector<QLabel*> inflectionCentsLabels;
+
+    // Degree frequency display
+    QGroupBox *degreeFreqGroup = nullptr;
+    QHBoxLayout *degreeFreqLayout = nullptr;
+    QDoubleSpinBox *degreeRefFreqSpin = nullptr;
+    QVector<QLabel*> degreeFreqLabels;
+
     void updateKeyButtonStyles();
+    void rebuildInflectionRows(const Scale &scale);
+    void updateDegreeFrequencies();
+    QVector<double> getCurrentCentOffsets() const;
 };
 
 #endif // SCALEDIALOG_H

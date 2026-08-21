@@ -1309,7 +1309,7 @@ QJsonObject KalaTools::toolSetTempo(const QJsonObject &args)
 
     if (!args.contains("bpm")) return error("'bpm' is required.");
     const double bpm = args["bpm"].toDouble();
-    if (bpm < 20 || bpm > 300) return error("bpm must be between 20 and 300.");
+    if (bpm < 1 || bpm > 300) return error("bpm must be between 1 and 300.");
 
     sc->setDefaultTempo(bpm);
     sc->update();
@@ -2625,7 +2625,7 @@ QJsonObject KalaTools::toolSetTimeSignature(const QJsonObject &args)
     QString msg = QString("Default time signature set to %1/%2.").arg(num).arg(denom);
     if (args.contains("bpm")) {
         const double bpm = args["bpm"].toDouble();
-        if (bpm < 20 || bpm > 300) return error("bpm must be 20–300.");
+        if (bpm < 1 || bpm > 300) return error("bpm must be 1–300.");
         sc->setDefaultTempo(bpm);
         msg += QString(" Tempo set to %1 BPM.").arg(bpm);
     }

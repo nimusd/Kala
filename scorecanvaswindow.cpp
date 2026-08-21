@@ -16,12 +16,16 @@
 #include <QKeyEvent>
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <QCloseEvent>
+#include <QSettings>
 #include <QCursor>
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QInputDialog>
+#include <QMessageBox>
 #include <cmath>
 #include <QCoreApplication>
+#include "midioutput.h"
 
 ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *parent)
     : QMainWindow{parent}
@@ -42,8 +46,8 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
     , panStartVerticalScroll(0)
     , currentTimeMode(AbsoluteTime)
     , currentTempo(120)
-    , currentTimeSigTop(4)
-    , currentTimeSigBottom(4)
+    , currentTimeSigTop(5)
+    , currentTimeSigBottom(0)
     , audioEngine(sharedAudioEngine)
     , trackManager(nullptr)  // Will be set via setTrackManager()
     , playbackTimer(nullptr)
@@ -55,6 +59,13 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
 {
     qDebug() << "ScoreCanvasWindow: Starting constructor";
     ui->setupUi(this);
+
+    // Restore window geometry from last session
+    {
+        QSettings settings;
+        if (settings.contains("windows/scoreCanvas/geometry"))
+            restoreGeometry(settings.value("windows/scoreCanvas/geometry").toByteArray());
+    }
 
     // Initialize track color palette
     trackColorPalette = {
@@ -92,7 +103,7 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
     statusTempoLabel->setMinimumWidth(80);
     statusTempoLabel->setStyleSheet("QLabel { padding: 0 5px; }");
 
-    statusTimeSigLabel = new QLabel("4/4", this);
+    statusTimeSigLabel = new QLabel("5 pulses", this);
     statusTimeSigLabel->setMinimumWidth(50);
     statusTimeSigLabel->setStyleSheet("QLabel { padding: 0 5px; }");
 
@@ -358,50 +369,151 @@ void ScoreCanvasWindow::setupCompositionSettings()
 
     ui->toolBar->addSeparator();
 
-    // Tempo Label and SpinBox
-    QLabel *tempoLabel = new QLabel(" Tempo: ", this);
-    ui->toolBar->addWidget(tempoLabel);
+    // Auto/Manual Render Mode Toggle
+    renderModeToggle = new QPushButton("Auto", this);
+    renderModeToggle->setCheckable(true);
+    renderModeToggle->setChecked(true);  // Default: Auto
+    renderModeToggle->setMinimumWidth(70);
+    renderModeToggle->setFocusPolicy(Qt::NoFocus);
+    renderModeToggle->setToolTip("Auto: re-render on every edit\nManual: render only when play is pressed");
+    renderModeToggle->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #64B5F6;"  // Blue when Auto
+        "    padding: 5px 10px;"
+        "    border: 1px solid #42A5F5;"
+        "    border-radius: 3px;"
+        "}"
+        "QPushButton:checked {"
+        "    background-color: #64B5F6;"  // Blue when Auto
+        "}"
+        "QPushButton:!checked {"
+        "    background-color: #B0BEC5;"  // Grey when Manual
+        "    border-color: #78909C;"
+        "}"
+    );
+    ui->toolBar->addWidget(renderModeToggle);
+    connect(renderModeToggle, &QPushButton::clicked, this, &ScoreCanvasWindow::onRenderModeToggled);
 
-    tempoSpinBox = new QSpinBox(this);
-    tempoSpinBox->setRange(20, 300);  // Reasonable BPM range
-    tempoSpinBox->setValue(currentTempo);
-    tempoSpinBox->setSuffix(" BPM");
-    tempoSpinBox->setMinimumWidth(90);
-    tempoSpinBox->setFocusPolicy(Qt::StrongFocus);  // Only gets focus when clicked
-    ui->toolBar->addWidget(tempoSpinBox);
-    connect(tempoSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &ScoreCanvasWindow::onTempoChanged);
+    // MIDI test button — quick hello-note to verify the MIDI-out setup
+    // (currently the VL70-m; stays as a permanent hardware check).
+    QPushButton *midiTestBtn = new QPushButton("MIDI test", this);
+    midiTestBtn->setMinimumWidth(70);
+    midiTestBtn->setFocusPolicy(Qt::NoFocus);
+    midiTestBtn->setToolTip("Send a test note to the first MIDI output port");
+    midiTestBtn->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #4DB6AC;"  // Teal
+        "    padding: 5px 10px;"
+        "    border: 1px solid #26A69A;"
+        "    border-radius: 3px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #80CBC4;"
+        "}"
+    );
+    ui->toolBar->addWidget(midiTestBtn);
+    connect(midiTestBtn, &QPushButton::clicked, this, &ScoreCanvasWindow::onMidiTestClicked);
 
     ui->toolBar->addSeparator();
 
-    // Time Signature Label and SpinBoxes
-    QLabel *timeSigLabel = new QLabel(" Time Sig: ", this);
-    ui->toolBar->addWidget(timeSigLabel);
+    // Spacer to push time signature UI to the right
+    QWidget *spacer = new QWidget(this);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui->toolBar->addWidget(spacer);
 
-    timeSigNumerator = new QSpinBox(this);
-    timeSigNumerator->setRange(1, 99);  // Up to 99 for complex rhythms
-    timeSigNumerator->setValue(currentTimeSigTop);
-    timeSigNumerator->setMinimumWidth(60);
-    timeSigNumerator->setMaximumWidth(60);
-    timeSigNumerator->setFocusPolicy(Qt::StrongFocus);  // Only gets focus when clicked
-    ui->toolBar->addWidget(timeSigNumerator);
+    // Time signature mode combo + stacked widget
+    timeSignatureModeCombo = new QComboBox(this);
+    timeSignatureModeCombo->addItem("Kala time signature");
+    timeSignatureModeCombo->addItem("Western time signature");
+    timeSignatureModeCombo->setMinimumWidth(140);
+    timeSignatureModeCombo->setFocusPolicy(Qt::StrongFocus);
+    ui->toolBar->addWidget(timeSignatureModeCombo);
 
-    QLabel *slashLabel = new QLabel(" / ", this);
-    ui->toolBar->addWidget(slashLabel);
+    // --- Kala page ---
+    kalaTimeSigPage = new QWidget(this);
+    QHBoxLayout *kalaLayout = new QHBoxLayout(kalaTimeSigPage);
+    kalaLayout->setContentsMargins(4, 0, 4, 0);
+    kalaLayout->setSpacing(4);
 
-    timeSigDenominator = new QSpinBox(this);
-    // 0 = simple mode (beat = tempo), 1-99 = scaled mode
-    timeSigDenominator->setRange(0, 99);
-    timeSigDenominator->setValue(currentTimeSigBottom);
-    timeSigDenominator->setMinimumWidth(60);
-    timeSigDenominator->setMaximumWidth(60);
-    timeSigDenominator->setFocusPolicy(Qt::StrongFocus);  // Only gets focus when clicked
-    ui->toolBar->addWidget(timeSigDenominator);
+    QLabel *kalaPulsesLabel = new QLabel("Pulses/bar:", this);
+    kalaLayout->addWidget(kalaPulsesLabel);
 
-    connect(timeSigNumerator, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &ScoreCanvasWindow::onTimeSignatureChanged);
-    connect(timeSigDenominator, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &ScoreCanvasWindow::onTimeSignatureChanged);
+    kalaPulsesSpin = new QSpinBox(this);
+    kalaPulsesSpin->setRange(1, 99);
+    kalaPulsesSpin->setValue(cachedKalaPulses);
+    kalaPulsesSpin->setMinimumWidth(50);
+    kalaPulsesSpin->setFocusPolicy(Qt::StrongFocus);
+    kalaLayout->addWidget(kalaPulsesSpin);
+
+    QLabel *kalaDurationLabel = new QLabel("Pulse (ms):", this);
+    kalaLayout->addWidget(kalaDurationLabel);
+
+    kalaDurationSpin = new QSpinBox(this);
+    kalaDurationSpin->setRange(1, 60000);
+    kalaDurationSpin->setValue(cachedKalaDurationMs);
+    kalaDurationSpin->setMinimumWidth(70);
+    kalaDurationSpin->setFocusPolicy(Qt::StrongFocus);
+    kalaLayout->addWidget(kalaDurationSpin);
+    kalaLayout->addStretch();
+
+    // --- Western page ---
+    westernTimeSigPage = new QWidget(this);
+    QHBoxLayout *westernLayout = new QHBoxLayout(westernTimeSigPage);
+    westernLayout->setContentsMargins(4, 0, 4, 0);
+    westernLayout->setSpacing(4);
+
+    QLabel *westernTempoLabel = new QLabel("Tempo:", this);
+    westernLayout->addWidget(westernTempoLabel);
+
+    westernTempoSpin = new QSpinBox(this);
+    westernTempoSpin->setRange(1, 300);
+    westernTempoSpin->setValue(cachedWesternTempo);
+    westernTempoSpin->setSuffix(" BPM");
+    westernTempoSpin->setMinimumWidth(80);
+    westernTempoSpin->setFocusPolicy(Qt::StrongFocus);
+    westernLayout->addWidget(westernTempoSpin);
+
+    QLabel *westernNumLabel = new QLabel("Num:", this);
+    westernLayout->addWidget(westernNumLabel);
+
+    westernNumSpin = new QSpinBox(this);
+    westernNumSpin->setRange(1, 99);
+    westernNumSpin->setValue(cachedWesternNum);
+    westernNumSpin->setMinimumWidth(50);
+    westernNumSpin->setFocusPolicy(Qt::StrongFocus);
+    westernLayout->addWidget(westernNumSpin);
+
+    QLabel *westernDenLabel = new QLabel("Den:", this);
+    westernLayout->addWidget(westernDenLabel);
+
+    westernDenSpin = new QSpinBox(this);
+    westernDenSpin->setRange(0, 99);
+    westernDenSpin->setValue(cachedWesternDen);
+    westernDenSpin->setMinimumWidth(50);
+    westernDenSpin->setFocusPolicy(Qt::StrongFocus);
+    westernLayout->addWidget(westernDenSpin);
+    westernLayout->addStretch();
+
+    // --- Stacked widget ---
+    timeSigStack = new QStackedWidget(this);
+    timeSigStack->addWidget(kalaTimeSigPage);    // index 0
+    timeSigStack->addWidget(westernTimeSigPage); // index 1
+    timeSigStack->setCurrentIndex(0);  // Default to Kala
+    ui->toolBar->addWidget(timeSigStack);
+
+    // Connect signals
+    connect(timeSignatureModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ScoreCanvasWindow::onTimeSignatureModeChanged);
+    connect(kalaPulsesSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ScoreCanvasWindow::onTimeSettingsChanged);
+    connect(kalaDurationSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ScoreCanvasWindow::onTimeSettingsChanged);
+    connect(westernTempoSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ScoreCanvasWindow::onTimeSettingsChanged);
+    connect(westernNumSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ScoreCanvasWindow::onTimeSettingsChanged);
+    connect(westernDenSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ScoreCanvasWindow::onTimeSettingsChanged);
 
     // Connect File menu action
     connect(ui->actionCompositionSettings, &QAction::triggered,
@@ -504,17 +616,32 @@ void ScoreCanvasWindow::bindCurveNamesFromTrack(Track *track)
     m_curveNamesConnections.clear();
     m_curveNamesTrack = track;
     if (m_curveNamesTrack) {
+        Track *track = m_curveNamesTrack;
         // Base canvas still emits when user edits names in the Envelope inspector
-        if (Canvas *base = m_curveNamesTrack->getCanvas()) {
+        if (Canvas *base = track->getCanvas()) {
             m_curveNamesConnections.append(
                 connect(base, &Canvas::expressiveCurveNamesChanged,
                         this, &ScoreCanvasWindow::refreshCurveSelector));
         }
-        // Variations are immutable after creation, so create/delete/rename are
-        // the only events that can change the union.
+        // Variation canvases emit when VL70-m rows toggle (Phase 6), so the
+        // union refreshes live. ("Variations are immutable" no longer holds
+        // for the curve-name list.) Hook existing variations now and each
+        // new one as it is created.
+        auto connectVariation = [this, track](int index) {
+            if (Canvas *varCanvas = track->getCanvasForVariation(index)) {
+                m_curveNamesConnections.append(
+                    connect(varCanvas, &Canvas::expressiveCurveNamesChanged,
+                            this, &ScoreCanvasWindow::refreshCurveSelector));
+            }
+        };
+        for (int i = 1; i <= track->getVariationCount(); ++i)
+            connectVariation(i);
         m_curveNamesConnections.append(
-            connect(m_curveNamesTrack, &Track::variationCreated,
-                    this, [this](int, const QString&) { refreshCurveSelector(); }));
+            connect(track, &Track::variationCreated,
+                    this, [this, connectVariation](int index, const QString&) {
+                        connectVariation(index);
+                        refreshCurveSelector();
+                    }));
         m_curveNamesConnections.append(
             connect(m_curveNamesTrack, &Track::variationDeleted,
                     this, [this](int) { refreshCurveSelector(); }));
@@ -812,8 +939,9 @@ void ScoreCanvasWindow::setupScoreCanvas()
     });
 
     // Restart background pre-render debounce on every committed score edit
+    // Only when auto-render is enabled; in manual mode, rendering happens on play
     connect(scoreCanvas->getUndoStack(), &QUndoStack::indexChanged, this, [this](int) {
-        if (m_renderDebounceTimer) m_renderDebounceTimer->start();
+        if (m_autoRender && m_renderDebounceTimer) m_renderDebounceTimer->start();
     });
 }
 
@@ -1172,6 +1300,14 @@ void ScoreCanvasWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    // N key sets the playback start position to the current now marker
+    if (event->key() == Qt::Key_N && event->modifiers() == Qt::NoModifier) {
+        playbackStartPosition = timeline->getNowMarker();
+        scoreCanvas->setPasteTargetTime(playbackStartPosition);
+        event->accept();
+        return;
+    }
+
     // G key opens goto dialog
     if (event->key() == Qt::Key_G && event->modifiers() == Qt::NoModifier) {
         // Create and show goto dialog
@@ -1181,6 +1317,13 @@ void ScoreCanvasWindow::keyPressEvent(QKeyEvent *event)
         GotoDialog dialog(mode, currentTempo, currentTimeSigTop, currentTimeSigBottom, this);
         if (dialog.exec() == QDialog::Accepted) {
             double targetTimeMs = dialog.getTargetTimeMs();
+
+            // Set now time if requested (via "n" key or "Set Now" button)
+            if (dialog.getSetNowTime()) {
+                playbackStartPosition = targetTimeMs;
+                scoreCanvas->setPasteTargetTime(playbackStartPosition);
+                timeline->setNowMarker(playbackStartPosition);
+            }
 
             // Convert time to pixel position
             int targetPixel = scoreCanvas->timeToPixel(targetTimeMs);
@@ -1199,27 +1342,10 @@ void ScoreCanvasWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    // Shift+Left / Shift+Right: scroll to first/last note
-    if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) && event->modifiers() == Qt::ShiftModifier) {
-        const QVector<Note> &notes = scoreCanvas->getPhrase().getNotes();
-        if (!notes.isEmpty()) {
-            double targetTimeMs;
-            if (event->key() == Qt::Key_Left) {
-                targetTimeMs = notes[0].getStartTime();
-                for (const Note &n : notes)
-                    targetTimeMs = qMin(targetTimeMs, n.getStartTime());
-            } else {
-                targetTimeMs = 0;
-                for (const Note &n : notes)
-                    targetTimeMs = qMax(targetTimeMs, n.getEndTime());
-            }
-            int targetPixel = scoreCanvas->timeToPixel(targetTimeMs);
-            int viewportWidth = scoreScrollArea->viewport()->width();
-            int scrollValue = targetPixel - (viewportWidth / 2);
-            scrollValue = qMax(scoreScrollArea->horizontalScrollBar()->minimum(), scrollValue);
-            scrollValue = qMin(scoreScrollArea->horizontalScrollBar()->maximum(), scrollValue);
-            scoreScrollArea->horizontalScrollBar()->setValue(scrollValue);
-        }
+    // Shift+Left / Shift+Right: step selection to previous/next note
+    if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) &&
+        (event->modifiers() & Qt::ShiftModifier)) {
+        scoreCanvas->selectNextNote(event->key() == Qt::Key_Right ? 1 : -1);
         event->accept();
         return;
     }
@@ -1759,6 +1885,22 @@ void ScoreCanvasWindow::onTransformModeChanged(bool active)
     transformModeBtn->setChecked(active);
 }
 
+void ScoreCanvasWindow::onRenderModeToggled()
+{
+    m_autoRender = renderModeToggle->isChecked();
+    renderModeToggle->setText(m_autoRender ? "Auto" : "Manual");
+    qDebug() << "ScoreCanvasWindow: Render mode set to" << (m_autoRender ? "Auto" : "Manual");
+}
+
+void ScoreCanvasWindow::onMidiTestClicked()
+{
+    // Phase 1 hello-note: fire one hardcoded note at the configured MIDI
+    // output device — proves the wire from Kala to external hardware works.
+    const QString error = MidiOutput::sendTestNote();
+    if (!error.isEmpty())
+        QMessageBox::warning(this, "MIDI test", error);
+}
+
 void ScoreCanvasWindow::onTimeModeToggled()
 {
     // Toggle between Absolute and Musical time modes
@@ -1783,107 +1925,147 @@ void ScoreCanvasWindow::onTimeModeToggled()
     scoreCanvas->setMusicalMode(currentTimeMode == MusicalTime, currentTempo, currentTimeSigTop, currentTimeSigBottom);
 }
 
-void ScoreCanvasWindow::onTempoChanged(int bpm)
+void ScoreCanvasWindow::onTimeSignatureModeChanged(int index)
 {
-    // Get current timeline position
-    double nowTime = timeline->getNowMarker();
+    if (m_suppressTimeSigModeSwitch) return;
 
-    qDebug() << "ScoreCanvasWindow: Tempo changed to" << bpm << "BPM at time" << nowTime;
+    if (index == 0) {
+        // Switching to Kala — save Western cache, restore Kala cache
+        cachedWesternTempo = westernTempoSpin->value();
+        cachedWesternNum = westernNumSpin->value();
+        cachedWesternDen = westernDenSpin->value();
 
-    if (nowTime == 0.0) {
-        // At time 0, update the default tempo
-        scoreCanvas->setDefaultTempo(bpm);
-
-        // Also update composition settings for reference
-        compositionSettings.tempo = bpm;
-        compositionSettings.referenceTempo = bpm;
+        kalaPulsesSpin->setValue(cachedKalaPulses);
+        kalaDurationSpin->setValue(cachedKalaDurationMs);
+        timeSigStack->setCurrentIndex(0);
     } else {
-        // At other positions, add/update a tempo marker
-        // Get current settings at this time to preserve time signature and gradual flag
+        // Switching to Western — save Kala cache, restore Western cache
+        cachedKalaPulses = kalaPulsesSpin->value();
+        cachedKalaDurationMs = kalaDurationSpin->value();
+
+        westernTempoSpin->setValue(cachedWesternTempo);
+        westernNumSpin->setValue(cachedWesternNum);
+        westernDenSpin->setValue(cachedWesternDen);
+        timeSigStack->setCurrentIndex(1);
+    }
+
+    // Push to backend
+    onTimeSettingsChanged();
+}
+
+void ScoreCanvasWindow::onTimeSettingsChanged()
+{
+    if (m_suppressTimeSigModeSwitch) return;
+    if (!timeline) return;  // Not yet initialized during constructor
+
+    double nowTime = timeline->getNowMarker();
+    int newTempo, newTop, newBottom;
+
+    if (timeSignatureModeCombo->currentIndex() == 0) {
+        // Kala mode: tempo derived from pulse duration
+        newTop = kalaPulsesSpin->value();
+        newBottom = 0;
+        newTempo = static_cast<int>(60000.0 / kalaDurationSpin->value());
+        if (newTempo < 1) newTempo = 1;
+        if (newTempo > 300) newTempo = 300;
+
+        cachedKalaPulses = newTop;
+        cachedKalaDurationMs = kalaDurationSpin->value();
+    } else {
+        // Western mode
+        newTempo = westernTempoSpin->value();
+        newTop = westernNumSpin->value();
+        newBottom = westernDenSpin->value();
+
+        cachedWesternTempo = newTempo;
+        cachedWesternNum = newTop;
+        cachedWesternDen = newBottom;
+    }
+
+    qDebug() << "ScoreCanvasWindow: Time settings changed — tempo:" << newTempo
+             << "time sig:" << newTop << "/" << newBottom << "at time" << nowTime;
+
+    // Update the marker at the current position (or default at time 0)
+    if (nowTime == 0.0) {
+        scoreCanvas->setDefaultTempo(newTempo);
+        scoreCanvas->setDefaultTimeSignature(newTop, newBottom);
+        compositionSettings.tempo = newTempo;
+        compositionSettings.referenceTempo = newTempo;
+    } else {
         TempoTimeSignature tts = scoreCanvas->getTempoTimeSignatureAtTime(nowTime);
-        tts.bpm = bpm;
+        tts.bpm = newTempo;
+        tts.timeSigNumerator = newTop;
+        tts.timeSigDenominator = newBottom;
         scoreCanvas->addTempoChange(nowTime, tts);
     }
 
     // Update internal state
-    currentTempo = bpm;
+    currentTempo = newTempo;
+    currentTimeSigTop = newTop;
+    currentTimeSigBottom = newBottom;
+
+    // Update status bar
     statusTempoLabel->setText(QString("%1 BPM").arg(currentTempo));
+    if (currentTimeSigBottom == 0)
+        statusTimeSigLabel->setText(QString("%1 pulses").arg(currentTimeSigTop));
+    else
+        statusTimeSigLabel->setText(QString("%1/%2").arg(currentTimeSigTop).arg(currentTimeSigBottom));
 
     // Update timeline
     timeline->setTempo(currentTempo);
-
-    // If in musical mode, update bar line spacing
-    if (currentTimeMode == MusicalTime) {
-        scoreCanvas->setMusicalMode(true, currentTempo, currentTimeSigTop, currentTimeSigBottom);
-    }
-
-    // Refresh the canvas to show updated note positions
-    scoreCanvas->update();
-
-    emit compositionSettingsChanged();
-}
-
-void ScoreCanvasWindow::onTimeSignatureChanged()
-{
-    int newNum = timeSigNumerator->value();
-    int newDenom = timeSigDenominator->value();
-
-    // Get current timeline position
-    double nowTime = timeline->getNowMarker();
-
-    qDebug() << "ScoreCanvasWindow: Time signature changed to"
-             << newNum << "/" << newDenom << "at time" << nowTime;
-
-    if (nowTime == 0.0) {
-        // At time 0, update the default time signature
-        scoreCanvas->setDefaultTimeSignature(newNum, newDenom);
-    } else {
-        // At other positions, add/update a tempo marker
-        // Get current settings at this time to preserve tempo and gradual flag
-        TempoTimeSignature tts = scoreCanvas->getTempoTimeSignatureAtTime(nowTime);
-        tts.timeSigNumerator = newNum;
-        tts.timeSigDenominator = newDenom;
-        scoreCanvas->addTempoChange(nowTime, tts);
-    }
-
-    // Update internal state
-    currentTimeSigTop = newNum;
-    currentTimeSigBottom = newDenom;
-    statusTimeSigLabel->setText(QString("%1/%2").arg(currentTimeSigTop).arg(currentTimeSigBottom));
-
-    // Update timeline
     timeline->setTimeSignature(currentTimeSigTop, currentTimeSigBottom);
 
-    // If in musical mode, update bar line spacing
-    if (currentTimeMode == MusicalTime) {
+    // Update ScoreCanvas musical mode
+    if (currentTimeMode == MusicalTime)
         scoreCanvas->setMusicalMode(true, currentTempo, currentTimeSigTop, currentTimeSigBottom);
-    }
 
+    scoreCanvas->update();
     emit compositionSettingsChanged();
 }
 
 void ScoreCanvasWindow::onNowMarkerChanged(double timeMs)
 {
-    // Get tempo/time signature at the new timeline position
+    if (!scoreCanvas) return;
+
     TempoTimeSignature tts = scoreCanvas->getTempoTimeSignatureAtTime(timeMs);
 
-    // Block signals to prevent triggering onTempoChanged/onTimeSignatureChanged
-    tempoSpinBox->blockSignals(true);
-    timeSigNumerator->blockSignals(true);
-    timeSigDenominator->blockSignals(true);
+    m_suppressTimeSigModeSwitch = true;
 
-    // Update spinbox values
-    tempoSpinBox->setValue(static_cast<int>(tts.bpm));
-    timeSigNumerator->setValue(tts.timeSigNumerator);
-    timeSigDenominator->setValue(tts.timeSigDenominator);
+    // Block all spinbox signals
+    kalaPulsesSpin->blockSignals(true);
+    kalaDurationSpin->blockSignals(true);
+    westernTempoSpin->blockSignals(true);
+    westernNumSpin->blockSignals(true);
+    westernDenSpin->blockSignals(true);
+
+    int tempo = static_cast<int>(tts.bpm);
+
+    if (tts.timeSigDenominator == 0) {
+        // Kala mode
+        timeSignatureModeCombo->setCurrentIndex(0);
+        timeSigStack->setCurrentIndex(0);
+        kalaPulsesSpin->setValue(tts.timeSigNumerator);
+        kalaDurationSpin->setValue(static_cast<int>(60000.0 / tempo));
+    } else {
+        // Western mode
+        timeSignatureModeCombo->setCurrentIndex(1);
+        timeSigStack->setCurrentIndex(1);
+        westernTempoSpin->setValue(tempo);
+        westernNumSpin->setValue(tts.timeSigNumerator);
+        westernDenSpin->setValue(tts.timeSigDenominator);
+    }
 
     // Restore signals
-    tempoSpinBox->blockSignals(false);
-    timeSigNumerator->blockSignals(false);
-    timeSigDenominator->blockSignals(false);
+    kalaPulsesSpin->blockSignals(false);
+    kalaDurationSpin->blockSignals(false);
+    westernTempoSpin->blockSignals(false);
+    westernNumSpin->blockSignals(false);
+    westernDenSpin->blockSignals(false);
+
+    m_suppressTimeSigModeSwitch = false;
 
     // Update internal state
-    currentTempo = static_cast<int>(tts.bpm);
+    currentTempo = tempo;
     currentTimeSigTop = tts.timeSigNumerator;
     currentTimeSigBottom = tts.timeSigDenominator;
 }
@@ -1892,7 +2074,10 @@ void ScoreCanvasWindow::refreshToolbar()
 {
     onNowMarkerChanged(timeline->getNowMarker());
     statusTempoLabel->setText(QString("%1 BPM").arg(currentTempo));
-    statusTimeSigLabel->setText(QString("%1/%2").arg(currentTimeSigTop).arg(currentTimeSigBottom));
+    if (currentTimeSigBottom == 0)
+        statusTimeSigLabel->setText(QString("%1 pulses").arg(currentTimeSigTop));
+    else
+        statusTimeSigLabel->setText(QString("%1/%2").arg(currentTimeSigTop).arg(currentTimeSigBottom));
 }
 
 void ScoreCanvasWindow::scaleNoteTimes(double scaleFactor)
@@ -2031,6 +2216,7 @@ CompositionSettings ScoreCanvasWindow::getSettings() const
     s.referenceTempo = compositionSettings.referenceTempo;  // Preserve reference tempo
     s.timeSigTop = currentTimeSigTop;
     s.timeSigBottom = currentTimeSigBottom;
+    s.autoRender = m_autoRender;
     s.syncLengthFromMs();   // Calculate bars from duration
     return s;
 }
@@ -2038,16 +2224,40 @@ CompositionSettings ScoreCanvasWindow::getSettings() const
 void ScoreCanvasWindow::updateFromSettings(const CompositionSettings &settings)
 {
     // Block signals to prevent circular updates
-    tempoSpinBox->blockSignals(true);
-    timeSigNumerator->blockSignals(true);
-    timeSigDenominator->blockSignals(true);
+    m_suppressTimeSigModeSwitch = true;
+    kalaPulsesSpin->blockSignals(true);
+    kalaDurationSpin->blockSignals(true);
+    westernTempoSpin->blockSignals(true);
+    westernNumSpin->blockSignals(true);
+    westernDenSpin->blockSignals(true);
     timeModeToggle->blockSignals(true);
 
-    // Update toolbar controls
-    tempoSpinBox->setValue(settings.tempo);
-    timeSigNumerator->setValue(settings.timeSigTop);
-    timeSigDenominator->setValue(settings.timeSigBottom);
+    // Update toolbar controls based on time signature mode
+    int tempo = settings.tempo;
+    if (settings.timeSigBottom == 0) {
+        // Kala mode
+        timeSignatureModeCombo->setCurrentIndex(0);
+        timeSigStack->setCurrentIndex(0);
+        kalaPulsesSpin->setValue(settings.timeSigTop);
+        int pulseMs = static_cast<int>(60000.0 / tempo);
+        if (pulseMs < 1) pulseMs = 1;
+        if (pulseMs > 60000) pulseMs = 60000;
+        kalaDurationSpin->setValue(pulseMs);
+        cachedKalaPulses = settings.timeSigTop;
+        cachedKalaDurationMs = pulseMs;
+    } else {
+        // Western mode
+        timeSignatureModeCombo->setCurrentIndex(1);
+        timeSigStack->setCurrentIndex(1);
+        westernTempoSpin->setValue(tempo);
+        westernNumSpin->setValue(settings.timeSigTop);
+        westernDenSpin->setValue(settings.timeSigBottom);
+        cachedWesternTempo = tempo;
+        cachedWesternNum = settings.timeSigTop;
+        cachedWesternDen = settings.timeSigBottom;
+    }
 
+    // Time mode toggle
     if (settings.timeMode == CompositionSettings::Musical) {
         timeModeToggle->setChecked(true);
         timeModeToggle->setText("Musical");
@@ -2061,18 +2271,20 @@ void ScoreCanvasWindow::updateFromSettings(const CompositionSettings &settings)
     }
 
     // Restore signal processing
-    tempoSpinBox->blockSignals(false);
-    timeSigNumerator->blockSignals(false);
-    timeSigDenominator->blockSignals(false);
+    kalaPulsesSpin->blockSignals(false);
+    kalaDurationSpin->blockSignals(false);
+    westernTempoSpin->blockSignals(false);
+    westernNumSpin->blockSignals(false);
+    westernDenSpin->blockSignals(false);
     timeModeToggle->blockSignals(false);
+    m_suppressTimeSigModeSwitch = false;
 
     // Update internal state
     currentTempo = settings.tempo;
     currentTimeSigTop = settings.timeSigTop;
     currentTimeSigBottom = settings.timeSigBottom;
 
-    // IMPORTANT: Update compositionSettings BEFORE calling onTempoChanged
-    // This prevents unwanted scaling when loading saved settings
+    // IMPORTANT: Update compositionSettings BEFORE calling anything that might scale
     compositionName = settings.compositionName;
     compositionSettings = settings;
 
@@ -2080,22 +2292,18 @@ void ScoreCanvasWindow::updateFromSettings(const CompositionSettings &settings)
     if (m_renderDebounceTimer)
         m_renderDebounceTimer->setInterval(settings.preRenderDelayMs);
 
-    // Update timeline and scoreCanvas directly (don't call onTimeModeToggled - it's a toggle!)
+    // Update timeline and scoreCanvas directly
     timeline->setTimeMode(currentTimeMode == MusicalTime ? Timeline::Musical : Timeline::Absolute);
     timeline->setTempo(currentTempo);
     timeline->setTimeSignature(currentTimeSigTop, currentTimeSigBottom);
-    // drawBarLines uses defaultTempo/defaultTimeSigNum/Denom (via getTempoTimeSignatureAtTime);
-    // setMusicalMode only stores unused mirror fields, so the defaults must be set explicitly
-    // or bar lines stay at 120/4/4 until the user edits tempo/timesig.
     scoreCanvas->setDefaultTempo(currentTempo);
     scoreCanvas->setDefaultTimeSignature(currentTimeSigTop, currentTimeSigBottom);
     scoreCanvas->setMusicalMode(currentTimeMode == MusicalTime, currentTempo, currentTimeSigTop, currentTimeSigBottom);
 
-    // Note: We don't call onTempoChanged here because:
-    // 1. compositionSettings is already set with the correct referenceTempo
-    // 2. Calling onTempoChanged would compare referenceTempo to tempo (same values) and skip scaling
-    // 3. Timeline and scoreCanvas are already updated above
-    onTimeSignatureChanged();
+    // Restore render mode toggle
+    m_autoRender = settings.autoRender;
+    renderModeToggle->setChecked(m_autoRender);
+    renderModeToggle->setText(m_autoRender ? "Auto" : "Manual");
 
     // Update canvas width based on composition length
     int canvasWidth = static_cast<int>(currentPixelsPerSecond * (settings.lengthMs / 1000.0));
@@ -2104,7 +2312,10 @@ void ScoreCanvasWindow::updateFromSettings(const CompositionSettings &settings)
 
     // Update status bar display
     statusTempoLabel->setText(QString("%1 BPM").arg(settings.tempo));
-    statusTimeSigLabel->setText(QString("%1/%2").arg(settings.timeSigTop).arg(settings.timeSigBottom));
+    if (settings.timeSigBottom == 0)
+        statusTimeSigLabel->setText(QString("%1 pulses").arg(settings.timeSigTop));
+    else
+        statusTimeSigLabel->setText(QString("%1/%2").arg(settings.timeSigTop).arg(settings.timeSigBottom));
 
     qDebug() << "ScoreCanvasWindow: Canvas resized to" << canvasWidth << "pixels for"
              << settings.lengthMs << "ms composition (" << (settings.lengthMs / 60000.0) << "minutes)";
@@ -2408,4 +2619,11 @@ void ScoreCanvasWindow::updateFrequencyLabels()
         labelLines.append(fl);
     }
     frequencyLabels->setScaleLines(labelLines);
+}
+
+void ScoreCanvasWindow::closeEvent(QCloseEvent *event)
+{
+    QSettings settings;
+    settings.setValue("windows/scoreCanvas/geometry", saveGeometry());
+    QMainWindow::closeEvent(event);
 }

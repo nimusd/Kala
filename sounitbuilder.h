@@ -58,6 +58,7 @@ public:
 protected:
     bool event(QEvent *event) override;  // Override to catch Tab key before focus navigation
     void keyPressEvent(QKeyEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 
 private:
@@ -125,9 +126,15 @@ public slots:
     void rebuildGraph(int trackIndex = 0, bool rebuildTrackGraph = true);  // Rebuild audio graph from canvas for specific track
     void setCurrentEditingTrack(int trackIndex);  // Set which track is being edited
     void setSuppressInvalidGraphWarning(bool suppress) { m_suppressInvalidGraphWarning = suppress; }
+    void setEditingVariation(bool editing) { m_editingVariation = editing; }
+    bool isEditingVariation() const { return m_editingVariation; }
 
 private:
     void startPlayback();
+    // VL70-m rows: keep the canvas expressive-curve names in sync with the
+    // container - only active rows whose ports have NO incoming modifier
+    // connection (or whose curve an Envelope Engine still reads) stay listed.
+    void syncVl70mCurveNames();
 
 signals:
     void playbackStarted();
@@ -157,6 +164,7 @@ private:
     bool m_noteModePlaying = false;            // True while note-mode single-note playback is active
 
     bool m_suppressInvalidGraphWarning = false;
+    bool m_editingVariation = false;
 
     // Note mode methods
     void enterNoteMode();

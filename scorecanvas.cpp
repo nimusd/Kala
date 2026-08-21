@@ -1022,7 +1022,7 @@ void ScoreCanvas::setMusicalMode(bool enabled, int tempo, int timeSigTop, int ti
 
 void ScoreCanvas::setDefaultTempo(double bpm)
 {
-    if (bpm >= 20.0 && bpm <= 300.0) {
+    if (bpm >= 1.0 && bpm <= 300.0) {
         defaultTempo = bpm;
         qDebug() << "ScoreCanvas: Default tempo set to" << bpm << "BPM";
         emit tempoSettingsChanged();
@@ -1184,15 +1184,11 @@ void ScoreCanvas::drawBarLines(QPainter &painter)
     // Helper to calculate bar/beat durations for a given tempo/timesig
     auto calcDurations = [](double tempo, int timeSigTop, int timeSigBottom,
                            double &barDurationMs, double &beatDurationMs) {
-        if (timeSigBottom == 0) {
-            // Simple mode: beat = 60000/tempo
-            beatDurationMs = 60000.0 / tempo;
-            barDurationMs = beatDurationMs * timeSigTop;
-        } else {
-            // Scaled mode: bar = (60000/tempo) * (top/bottom)
-            barDurationMs = (60000.0 / tempo) * (static_cast<double>(timeSigTop) / timeSigBottom);
-            beatDurationMs = barDurationMs / timeSigTop;
-        }
+        Q_UNUSED(timeSigBottom);
+        // Bar duration = beat duration × beats per bar.
+        // Denominator is informational for notation/display and does not scale duration.
+        beatDurationMs = 60000.0 / tempo;
+        barDurationMs = beatDurationMs * timeSigTop;
     };
 
     // For each tempo region, draw beat and bar lines
@@ -2940,6 +2936,41 @@ void ScoreCanvas::deselectAll()
     update();
 }
 
+void ScoreCanvas::selectNextNote(int direction)
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (notes.isEmpty()) return;
+
+    double refTime;
+    if (direction > 0) {
+        refTime = -1e9;
+        for (int si : selectedNoteIndices) {
+            if (si >= 0 && si < notes.size())
+                refTime = qMax(refTime, notes[si].getStartTime());
+        }
+        int best = -1;
+        double bestTime = 1e9;
+        for (int i = 0; i < notes.size(); ++i) {
+            double t = notes[i].getStartTime();
+            if (t > refTime && t < bestTime) { bestTime = t; best = i; }
+        }
+        if (best >= 0) { selectNote(best, false); update(); }
+    } else {
+        refTime = 1e9;
+        for (int si : selectedNoteIndices) {
+            if (si >= 0 && si < notes.size())
+                refTime = qMin(refTime, notes[si].getStartTime());
+        }
+        int best = -1;
+        double bestTime = -1e9;
+        for (int i = 0; i < notes.size(); ++i) {
+            double t = notes[i].getStartTime();
+            if (t < refTime && t > bestTime) { bestTime = t; best = i; }
+        }
+        if (best >= 0) { selectNote(best, false); update(); }
+    }
+}
+
 bool ScoreCanvas::isNoteSelected(int index) const
 {
     return selectedNoteIndices.contains(index);
@@ -4422,6 +4453,24 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
         }
     }
 
+    // Shift+Up / Shift+Down: transpose selected notes by scale degrees
+    if ((event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) &&
+        (event->modifiers() & Qt::ShiftModifier) &&
+        !selectedNoteIndices.isEmpty()) {
+        int steps = (event->key() == Qt::Key_Up) ? 1 : -1;
+        transposeSelectedNotesByDegrees(steps);
+        event->accept();
+        return;
+    }
+
+    // Shift+Left / Shift+Right: navigate to previous/next note
+    if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) &&
+        (event->modifiers() & Qt::ShiftModifier)) {
+        selectNextNote((event->key() == Qt::Key_Right) ? 1 : -1);
+        event->accept();
+        return;
+    }
+
     // Delete key removes selected notes
     if (event->key() == Qt::Key_Delete && !selectedNoteIndices.isEmpty()) {
         performDelete();
@@ -4689,6 +4738,74 @@ void ScoreCanvas::performRetrograde()
     selectNotes(cmd->getInsertedIndices());
     update();
     qDebug() << "Retrograde:" << selectedNotes.size() << "notes at time" << pasteTargetTime;
+}
+
+void ScoreCanvas::transposeSelectedNotesByDegrees(int steps)
+{
+    if (selectedNoteIndices.isEmpty() || steps == 0)
+        return;
+
+    const QVector<Note> &notes = phrase.getNotes();
+    QUndoCommand *macro = new QUndoCommand(
+        steps > 0 ? "Transpose Up" : "Transpose Down");
+    int count = 0;
+
+    for (int idx : selectedNoteIndices) {
+        if (idx < 0 || idx >= notes.size()) continue;
+        const Note &n = notes[idx];
+
+        const Scale scale    = getScaleAtTime(n.getStartTime());
+        const double baseFreq = getBaseFrequencyAtTime(n.getStartTime());
+        const int degCount = scale.getDegreeCount();
+        if (degCount <= 0 || baseFreq <= 0.0 || n.getPitchHz() <= 0.0) continue;
+
+        // Find nearest (octave, scale-degree) by minimizing log2 distance
+        const double logPitch = std::log2(n.getPitchHz() / baseFreq);
+        double minDist = 1e9;
+        int bestDeg = 0, bestOct = 0;
+        for (int oct = -5; oct <= 8; ++oct) {
+            for (int d = 0; d < degCount; ++d) {
+                double ratio = scale.getRatio(d);
+                if (ratio <= 0.0) continue;
+                double logRatio = std::log2(ratio) + oct;
+                double dist = std::abs(logPitch - logRatio);
+                if (dist < minDist) { minDist = dist; bestDeg = d; bestOct = oct; }
+            }
+        }
+
+        // Walk N steps from (bestDeg, bestOct)
+        int total = bestDeg + steps;
+        int newOct = bestOct + total / degCount;
+        int newDeg = total % degCount;
+        if (newDeg < 0) { newDeg += degCount; newOct--; }
+        double newRatio = scale.getRatio(newDeg);
+        if (newRatio <= 0.0) continue;
+        double newPitch = baseFreq * newRatio * std::pow(2.0, newOct);
+
+        // Scale pitch curve Hz values if present
+        Curve newPitchCurve = n.getPitchCurve();
+        if (n.hasPitchCurve()) {
+            newPitchCurve.clearPoints();
+            const double factor = newPitch / n.getPitchHz();
+            for (const Curve::Point &pt : n.getPitchCurve().getPoints())
+                newPitchCurve.addPoint(pt.time, pt.value * factor, pt.pressure);
+        }
+
+        new MoveNoteCommand(&phrase, idx,
+                            n.getStartTime(), n.getPitchHz(),
+                            n.getStartTime(), newPitch,
+                            n.getPitchCurve(), newPitchCurve,
+                            n.hasPitchCurve(), this, macro);
+        ++count;
+    }
+
+    if (count > 0) {
+        undoStack->push(macro);
+        update();
+        qDebug() << "Transposed" << count << "note(s) by" << steps << "scale degree(s)";
+    } else {
+        delete macro;
+    }
 }
 
 // ============================================================================

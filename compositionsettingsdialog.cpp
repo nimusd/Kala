@@ -58,7 +58,7 @@ void CompositionSettingsDialog::setupUI()
 
     // Tempo
     tempoSpinBox = new QSpinBox(this);
-    tempoSpinBox->setRange(20, 300);
+    tempoSpinBox->setRange(1, 300);
     tempoSpinBox->setSuffix(" BPM");
     tempoSpinBox->setValue(settings.tempo);
     formLayout->addRow("Tempo:", tempoSpinBox);

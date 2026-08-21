@@ -13,6 +13,11 @@ set(RTAUDIO_API_ASIO OFF CACHE BOOL "Build ASIO API" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
 FetchContent_MakeAvailable(rtaudio)
 
+# RtMidi (vendored in third_party/rtmidi) — MIDI output for external
+# hardware (VL70-m). Compiles directly into Kala; its own CMake project is
+# not used because it defines an "uninstall" target that collides with
+# RtAudio's.
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Concurrent Network)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
@@ -84,6 +89,8 @@ qt_add_executable(Kala
     irconvolution.h irconvolution.cpp
     recordermodel.h recordermodel.cpp
     flutemodel.h flutemodel.cpp
+    guitarmodel.h guitarmodel.cpp
+    oudmodel.h oudmodel.cpp
     pianomodel.h pianomodel.cpp
     bassmodel.h bassmodel.cpp
     tibetanbowlmodel.h tibetanbowlmodel.cpp
@@ -120,7 +127,11 @@ qt_add_executable(Kala
     kalaagent.h kalaagent.cpp
     companionpanel.h companionpanel.cpp
     animapalette.h animapalette.cpp
-
+    midioutput.h midioutput.cpp
+    midistream.h midistream.cpp
+    vl70mrows.h
+    bandwidthtestdialog.h bandwidthtestdialog.cpp
+    third_party/rtmidi/RtMidi.cpp
 )
 
 # FFTW3 (single-precision float build, pre-built DLL for Windows/MinGW)
@@ -144,6 +155,13 @@ target_link_libraries(Kala
         Qt::Network
         rtaudio
 )
+
+# RtMidi: include path, Windows MM backend, and winmm system library
+target_include_directories(Kala PRIVATE "${CMAKE_SOURCE_DIR}/third_party/rtmidi")
+if(WIN32)
+    target_compile_definitions(Kala PRIVATE __WINDOWS_MM__)
+    target_link_libraries(Kala PRIVATE winmm)
+endif()
 target_link_libraries(Kala PRIVATE Qt6::Widgets)
 target_link_libraries(Kala PRIVATE Qt6::Widgets)
 target_link_libraries(Kala PRIVATE Qt6::Widgets)

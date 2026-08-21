@@ -2,12 +2,27 @@
 #include "track.h"
 #include "vibrato.h"
 #include "note.h"
+#include "midioutput.h"
+#include "midistream.h"
+#include "vl70mrows.h"
 #ifdef _WIN32
 #include "audiodevicenotifier.h"
 #endif
 #include <iostream>
 #include <cmath>
 #include <random>
+#include <algorithm>
+#include <QElapsedTimer>
+
+namespace {
+
+// How long after the transport end the callback waits before tearing down the
+// MIDI stream session. The stream plays on its own clock, so this grace
+// guarantees its final note-offs and end-resets were clocked out before the
+// stop resets arrive. The single tuning knob if a release tail ever gets cut.
+constexpr double kMidiStreamEndGraceMs = 100.0;
+
+} // namespace
 
 AudioEngine::AudioEngine()
     : QObject(nullptr)
@@ -42,6 +57,7 @@ AudioEngine::~AudioEngine()
     stopDeviceNotifier();
     shutdown();
     clearAllGraphs();
+    closeMidiOut();
 }
 
 bool AudioEngine::initialize(unsigned int sampleRate, unsigned int bufferFrames)
@@ -143,7 +159,16 @@ void AudioEngine::stopNote()
     gateOpen = false;
     amplitude = 0.0;  // Immediate cutoff for stop button
     useRenderBuffer.store(false);  // Stop segment-based buffer playback
-    useTrackPlayback.store(false); // Stop track-based playback
+    // Track-based playback (VL70-m MIDI): release the port too - stopNote()
+    // alone leaves the stream session playing and All Notes Off never goes
+    // out, so the module sustains the last note forever. stopTrackPlayback()
+    // locks the playback mutex, stops the stream session (shutdown messages +
+    // close) and clears the event list.
+    if (useTrackPlayback.load()) {
+        stopTrackPlayback();
+    } else {
+        useTrackPlayback.store(false); // Stop track-based playback
+    }
 }
 
 bool AudioEngine::buildGraph(Canvas *canvas, int trackIndex)
@@ -237,13 +262,31 @@ int AudioEngine::audioCallback(void *outputBuffer, void *inputBuffer,
         double currentTimeMs = engine->trackPlaybackTimeMs.load();
         double endTimeMs = engine->trackPlaybackEndMs.load();
 
+        // MIDI dispatch lives in the WinMM stream session (started in
+        // playFromTracks) - the callback never touches MIDI, only the
+        // transport. That keeps the audio buffer free of the note-start
+        // message bursts the old callback dispatch suffered from.
+
         // Check if we've reached the end
         if (currentTimeMs >= endTimeMs) {
-            // Playback complete - fill with silence and stop
+            // Natural end: stop mixing. The MIDI stream runs on its own clock
+            // (started at the same instant as the transport), so wait out a
+            // grace margin before tearing it down - guarantees its final
+            // note-offs and end-resets were clocked out before the stop
+            // resets arrive.
             for (unsigned int i = 0; i < nFrames * 2; i++) {
                 buffer[i] = 0.0f;
             }
-            engine->useTrackPlayback.store(false);
+            if (currentTimeMs >= endTimeMs + kMidiStreamEndGraceMs &&
+                !engine->m_endCloseSignaled.exchange(true)) {
+                engine->useTrackPlayback.store(false);
+                // Queued to the main thread (KalaMain connects this to
+                // stopTrackPlayback), so all WinMM teardown happens off the
+                // audio thread. The emit under trackPlaybackMutex is safe -
+                // the slot runs after the callback released the lock.
+                emit engine->trackPlaybackEnded();
+            }
+            engine->trackPlaybackTimeMs.store(currentTimeMs + bufferDurationMs);
             return 0;
         }
 
@@ -903,6 +946,10 @@ void AudioEngine::renderNotes(const QVector<Note>& notes, int maxNotes)
         size_t silenceRun = 0;
         bool tailFinished = false;
 
+        // Vibrato phase accumulator — needed for time-varying rate (rate envelope)
+        double vibratoPhaseAccum = 0.0;
+        double organicPhaseAccum = 0.0;
+
         // Render this note's samples into segments
         // IMPORTANT: We must process ALL samples to maintain envelope/synthesis state continuity,
         // but we only WRITE to dirty segments. This prevents glitches when notes span multiple segments.
@@ -944,15 +991,23 @@ void AudioEngine::renderNotes(const QVector<Note>& notes, int maxNotes)
                     }
                     double vibratoProgress = (noteProgress - vibrato.onset) / (1.0 - vibrato.onset);
                     double envelopeIntensity = vibrato.envelopeAt(vibratoProgress);
-                    double noteTimeSeconds = (note.getDuration() / 1000.0) * noteProgress;
-                    double vibratoPhase = noteTimeSeconds * vibrato.rate * 2.0 * M_PI;
+
+                    // Time-varying rate via rate envelope (0.0 = 0 Hz, 1.0 = full rate)
+                    double effectiveRate = vibrato.rate * vibrato.rateAt(vibratoProgress);
+
+                    // Advance phase accumulators (per-sample integration)
+                    double phaseInc = effectiveRate * 2.0 * M_PI / static_cast<double>(sampleRate);
+                    vibratoPhaseAccum += phaseInc;
 
                     double organicMod = 1.0;
                     if (vibrato.regularity > 0.0) {
-                        double slowPhase = noteTimeSeconds * vibrato.rate * 0.23 * 2.0 * M_PI;
-                        organicMod = 1.0 + vibrato.regularity * 0.3 * std::sin(slowPhase);
-                        vibratoPhase += vibrato.regularity * 0.5 * std::sin(slowPhase * 0.7);
+                        double slowPhaseInc = effectiveRate * 0.23 * 2.0 * M_PI / static_cast<double>(sampleRate);
+                        organicPhaseAccum += slowPhaseInc;
+                        organicMod = 1.0 + vibrato.regularity * 0.3 * std::sin(organicPhaseAccum);
                     }
+
+                    double vibratoPhase = vibratoPhaseAccum
+                                        + vibrato.regularity * 0.5 * std::sin(organicPhaseAccum * 0.7);
 
                     double lfoValue = std::sin(vibratoPhase) * organicMod;
                     currentPitch *= 1.0 + (lfoValue * vibrato.pitchDepth * envelopeIntensity);
@@ -1175,12 +1230,7 @@ void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs
     // Stop any existing playback
     useRenderBuffer.store(false);
     useTrackPlayback.store(false);
-
-    // Lock and update track list
-    {
-        std::lock_guard<std::mutex> lock(trackPlaybackMutex);
-        playbackTracks = tracks;
-    }
+    m_endCloseSignaled.store(false);
 
     // Calculate end time based on rendered note buffers (includes reverb/decay tails)
     double endTimeMs = 0.0;
@@ -1190,6 +1240,54 @@ void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs
         double trackEnd = track->getRenderedEndTimeMs();
         if (trackEnd > endTimeMs) {
             endTimeMs = trackEnd;
+        }
+    }
+
+    // Lock and update track list
+    {
+        std::lock_guard<std::mutex> lock(trackPlaybackMutex);
+        playbackTracks = tracks;
+
+        // Release the previous playback's MIDI port and event list first -
+        // closeMidiOut() clears m_midiEvents, so it must run BEFORE baking.
+        closeMidiOut();
+
+        // Bake MIDI events for notes routed to VL70-m graphs (Phase 3:
+        // continuous breath/bend streams, per-note RPN bend range).
+        // Includes the MIDI tail in the playback length: a MIDI-only track has no
+        // audio renders, so getRenderedEndTimeMs() alone would be 0.
+        double midiEndMs = 0.0;
+        bakeMidiEvents(tracks, startTimeMs, midiEndMs);
+        if (midiEndMs > endTimeMs) {
+            endTimeMs = midiEndMs;
+        }
+
+        // Serialize the bake into WinMM MIDIEVENT buffers and hand them to a
+        // stream session (midiStreamOut). Keeps the old "no events -> no
+        // port" and error-warning-then-continue behavior. The session starts
+        // here, microseconds before useTrackPlayback=true - stream clock and
+        // transport start effectively together.
+        if (!m_midiEvents.empty()) {
+            QString error;
+            const int devIdx = MidiOutput::configuredDeviceIndex(&error);
+            if (devIdx < 0) {
+                qWarning() << "AudioEngine: MIDI output unavailable:" << error;
+            } else {
+                const auto buffers = buildMidiEventStream(m_midiEvents, startTimeMs);
+                size_t totalBytes = 0;
+                for (const auto &buf : buffers)
+                    totalBytes += buf.size();
+                m_midiStream = new MidiStreamPlayer();
+                if (!m_midiStream->start(buffers, devIdx, buildMidiStopMessages(), &error)) {
+                    qWarning() << "AudioEngine: MIDI stream start failed:" << error;
+                    delete m_midiStream;
+                    m_midiStream = nullptr;
+                } else {
+                    qDebug() << "AudioEngine: MIDI stream started (" << m_midiEvents.size()
+                             << "events," << totalBytes << "bytes in" << buffers.size()
+                             << "buffer(s), device" << devIdx << ")";
+                }
+            }
         }
     }
 
@@ -1211,12 +1309,496 @@ void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs
               << (endTimeMs - startTimeMs) / 1000.0 << " seconds)" << std::endl;
 }
 
+void AudioEngine::bakeMidiEvents(const QList<Track*> &tracks, double startTimeMs,
+                                 double &outEndMs)
+{
+    m_midiEvents.clear();
+    outEndMs = 0.0;
+    m_midiResetRows.clear();
+    m_midiChannelsUsed.clear();
+
+    // Note events bake into a local list first so the play-start neutrals
+    // can be inserted ahead of them unconditionally (see below).
+    std::vector<MidiEvent> baked;
+    // Bake-wide last-sent value per (channel, row). Missing entries read as
+    // the row's neutral via QHash::value's default, so end-resets only fire
+    // when a curve actually moved the parameter away from neutral.
+    QHash<QString, int> lastSentBake;
+    // Phase 6: a connection to the "pitch" port is ignored (pitch stays
+    // note-curve + vibrato driven) - warn once per bake, not per note.
+    bool warnedPitchPort = false;
+
+    for (Track *track : tracks) {
+        if (!track || track->isMuted()) continue;
+
+        double prevNoteEnd = -1.0;
+        int prevChannel = -1;
+        for (const Note &note : track->getNotes()) {
+            // No cold-start chase: notes already past at play start are skipped.
+            if (note.getStartTime() < startTimeMs) continue;
+            if (note.getDuration() <= 0.0) continue;
+
+            SounitGraph *graph = track->getGraphForVariation(note.getVariationIndex());
+            if (!graph || !graph->hasMidiOut()) continue;
+            Container *mc = graph->getMidiContainer();
+            if (!mc) continue;
+
+            const int channel = qBound(1, static_cast<int>(mc->getParameter("midiChannel", 1.0)), 16);
+            if (!m_midiChannelsUsed.contains(channel)) m_midiChannelsUsed.append(channel);
+            // Container's requested bend range (per-note RPN below may widen it
+            // to cover the note's actual pitch excursion).
+            const double containerRange = qBound(0.0, mc->getParameter("pitchBendRange", 2.0), 24.0);
+            // Resample interval for the cheap tier (volume CC7 + pitch bend).
+            const double updateMs = qBound(1.0, mc->getParameter("midiUpdateIntervalMs", 10.0), 100.0);
+
+            // Rows architecture: collect this container's active non-volume
+            // rows into the bake-wide reset union (play-start neutrals +
+            // closeMidiOut), deduped on the message target.
+            auto pushResetRow = [this, mc](const Vl70mRows::Row &r) {
+                MidiResetRow rr;
+                rr.neutral = Vl70mRows::neutral(mc, r);
+                if (r.kind == Vl70mRows::Kind::Cc) {
+                    rr.kind = 0;
+                    rr.cc = Vl70mRows::ccNum(mc, r);
+                    for (const MidiResetRow &e : m_midiResetRows)
+                        if (e.kind == 0 && e.cc == rr.cc) return;
+                } else if (r.kind == Vl70mRows::Kind::Nrpn) {
+                    rr.kind = 1;
+                    rr.msb = r.nrpnMsb;
+                    rr.lsb = r.nrpnLsb;
+                    for (const MidiResetRow &e : m_midiResetRows)
+                        if (e.kind == 1 && e.msb == rr.msb && e.lsb == rr.lsb) return;
+                } else {
+                    return;  // volume never resets
+                }
+                m_midiResetRows.append(rr);
+            };
+            for (const Vl70mRows::Row &r : Vl70mRows::catalog())
+                if (Vl70mRows::isActive(mc, r))
+                    pushResetRow(r);
+
+            // Authoring conflict: overlapping MIDI notes on the same channel.
+            // The VL70-m is monophonic - flag rather than silently resolve.
+            if (channel == prevChannel && note.getStartTime() < prevNoteEnd) {
+                qWarning() << "AudioEngine: overlapping MIDI notes on channel" << channel
+                           << "in track" << track->getName()
+                           << "- VL70-m is monophonic (last note-on wins)";
+            }
+            prevNoteEnd = note.getStartTime() + note.getDuration();
+            prevChannel = channel;
+
+            const double startMs = note.getStartTime();
+            const double endMs = note.getStartTime() + note.getDuration();
+            const double durationMs = note.getDuration();
+
+            // The note number is chosen ONCE from the start pitch and never
+            // changes mid-note: semitone crossings during a glide ride the
+            // bend wheel instead of re-triggering the envelope.
+            const double startPitch = note.getPitchAt(0.0);
+            if (!(startPitch > 0.0)) {
+                qWarning() << "AudioEngine: note" << note.getId()
+                           << "has non-positive start pitch" << startPitch << "Hz - skipping MIDI bake";
+                continue;
+            }
+            const double noteNumSemis = std::round(69.0 + 12.0 * std::log2(startPitch / 440.0));
+            const int noteNum = qBound(0, static_cast<int>(noteNumSemis), 127);
+
+            // Tick grid: k-count interior ticks strictly before endMs (avoids
+            // FP drift and a duplicate tick when the duration is an exact
+            // multiple of the interval), plus one final tick exactly at endMs
+            // so the curve endpoints land. dt is the elapsed time since the
+            // previous tick - the first interior tick advances one full
+            // interval, like sample 0 of the audio renderer.
+            struct BakeTick {
+                double timeMs;
+                double dtSec;
+                double progress;
+            };
+            // Phase 5: the same grid pattern serves all three tiers (cheap
+            // breath/bend, element CCs, part NRPNs), each at its own interval.
+            auto buildTicks = [&](double intervalMs) {
+                const int interiorCount = static_cast<int>(std::ceil(durationMs / intervalMs - 1e-9));
+                QVector<BakeTick> out;
+                out.reserve(interiorCount + 1);
+                double prevTickMs = startMs - intervalMs;
+                for (int k = 0; k < interiorCount; ++k) {
+                    const double tMs = startMs + k * intervalMs;
+                    out.append({tMs, (tMs - prevTickMs) / 1000.0, (tMs - startMs) / durationMs});
+                    prevTickMs = tMs;
+                }
+                out.append({endMs, (endMs - prevTickMs) / 1000.0, 1.0});
+                return out;
+            };
+            const QVector<BakeTick> ticks = buildTicks(updateMs);
+
+            // Evaluate one tick: pitch + dynamics curves with vibrato applied
+            // (same helper as the audio renderer, so both paths produce the
+            // same continuous vibrato).
+            auto evaluateTick = [&note](double progress, double dtSec,
+                                        double &vibratoPhaseAccum, double &organicPhaseAccum,
+                                        double &pitch, double &dynamics) {
+                pitch = note.getPitchAt(progress);
+                dynamics = note.getDynamicsAt(progress);
+                applyVibrato(note.getVibrato(), progress, dtSec,
+                             pitch, dynamics, vibratoPhaseAccum, organicPhaseAccum);
+                // A hand-drawn curve could dip to zero or below (log2 UB).
+                if (!(pitch > 0.0)) pitch = 1.0;
+            };
+
+            // Pass A: measure the pitch excursion (semitones vs noteNum) over
+            // the exact grid Pass B emits, so the bend range can never clip
+            // mid-note - covers vibrato onset/regularity boost/custom
+            // envelopes and stepped quantized curves with no margin math.
+            double bendRange = containerRange;
+            {
+                double phaseA = 0.0, organicA = 0.0, maxAbs = 0.0;
+                for (const BakeTick &tick : ticks) {
+                    double pitch = 0.0, dynamics = 0.0;
+                    evaluateTick(tick.progress, tick.dtSec, phaseA, organicA, pitch, dynamics);
+                    const double semis = 69.0 + 12.0 * std::log2(pitch / 440.0);
+                    maxAbs = qMax(maxAbs, std::abs(semis - noteNumSemis));
+                }
+                if (maxAbs + 1e-6 > 24.0) {
+                    qWarning() << "AudioEngine: note" << note.getId()
+                               << "pitch excursion" << maxAbs
+                               << "semitones exceeds the VL70-m bend range (24 st) - bend will clip";
+                }
+                bendRange = qBound(0.0, std::ceil(qMax(containerRange, maxAbs + 1e-6)), 24.0);
+            }
+
+            const unsigned char st    = 0x90 | (channel - 1);
+            const unsigned char stOff = 0x80 | (channel - 1);
+            const unsigned char cc    = 0xB0 | (channel - 1);
+            const unsigned char eb    = 0xE0 | (channel - 1);
+
+            // RPN 0,0 (pitch bend sensitivity) = this note's measured range.
+            // Baked into the stream so it changes between notes, never during.
+            const unsigned char rangeByte = static_cast<unsigned char>(bendRange);
+            baked.push_back({startMs, {cc, 101, 0}});         // RPN MSB = 0
+            baked.push_back({startMs, {cc, 100, 0}});         // RPN LSB = 0
+            baked.push_back({startMs, {cc, 6, rangeByte}});   // data MSB = range semitones
+            baked.push_back({startMs, {cc, 38, 0}});          // data LSB = 0
+            baked.push_back({startMs, {cc, 101, 127}});       // RPN null
+            baked.push_back({startMs, {cc, 100, 127}});
+
+            // Rows architecture: generic emitter for the patch-assigned rows
+            // (element CCs, NRPN part offsets, breath/expression). Each
+            // active row with a curve on this note streams on its own grid;
+            // rows without a curve send nothing (play-start neutrals cover
+            // the resting state). Delta-skip per note with the first tick
+            // always emitted; a bake-wide last-sent per (channel, row) feeds
+            // the end-resets below. Emitted before Pass B so fresh values
+            // land before note-on.
+            auto emitRowValue = [&](const Vl70mRows::Row &row, int val, double timeMs) {
+                if (row.kind == Vl70mRows::Kind::Cc) {
+                    baked.push_back(MidiEvent{timeMs, MidiOutput::cc(channel, Vl70mRows::ccNum(mc, row), val)});
+                } else if (row.kind == Vl70mRows::Kind::Nrpn) {
+                    for (const auto &msg : MidiOutput::nrpn(channel, row.nrpnMsb, row.nrpnLsb, val))
+                        baked.push_back(MidiEvent{timeMs, msg});
+                }
+            };
+            QStringList streamedRows;
+            // Phase 6 precedence: connection wins. Rows with incoming
+            // Modifier connections stream the cloned graph's audio-rate walk
+            // below; unconnected active rows keep the named-curve path
+            // (byte-identical Phase 5 output). The pitch port stays
+            // note-curve + vibrato driven - a connection to it is ignored.
+            QVector<const Vl70mRows::Row*> walkedRows;
+            for (const Vl70mRows::Row &row : Vl70mRows::catalog()) {
+                if (row.kind == Vl70mRows::Kind::Volume) continue;
+                if (!Vl70mRows::isActive(mc, row)) continue;
+                if (graph->isMidiPortConnected(row.name))
+                    walkedRows.append(&row);
+            }
+            if (!warnedPitchPort && graph->isMidiPortConnected(QStringLiteral("pitch"))) {
+                warnedPitchPort = true;
+                qWarning() << "AudioEngine: connection to VL70-m 'pitch' port ignored -"
+                           << "pitch stays note-curve + vibrato driven";
+            }
+            for (const Vl70mRows::Row &row : Vl70mRows::catalog()) {
+                if (row.kind == Vl70mRows::Kind::Volume) continue;  // Pass B drives volume
+                if (!Vl70mRows::isActive(mc, row)) continue;
+                if (walkedRows.contains(&row)) continue;  // handled by the walk below
+                const int curveIdx = note.findExpressiveCurveIndexByName(row.name);
+                if (curveIdx < 0) continue;
+                const Curve &curve = note.getExpressiveCurve(curveIdx);
+                if (curve.isEmpty()) continue;
+                const QString key = QStringLiteral("ch%1.%2").arg(channel).arg(row.name);
+                const QVector<BakeTick> rowTicks = buildTicks(Vl70mRows::resolutionMs(mc, row));
+                int lastInNote = -1, rowMin = 127, rowMax = 0;
+                for (int i = 0; i < rowTicks.size(); ++i) {
+                    const double v = curve.valueAt(std::min(rowTicks[i].progress, 1.0));
+                    const int val = qBound(0, static_cast<int>(std::lround(qBound(0.0, v, 1.0) * 127.0)), 127);
+                    if (i == 0 || val != lastInNote) {
+                        emitRowValue(row, val, rowTicks[i].timeMs);
+                        lastInNote = val;
+                        lastSentBake[key] = val;
+                    }
+                    rowMin = qMin(rowMin, val);
+                    rowMax = qMax(rowMax, val);
+                }
+                streamedRows.append(QStringLiteral("%1(%2,%3-%4)").arg(row.name)
+                                        .arg(rowTicks.size()).arg(rowMin).arg(rowMax));
+            }
+
+            // Phase 6: ONE audio-rate walk over the note for all graph-driven
+            // rows. The clone + reset mirrors Track::renderNoteImpl
+            // (track.cpp:1441-1505), and the per-sample curve assembly mirrors
+            // it too, so baked MIDI matches internal rendering. Row grid ticks
+            // are sampling points in the walk (stateful modifiers advance
+            // exactly one step per call - see driftengine.cpp / physicssystem.cpp
+            // / lfo.cpp - so a coarse-grid evaluation would diverge).
+            if (!walkedRows.isEmpty()) {
+                SounitGraph *walkGraph = graph->clone();
+                walkGraph->reset(note.isLegato());
+
+                struct WalkRowState {
+                    const Vl70mRows::Row *row;
+                    QVector<BakeTick> ticks;
+                    int tickIdx = 0;
+                    int lastVal = -1;      // per-note delta-skip; first tick always emitted
+                    int rowMin = 127, rowMax = 0;
+                };
+                QVector<WalkRowState> walkStates;
+                walkStates.reserve(walkedRows.size());
+                for (const Vl70mRows::Row *row : walkedRows) {
+                    WalkRowState ws;
+                    ws.row = row;
+                    ws.ticks = buildTicks(Vl70mRows::resolutionMs(mc, *row));
+                    walkStates.append(ws);
+                }
+
+                auto emitWalked = [&](WalkRowState &ws, double timeMs) {
+                    const double v = walkGraph->getMidiPortValue(ws.row->name);
+                    const int val = qBound(0, static_cast<int>(std::lround(qBound(0.0, v, 1.0) * 127.0)), 127);
+                    if (ws.tickIdx == 0 || val != ws.lastVal) {
+                        emitRowValue(*ws.row, val, timeMs);
+                        ws.lastVal = val;
+                        lastSentBake[QStringLiteral("ch%1.%2").arg(channel).arg(ws.row->name)] = val;
+                    }
+                    ws.rowMin = qMin(ws.rowMin, val);
+                    ws.rowMax = qMax(ws.rowMax, val);
+                    ws.tickIdx++;
+                };
+
+                // Expressive-curve assembly, exactly as renderNoteImpl does.
+                const int walkSamples = qMax(1, static_cast<int>(std::lround(
+                    durationMs * static_cast<double>(sampleRate) / 1000.0)));
+                QStringList walkNames;
+                walkNames.append(QStringLiteral("Dynamics"));
+                QVector<const Curve*> walkCurves;
+                const int expressiveCount = note.getExpressiveCurveCount();
+                for (int ci = 1; ci < expressiveCount; ++ci) {
+                    walkNames.append(note.getExpressiveCurveName(ci));
+                    walkCurves.append(&note.getExpressiveCurve(ci));
+                }
+
+                QElapsedTimer walkTimer;
+                walkTimer.start();
+                double walkPhase = 0.0, walkOrganic = 0.0;
+                for (int i = 0; i < walkSamples; ++i) {
+                    const double progress = (walkSamples > 1)
+                        ? static_cast<double>(i) / static_cast<double>(walkSamples - 1) : 0.5;
+                    double pitch = note.getPitchAt(progress);
+                    double dynamics = note.getDynamicsAt(progress);
+                    applyVibrato(note.getVibrato(), progress, 1.0 / static_cast<double>(sampleRate),
+                                 pitch, dynamics, walkPhase, walkOrganic);
+                    if (!(pitch > 0.0)) pitch = 1.0;
+
+                    QVector<double> walkValues;
+                    walkValues.reserve(walkNames.size());
+                    walkValues.append(dynamics);  // index 0: dynamics (with vibrato applied)
+                    for (const Curve *c : walkCurves)
+                        walkValues.append((c && !c->isEmpty()) ? c->valueAt(std::min(progress, 1.0)) : 0.5);
+
+                    walkGraph->generateSample(pitch, progress, note.isLegato(), false,
+                                              dynamics, walkValues, walkNames);
+
+                    // Emit any row tick due at this walk time, using the
+                    // just-executed sample's port values.
+                    const double tMs = startMs + static_cast<double>(i) * 1000.0
+                                              / static_cast<double>(sampleRate);
+                    for (WalkRowState &ws : walkStates)
+                        while (ws.tickIdx < ws.ticks.size() && ws.ticks[ws.tickIdx].timeMs <= tMs + 1e-6)
+                            emitWalked(ws, ws.ticks[ws.tickIdx].timeMs);
+                }
+                // Flush ticks still due: the final endMs tick can lie up to
+                // ~1.5 sample periods past the last walk sample time
+                // (rounding of walkSamples). Values read are the state after
+                // the final progress=1.0 sample, matching the curve path's
+                // final tick at progress 1.0.
+                for (WalkRowState &ws : walkStates)
+                    while (ws.tickIdx < ws.ticks.size())
+                        emitWalked(ws, ws.ticks[ws.tickIdx].timeMs);
+
+                const qint64 walkElapsed = walkTimer.elapsed();
+                delete walkGraph;
+
+                for (const WalkRowState &ws : walkStates)
+                    streamedRows.append(QStringLiteral("%1[walk %2,%3-%4]").arg(ws.row->name)
+                                            .arg(ws.ticks.size()).arg(ws.rowMin).arg(ws.rowMax));
+                qDebug() << "AudioEngine: MIDI note" << note.getId() << "modifier walk:"
+                         << walkSamples << "samples in" << walkElapsed << "ms for"
+                         << walkedRows.size() << "row(s)";
+            }
+
+            // Pass B: emit. Order at identical timestamps (preserved by the
+            // stable_sort below): RPN, row streams, first-tick volume,
+            // first-tick bend, note-on. Interior duplicates are
+            // delta-skipped; the first tick always sends fresh volume +
+            // bend. Volume row off = no CC7 stream at all: loudness then
+            // comes from a breath/expression curve row or the module's own
+            // volume setting.
+            const bool volumeOn = Vl70mRows::isActive(mc, *Vl70mRows::find(QStringLiteral("volume")));
+            int lastBend = -1;
+            int lastVol = -1;
+            int volMin = 127, volMax = 0;
+            double phaseB = 0.0, organicB = 0.0;
+            for (int i = 0; i < ticks.size(); ++i) {
+                const BakeTick &tick = ticks[i];
+                double pitch = 0.0, dynamics = 0.0;
+                evaluateTick(tick.progress, tick.dtSec, phaseB, organicB, pitch, dynamics);
+
+                const double semis = 69.0 + 12.0 * std::log2(pitch / 440.0);
+                const double cents = (semis - noteNumSemis) * 100.0;
+                int bend = 8192;  // center
+                if (bendRange > 0.0) {
+                    bend = qBound(0, static_cast<int>(8192 + (cents / (bendRange * 100.0)) * 8192.0), 16383);
+                }
+                const bool isFirstTick = (i == 0);
+
+                // Dynamics -> volume CC7 (rows architecture, toggleable).
+                // No min clamp: 0 = silence is correct for volume (breath
+                // used to clamp at 1 so the note never died mid-stream).
+                if (volumeOn) {
+                    const int vol = qBound(0, static_cast<int>(std::round(dynamics * 127.0)), 127);
+                    volMin = qMin(volMin, vol);
+                    volMax = qMax(volMax, vol);
+                    // Volume before bend, matching Phase 2's note-start order.
+                    if (isFirstTick || vol != lastVol) {
+                        baked.push_back({tick.timeMs, {cc, 7, static_cast<unsigned char>(vol)}});
+                        lastVol = vol;
+                    }
+                }
+                if (isFirstTick || bend != lastBend) {
+                    baked.push_back({tick.timeMs, {eb, static_cast<unsigned char>(bend & 0x7F),
+                                                   static_cast<unsigned char>((bend >> 7) & 0x7F)}});
+                    lastBend = bend;
+                }
+                if (isFirstTick) {
+                    baked.push_back({tick.timeMs, {st, static_cast<unsigned char>(noteNum), 100}});
+                }
+            }
+
+            // End-resets: rows whose curve moved away from neutral return to
+            // neutral at note end (after their final grid ticks, before
+            // note-off). Rows that never moved - or have no curve - stay
+            // silent; the module keeps resting at the play-start neutral.
+            // The neutral is per-row data (row.<name>.neutral) - the patch's
+            // DEPTH + MODE decide where "off" lives, not Kala.
+            QStringList endResets;
+            for (const Vl70mRows::Row &row : Vl70mRows::catalog()) {
+                if (row.kind == Vl70mRows::Kind::Volume) continue;
+                if (!Vl70mRows::isActive(mc, row) || !Vl70mRows::resetAtNoteEnd(mc, row)) continue;
+                const int neutral = Vl70mRows::neutral(mc, row);
+                const QString key = QStringLiteral("ch%1.%2").arg(channel).arg(row.name);
+                if (lastSentBake.value(key, neutral) != neutral) {
+                    emitRowValue(row, neutral, endMs);
+                    lastSentBake[key] = neutral;
+                    endResets.append(QStringLiteral("%1->%2").arg(row.name).arg(neutral));
+                }
+            }
+            baked.push_back({endMs, {stOff, static_cast<unsigned char>(noteNum), 0}});
+            if (endMs > outEndMs) outEndMs = endMs;
+
+            qDebug() << "AudioEngine: MIDI note" << note.getId()
+                     << "pitch" << startPitch << "Hz -> note" << noteNum
+                     << "bendRange" << bendRange << "st, update" << updateMs
+                     << "ms, ticks" << ticks.size() << ", channel" << channel
+                     << "at" << startMs << "-" << endMs << "ms"
+                     << "| vol" << (volumeOn ? QStringLiteral("%1-%2").arg(volMin).arg(volMax)
+                                            : QStringLiteral("off"))
+                     << "| rows" << (streamedRows.isEmpty() ? QStringLiteral("none") : streamedRows.join(' '))
+                     << "| endReset" << (endResets.isEmpty() ? QStringLiteral("none") : endResets.join(' '));
+        }
+    }
+
+    // Rows architecture: play-start neutrals, one per active row per used
+    // channel. No SysEx writes into the edit buffer anymore - the patch owns
+    // its CC assignments; these messages only guarantee every driven
+    // parameter rests at neutral before the first note. Inserted before the
+    // note events, so at identical timestamps the stable_sort below keeps
+    // this order.
+    if (!baked.empty() && !m_midiResetRows.isEmpty()) {
+        for (const MidiResetRow &row : m_midiResetRows) {
+            for (int ch : m_midiChannelsUsed) {
+                if (row.kind == 0) {
+                    m_midiEvents.push_back({startTimeMs, MidiOutput::cc(ch, row.cc, row.neutral)});
+                } else {
+                    for (const auto &msg : MidiOutput::nrpn(ch, row.msb, row.lsb, row.neutral))
+                        m_midiEvents.push_back({startTimeMs, msg});
+                }
+            }
+        }
+        qDebug() << "AudioEngine: play-start neutrals for" << m_midiResetRows.size()
+                 << "rows x" << m_midiChannelsUsed.size() << "channel(s) at"
+                 << startTimeMs << "ms";
+    }
+    m_midiEvents.insert(m_midiEvents.end(), baked.begin(), baked.end());
+
+    std::stable_sort(m_midiEvents.begin(), m_midiEvents.end(),
+                     [](const MidiEvent &a, const MidiEvent &b) { return a.timeMs < b.timeMs; });
+
+    qDebug() << "AudioEngine: baked" << m_midiEvents.size() << "MIDI events, last at" << outEndMs << "ms";
+}
+
+std::vector<std::vector<unsigned char>> AudioEngine::buildMidiStopMessages() const
+{
+    std::vector<std::vector<unsigned char>> messages;
+    // Rows architecture: leave the module neutral before closing - every
+    // active row returns to its neutral value on every channel the bake
+    // used (no SysEx/CC-assign writes to undo; the patch owns those).
+    for (const MidiResetRow &row : m_midiResetRows) {
+        for (int ch : m_midiChannelsUsed) {
+            if (row.kind == 0) {
+                messages.push_back(MidiOutput::cc(ch, row.cc, row.neutral));
+            } else {
+                const auto nrpn = MidiOutput::nrpn(ch, row.msb, row.lsb, row.neutral);
+                messages.insert(messages.end(), nrpn.begin(), nrpn.end());
+            }
+        }
+    }
+    // Silence anything still sounding before closing the port
+    if (m_midiChannelsUsed.isEmpty()) {
+        messages.push_back({0xB0, 123, 0});
+    } else {
+        for (int ch : m_midiChannelsUsed)
+            messages.push_back(MidiOutput::cc(ch, 123, 0));
+    }
+    return messages;
+}
+
+void AudioEngine::closeMidiOut()
+{
+    if (m_midiStream) {
+        // Stream halt + stop messages (reset neutrals + All Notes Off) +
+        // handle close, all inside the session's stop().
+        m_midiStream->stop();
+        delete m_midiStream;
+        m_midiStream = nullptr;
+    }
+    m_midiEvents.clear();
+    m_midiResetRows.clear();
+    m_midiChannelsUsed.clear();
+}
+
 void AudioEngine::stopTrackPlayback()
 {
     useTrackPlayback.store(false);
 
     std::lock_guard<std::mutex> lock(trackPlaybackMutex);
     playbackTracks.clear();
+    closeMidiOut();
 
     std::cout << "AudioEngine: Track playback stopped" << std::endl;
 }
@@ -1263,6 +1845,9 @@ void AudioEngine::onDefaultDeviceChanged()
     useRenderBuffer.store(false);
     useTrackPlayback.store(false);
     gateOpen.store(false);
+    // Kill the MIDI stream session too - without this the port is orphaned
+    // and the stream would keep playing to the end of the SMF.
+    closeMidiOut();
 
     // Tell UI to stop its playback timers/buttons
     emit playbackStopRequested();

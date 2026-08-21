@@ -2,6 +2,7 @@
 #include "ui_sounitbuilder.h"
 #include "kalamain.h"
 #include "container.h"
+#include "vl70mrows.h"
 #include "scorecanvas.h"
 #include "track.h"
 #include "sounitbuildercommands.h"
@@ -16,6 +17,8 @@
 #include <QStatusBar>
 #include "scorecanvaswindow.h"
 #include "timeline.h"
+#include <QCloseEvent>
+#include <QSettings>
 
 SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
     : QMainWindow(parent)
@@ -32,6 +35,13 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
     , currentTrack(nullptr)  // Will be set via setTrackCanvas()
 {
     ui->setupUi(this);
+
+    // Restore window geometry from last session
+    {
+        QSettings settings;
+        if (settings.contains("windows/sounitBuilder/geometry"))
+            restoreGeometry(settings.value("windows/sounitBuilder/geometry").toByteArray());
+    }
 
     // NOTE: Canvas is now provided by Track via setTrackCanvas()
     // Don't create our own canvas here anymore
@@ -113,7 +123,9 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
     // Essential - Blue
     connect(ui->actionHarmonicGenerator, &QAction::triggered, this, [this]() {
         onAddContainer("Harmonic Generator", QColor("#3498db"),
-                       {"purity", "drift", "digitWindowOffset"},
+                       {"purity", "drift", "digitWindowOffset",
+                        "h1amp", "h2amp", "h3amp", "h4amp", "h5amp", "h6amp", "h7amp", "h8amp",
+                        "padBandwidth", "padBandwidthScale"},
                        {"spectrum"});
     });
     connect(ui->actionSpectrum_to_Signal, &QAction::triggered, this, [this]() {
@@ -137,6 +149,11 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
         onAddContainer("Note Tail", QColor("#3498db"),
                        {"signalIn", "length"},
                        {"signalOut"});
+    });
+    connect(ui->actionVL70m, &QAction::triggered, this, [this]() {
+        onAddContainer("VL70-m", QColor("#3498db"),
+                       Vl70mRows::allInputPorts(),
+                       {"midiOut"});
     });
 
     // Shaping - Orange
@@ -266,6 +283,23 @@ SounitBuilder::SounitBuilder(AudioEngine *sharedAudioEngine, QWidget *parent)
                         "vibratoFreq", "vibratoGain", "pitchMultiplier"},
                        {"signalOut"});
     });
+    connect(ui->actionGuitar, &QAction::triggered, this, [this]() {
+        onAddContainer("singlePluck", QColor(230, 81, 133),
+                       {"pluckPos0", "pluckPos1", "pluckPos2", "pluckPos3", "pluckPos4", "pluckPos5",
+                        "woundDamping", "sympatheticGain", "airResonance", "topResonance",
+                        "pluckHardness", "nailFleshRatio", "outputGain", "pitchMultiplier",
+                        "pitchGlideAmount", "jitterAmount",
+                        "stringMask", "frettedMode"},
+                       {"signalOut"});
+    });
+    connect(ui->actionOud, &QAction::triggered, this, [this]() {
+        onAddContainer("doublePluck", QColor(230, 81, 133),
+                       {"pluckPos0", "pluckPos1", "pluckPos2", "pluckPos3", "pluckPos4", "pluckPos5",
+                        "plectrumHardness", "plectrumBrightness", "courseDetune",
+                        "sympatheticGain", "airResonance", "topResonance",
+                        "outputGain", "pitchMultiplier", "frettedMode", "courseMask"},
+                       {"signalOut"});
+    });
     connect(ui->actionPiano, &QAction::triggered, this, [this]() {
         onAddContainer("Piano", QColor(230, 81, 133),
                        {"brightness", "detuning", "hammerHardness",
@@ -333,7 +367,15 @@ void SounitBuilder::rebuildGraph(int trackIndex, bool rebuildTrackGraph)
         // Check if the preview graph is valid
         QList<Container*> containerList = canvas->findChildren<Container*>();
         bool isValid = audioEngine->hasGraph(trackIndex);
-        if (!isValid && !containerList.isEmpty() && !m_suppressInvalidGraphWarning) {
+
+        // A graph containing a VL70-m container is valid for MIDI playback even
+        // without an audio signal chain - don't warn about it.
+        bool hasMidiContainer = false;
+        for (Container *c : containerList) {
+            if (c->getName() == "VL70-m") { hasMidiContainer = true; break; }
+        }
+
+        if (!isValid && !containerList.isEmpty() && !hasMidiContainer && !m_suppressInvalidGraphWarning) {
             QMessageBox::warning(this, "Invalid Graph Connection",
                                "The connection you made creates an invalid graph.\n\n"
                                "The audio engine has reverted to direct mode.\n\n"
@@ -346,7 +388,9 @@ void SounitBuilder::rebuildGraph(int trackIndex, bool rebuildTrackGraph)
         // Rebuild the track's compiled graph only when the sounit actually changed.
         // When switching tracks without edits, skip this to preserve note render caches
         // (avoids full re-render of every note just because the user switched tracks).
-        if (rebuildTrackGraph && currentTrack) {
+        // Also skip when editing a variation — the variation's canvas state must not
+        // overwrite the track's base compiled graph.
+        if (rebuildTrackGraph && currentTrack && !m_editingVariation) {
             currentTrack->rebuildGraph(audioEngine->getSampleRate());
         }
     } else {
@@ -425,6 +469,7 @@ void SounitBuilder::setTrackCanvas(Track *track)
     // Store current track and get its canvas
     currentTrack = track;
     canvas = newCanvas;
+    m_editingVariation = false;  // Reset variation editing state on track switch
 
     // Connect to track's render progress signals for the progress bar
     connect(currentTrack, &Track::renderStarted, this, &SounitBuilder::onRenderStarted);
@@ -443,6 +488,11 @@ void SounitBuilder::setTrackCanvas(Track *track)
         } else {
             qDebug() << "Skipping graph rebuild during canvas load";
         }
+        // Connection add/remove can change which VL70-m rows are
+        // graph-driven; keep the score canvas curve selector in sync
+        // (idempotent, cheap). Also covers sounit loads whose connections
+        // deserialize after the container's parameterChanged sync ran.
+        syncVl70mCurveNames();
     });
 
     // Forward canvas undo/redo signal so KalaMain can refresh the inspector
@@ -738,6 +788,20 @@ void SounitBuilder::onAddContainer(const QString &name, const QColor &color,
         newContainer->setParameter("numModes",       12.0);
         newContainer->setParameter("noiseGain",       0.15);
         newContainer->setParameter("pitchMultiplier", 1.0);
+    } else if (name == "VL70-m") {
+        // Rows architecture: declare the ACTIVE rows' curve names on this
+        // variation's canvas so the score curve selector offers only the
+        // parameters this container actually drives. The bake reads these by
+        // name from each note; the names are also the container's input ports
+        // (Phase 6 wires Modifiers here). Idempotent - safe on undo/redo and
+        // on old canvases that already have them. Row toggles later re-sync
+        // through the parameterChanged hook.
+        for (const Vl70mRows::Row &row : Vl70mRows::catalog())
+            if (row.kind != Vl70mRows::Kind::Volume && Vl70mRows::isActive(newContainer, row))
+                canvas->addExpressiveCurveName(row.name);
+        // Trim the static superset of ports down to the active rows (volume
+        // has no input port - it follows note dynamics).
+        newContainer->setInputPorts(Vl70mRows::activeInputPorts(newContainer));
     }
 
     newContainer->show();
@@ -1270,6 +1334,46 @@ void SounitBuilder::keyPressEvent(QKeyEvent *event)
     QMainWindow::keyPressEvent(event);
 }
 
+void SounitBuilder::syncVl70mCurveNames()
+{
+    if (!canvas) return;
+    Container *midi = nullptr;
+    for (Container *c : canvas->findChildren<Container*>()) {
+        if (c->getName() == "VL70-m") { midi = c; break; }
+    }
+    if (!midi) return;
+
+    // Rows whose port has an incoming modifier connection are graph-driven
+    // (connection wins in the bake) - a hand-drawn curve on such a row is
+    // ignored, so its name leaves the score canvas selector.
+    QSet<QString> connectedPorts;
+    for (const Canvas::Connection &conn : canvas->getConnections()) {
+        if (conn.toContainer == midi)
+            connectedPorts.insert(conn.toPort);
+    }
+    // Exception: an Envelope Engine with followDynamics reading this row's
+    // curve name still makes the drawn curve audible through the graph (the
+    // bake's walk passes every note curve to generateSample).
+    QSet<QString> envelopeCurves;
+    for (Container *c : canvas->findChildren<Container*>()) {
+        if (c->getName() != QStringLiteral("Envelope Engine")) continue;
+        if (c->getParameter("followDynamics", 0.0) <= 0.5) continue;
+        const QString name = c->getStringParameter("scoreCurveName", QString());
+        if (!name.isEmpty()) envelopeCurves.insert(name);
+    }
+
+    for (const Vl70mRows::Row &row : Vl70mRows::catalog()) {
+        if (row.kind == Vl70mRows::Kind::Volume) continue;
+        const bool keep = Vl70mRows::isActive(midi, row)
+                          && (!connectedPorts.contains(row.name)
+                              || envelopeCurves.contains(row.name));
+        if (keep)
+            canvas->addExpressiveCurveName(row.name);
+        else
+            canvas->removeExpressiveCurveName(row.name);
+    }
+}
+
 void SounitBuilder::connectContainerSignals(Container *container)
 {
     // Use Qt::UniqueConnection to prevent duplicate signal connections
@@ -1282,7 +1386,20 @@ void SounitBuilder::connectContainerSignals(Container *container)
     // Scope to receiver=this so we don't kill the container's own internal handlers
     // (e.g. the followDynamicsBtn ↔ param sync set up in addFollowDynamicsButton).
     disconnect(container, &Container::parameterChanged, this, nullptr);
-    connect(container, &Container::parameterChanged, this, [this]() {
+    connect(container, &Container::parameterChanged, this, [this, container]() {
+        // VL70-m rows architecture: ports follow the active rows, so a row
+        // toggle (inspector or undo) rebuilds the input ports. Covers
+        // creation/load/paste/duplicate paths - every one funnels through
+        // this function, and deserialization's endParameterUpdate fires this
+        // once after the params restore.
+        if (container->getName() == "VL70-m") {
+            const QStringList desired = Vl70mRows::activeInputPorts(container);
+            if (container->getInputPorts() != desired)
+                container->setInputPorts(desired);
+            // Keep the canvas curve-name list in sync (active rows minus
+            // graph-driven ports, see syncVl70mCurveNames).
+            syncVl70mCurveNames();
+        }
         rebuildGraph(currentEditingTrack);
     });
 
@@ -1905,4 +2022,11 @@ int SounitBuilder::findAdjacentNote(int currentIndex, int direction, int trackIn
 SounitBuilder::~SounitBuilder()
 {
     delete ui;
+}
+
+void SounitBuilder::closeEvent(QCloseEvent *event)
+{
+    QSettings settings;
+    settings.setValue("windows/sounitBuilder/geometry", saveGeometry());
+    QMainWindow::closeEvent(event);
 }

@@ -17,7 +17,7 @@
 #include <QStringList>
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Regex: a "user slot" is {UPPER_SNAKE}. Runtime expressions like
+// Regex: a " user slot" is {UPPER_SNAKE}. Runtime expressions like
 // {len(picks)}, {seq}, {RANGE_T/2} deliberately don't match.
 static const QRegularExpression &placeholderRegex()
 {

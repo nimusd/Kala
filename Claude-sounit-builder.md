@@ -73,7 +73,7 @@ Everything needed to design and generate `.sounit` files for Kala without openin
 
 ### Harmonic Generator
 **Ports out:** `spectrum`
-**Ports in:** `purity`, `drift`, `digitWindowOffset`
+**Ports in:** `purity`, `drift`, `digitWindowOffset`, `h1amp`, `h2amp`, `h3amp`, `h4amp`, `h5amp`, `h6amp`, `h7amp`, `h8amp`, `padBandwidth`, `padBandwidthScale`
 
 ```json
 "parameters": {
@@ -109,6 +109,16 @@ Everything needed to design and generate `.sounit` files for Kala without openin
 ```
 Note: `customDna` is NOT needed when using `digitString`. The digit string itself defines the spectrum.
 Connect Envelope Engine (score curve mode) → `digitWindowOffset` with weight=50–100 for live sweep.
+
+**Per-harmonic amplitude control** (`h1amp`–`h8amp`):
+Each port scales the amplitude of an *active* harmonic — the n-th harmonic whose DNA amplitude is greater than zero. `h1amp` = first active harmonic (typically the fundamental), `h2amp` = second active, etc. This means they work correctly with sparse DNA like odd-only, prime numbers, or Fibonacci — the ports always target harmonics that are actually present. Default is 1.0 (DNA-defined level). Value range 0–2 (allow boost up to 2×).
+
+Connect Envelope Engine → `h1amp` … `h8amp` with `modulate` function (weight=1.0) for bipolar control centered on the DNA default: envelope at 0.5 = no change, 0.0 = silence that harmonic, 1.0 = 2× boost. Use `passthrough` for direct 0–1 scaling (reduce-only, no boost).
+
+Typical use: one Envelope Engine per active harmonic, each with its own score curve name (e.g. "harmonic 1", "harmonic 2", …), so the user can paint per-harmonic amplitude envelopes directly on notes. Unconnected ports default to 1.0 — no effect.
+
+**PAD bandwidth modulation** (`padBandwidth`, `padBandwidthScale`):
+Connect a modulation source (Frequency Mapper, Drift Engine, Envelope Engine) to `padBandwidth` to control PADsynth spectral smearing width (1–200 cents). Connect to `padBandwidthScale` to control how bandwidth scales with harmonic number (0–2). Source 0–1 is scaled to the full parameter range. The PADsynth wavetable regenerates once per note (on the first sample) when the connected value differs from the cached value — FFT cost is one-time per note. For continuous modulation across notes (e.g. Frequency Mapper varying bandwidth by pitch), this works naturally. Avoid connecting fast LFOs — the per-note regeneration will see only the first-sample value.
 
 ---
 
@@ -972,6 +982,36 @@ Drive `blend` with Envelope Engine for dynamic breath evolution.
 | `soprano-recorder.sounit` | Recorder + Pure Sine HG body (gain 0.28), followDynamics | jetRatio, noiseGain |
 | `soprano-oboe.sounit` | Reed + Reed DNA + Formant (f1=1100/f2=3400), stiff reed | reedStiffness, f1Freq, gainB |
 | `soprano-whistle.sounit` | Pure Recorder only, high jetRatio (0.46), most airy | jetRatio, noiseGain |
+
+---
+
+### VL70-m (MIDI Out)
+**Color:** Blue (Essential). **Type name:** `"VL70-m"`.
+**Ports in:** `pitch` + one port per **active parameter row** (volume is not a port — it follows note dynamics). **Ports out:** `midiOut`
+
+```json
+"parameters": {
+    "midiChannel": 1,          // 1–16, MIDI channel notes are sent on
+    "pitchBendRange": 2,       // pitch bend sensitivity in semitones (0–24); default 2
+    "midiUpdateIntervalMs": 10, // volume + bend stream interval (1–100 ms)
+    "row.growl.active": 0,     // per-row state: active(0/1), cc(1–95), ms(1–100),
+    "row.growl.cc": 13,        // reset(0/1), neutral(0–127) — catalog defaults in
+    "row.growl.ms": 25,        // vl70mrows.h. NRPN rows have fixed msb/lsb
+    "row.growl.reset": 1,      // addresses, no cc. Neutral = resting value
+    "row.growl.neutral": 64    // (play start + note end) - match the patch's
+                               // DEPTH + MODE: 64 for symmetric ±DEPTH, 0/127
+                               // for one-directional patches.
+}
+```
+
+Sends notes to the configured MIDI output device (Settings → MIDI Setup) instead of producing audio. Sit it where a `signalOut` terminal would be; the `midiOut` port is declarative and never connects to other containers.
+
+- **Rows architecture — the patch owns the CC assignments.** The 23-row catalog (vl70mrows.h): volume CC7 (note dynamics, always on), breath CC2, expression CC11, twelve Table 9 element parameters (pressure, filter, amplitude, embouchure, tonguing, scream, breathNoise, growl, throatFormant, harmonicEnhancer, damping, absorption), eight NRPN part offsets (vibratoRate 01 08, vibratoDepth 01 09, filterCutoff 01 20, filterResonance 01 21, filterEgDepth 01 22, egAttack 01 63, egDecay 01 64, egRelease 01 66). Defaults active: volume, breath, expression, embouchure (CC13), breathNoise (CC14), filterCutoff, filterResonance. Configure the patch's CONTROL NO.s in VL-Wizard or on the module to match the rows — Kala never writes the voice edit buffer. Save the container as a sounit named after the patch; the name match is a human contract.
+- **No-curve semantics:** play start sends each active row's neutral once; a row with a curve on the note streams at its own resolution and returns to neutral at note end (`reset` flag; expression defaults off — its neutral is full 127); rows without a curve send nothing. Element rows default 25 ms, NRPN rows 12 ms (Phase 4 measurements). The neutral is per-row (`neutral` field) because the patch's DEPTH + MODE decide where "off" lives — a symmetric ±DEPTH CENTER BASE patch rests at 64, a one-directional patch at 0 or 127.
+- **Pitch** comes from each note's `pitchHz` (engine context): the nearest MIDI note number plus a pitch bend for the cents remainder, so scale-tuned Hz (Just Intonation, Maqam, Raga) land correctly. Bend range comes from `pitchBendRange` (RPN 0,0 is set per note to match its excursion).
+- **Volume** is sent as CC7 from the note's dynamics curve; vibrato bakes into bend and volume. Note On/Off is tied to note start/end on the timeline.
+- Events are baked at playback start and dispatched by the audio callback in sync with the transport. Overlapping notes on the same channel log a monophonic-conflict warning.
+- A graph containing only VL70-m (no audio signal chain) is valid for playback; it renders no audio and its notes still set the composition end time.
 
 ---
 

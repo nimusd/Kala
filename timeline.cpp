@@ -114,15 +114,10 @@ void Timeline::setTempoChanges(const QMap<double, QString> &changes)
 
 void Timeline::calcBarBeatDurations(double &barMs, double &beatMs) const
 {
-    // Matches ScoreCanvas/CompositionSettings bar-duration formula so labels
-    // align with the canvas bar lines and playback.
-    if (timeSigDenominator == 0) {
-        beatMs = 60000.0 / tempo;
-        barMs = beatMs * timeSigNumerator;
-    } else {
-        barMs = (60000.0 / tempo) * (static_cast<double>(timeSigNumerator) / timeSigDenominator);
-        beatMs = (timeSigNumerator > 0) ? (barMs / timeSigNumerator) : barMs;
-    }
+    // Bar duration = beat duration × beats per bar.
+    // Denominator is informational for notation/display and does not scale duration.
+    beatMs = 60000.0 / tempo;
+    barMs = beatMs * timeSigNumerator;
 }
 
 QString Timeline::formatTime(double timeMs) const

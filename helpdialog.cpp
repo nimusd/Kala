@@ -120,6 +120,7 @@ void HelpDialog::buildTableOfContents()
     addChild(score, "Vibrato", "score-canvas.html", "vibrato-a-parameter-not-an-ornament");
     addChild(score, "Segments", "score-canvas.html", "segments-subdividing-continuous-notes");
     addChild(score, "Time and Navigation", "score-canvas.html", "time-and-navigation");
+    addChild(score, "Kala vs Western Time Signature", "score-canvas.html", "kala-mode-vs-western-mode");
     addChild(score, "Canvas Interactions", "score-canvas.html", "canvas-interactions");
     addChild(score, "Right-Click: Notes", "score-canvas.html", "right-click-notes");
     addChild(score, "Right-Click: Segments", "score-canvas.html", "right-click-segments");
@@ -193,6 +194,7 @@ void HelpDialog::buildTableOfContents()
     addChild(dialogs, "New Project", "dialogs.html", "new-project-dialog");
     addChild(dialogs, "Scale Dialog", "dialogs.html", "scale-dialog");
     addChild(dialogs, "Composition Settings", "dialogs.html", "composition-settings-dialog");
+    addChild(dialogs, "Tempo Settings", "dialogs.html", "tempo-settings-dialog");
     addChild(dialogs, "Go To Dialog", "dialogs.html", "go-to-dialog");
     addChild(dialogs, "Easing Dialog", "dialogs.html", "easing-dialog");
     addChild(dialogs, "Vibrato Editor", "dialogs.html", "vibrato-editor-dialog");

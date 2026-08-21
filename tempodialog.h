@@ -13,13 +13,11 @@ class TempoDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit TempoDialog(const TempoTimeSignature &current, bool isAtTimeZero, QWidget *parent = nullptr);
+    explicit TempoDialog(const TempoTimeSignature &current, bool isAtTimeZero,
+                         bool isKalaMode, QWidget *parent = nullptr);
     ~TempoDialog();
 
-    // Get the configured tempo/time signature
     TempoTimeSignature getTempoTimeSignature() const;
-
-    // Check if delete was requested
     bool isDeleteRequested() const { return deleteRequested; }
 
 private slots:
@@ -28,6 +26,7 @@ private slots:
 private:
     Ui::TempoDialog *ui;
     bool deleteRequested = false;
+    bool m_isKalaMode = false;
 };
 
 #endif // TEMPODIALOG_H

@@ -130,6 +130,7 @@ private:
     size_t delayLength;
     size_t maxDelayLength;  // Allocated buffer capacity (allows pitch sweeps)
     double currentDelay;    // Fractional delay in samples (sampleRate / pitch)
+    double targetDelay;     // Target delay for smooth pitch slewing (avoids clicks)
     double prevSample;      // Previous sample for loop filter
 
     // Body resonance biquad state

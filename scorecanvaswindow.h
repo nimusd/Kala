@@ -20,6 +20,7 @@ class Canvas;
 #include <QPushButton>
 #include <QSpinBox>
 #include <QComboBox>
+#include <QStackedWidget>
 #include <QProgressBar>
 
 namespace Ui {
@@ -49,6 +50,7 @@ protected:
     bool event(QEvent *event) override;  // Override to catch Tab key before focus navigation
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 public slots:
     void onZoomIn();
@@ -111,9 +113,28 @@ private:
     QPushButton *timeModeToggle;      // Absolute ↔ Musical
     QPushButton *slideModeBtn;        // Slide mode toggle (time-only movement)
     QPushButton *transformModeBtn;    // Transform mode toggle (pitch-curve perimeter handles)
-    QSpinBox *tempoSpinBox;           // BPM
-    QSpinBox *timeSigNumerator;       // Top number (beats per bar)
-    QSpinBox *timeSigDenominator;     // Bottom number (note value)
+    QPushButton *renderModeToggle;    // Auto/Manual render mode toggle
+    bool m_autoRender = true;         // true = auto-render on edits, false = render only on play
+
+    // Time signature mode (Kala / Western)
+    QComboBox *timeSignatureModeCombo;
+    QStackedWidget *timeSigStack;
+    QWidget *kalaTimeSigPage;
+    QSpinBox *kalaPulsesSpin;
+    QSpinBox *kalaDurationSpin;
+    QWidget *westernTimeSigPage;
+    QSpinBox *westernTempoSpin;
+    QSpinBox *westernNumSpin;
+    QSpinBox *westernDenSpin;
+
+    // Cached values for mode switching
+    int cachedKalaPulses = 5;
+    int cachedKalaDurationMs = 500;
+    int cachedWesternTempo = 120;
+    int cachedWesternNum = 4;
+    int cachedWesternDen = 4;
+
+    bool m_suppressTimeSigModeSwitch = false;
 
     // Expressive curve selector — picks which named curve is rendered on the score
     QComboBox *curveSelectorCombo = nullptr;
@@ -189,8 +210,10 @@ private:
     void onTimeModeToggled();
     void onSlideModeChanged(bool active);
     void onTransformModeChanged(bool active);
-    void onTempoChanged(int bpm);
-    void onTimeSignatureChanged();
+    void onRenderModeToggled();
+    void onMidiTestClicked();
+    void onTimeSignatureModeChanged(int index);
+    void onTimeSettingsChanged();
     void onNowMarkerChanged(double timeMs);  // Sync spinboxes with timeline position
 
     // Audio playback (Phase 3)

@@ -1,5 +1,6 @@
 #include "canvas.h"
 #include "sounitbuildercommands.h"
+#include "vl70mrows.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -615,6 +616,14 @@ bool Canvas::addExpressiveCurveName(const QString &name)
     return true;
 }
 
+bool Canvas::removeExpressiveCurveName(const QString &name)
+{
+    const QString trimmed = name.trimmed();
+    if (!expressiveCurveNames.removeOne(trimmed)) return false;
+    emit expressiveCurveNamesChanged();
+    return true;
+}
+
 void Canvas::setExpressiveCurveNames(const QStringList &names)
 {
     expressiveCurveNames = names;
@@ -808,7 +817,9 @@ bool Canvas::saveToJson(const QString &filePath, const QString &sounitName)
 void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, QStringList &outputs)
 {
     if (type == "Harmonic Generator") {
-        inputs = {"purity", "drift", "digitWindowOffset"};
+        inputs = {"purity", "drift", "digitWindowOffset",
+                 "h1amp", "h2amp", "h3amp", "h4amp", "h5amp", "h6amp", "h7amp", "h8amp",
+                 "padBandwidth", "padBandwidthScale"};
         outputs = {"spectrum"};
     } else if (type == "Spectrum to Signal") {
         inputs = {"spectrumIn", "pitchMultiplier", "normalize"};
@@ -892,6 +903,18 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
                   "nlAttack", "modFrequency", "modType",
                   "vibratoFreq", "vibratoGain", "pitchMultiplier"};
         outputs = {"signalOut"};
+    } else if (type == "singlePluck") {
+        inputs = {"pluckPos0", "pluckPos1", "pluckPos2", "pluckPos3", "pluckPos4", "pluckPos5",
+                  "woundDamping", "sympatheticGain", "airResonance", "topResonance",
+                  "pluckHardness", "nailFleshRatio", "outputGain", "pitchMultiplier",
+                  "pitchGlideAmount", "jitterAmount", "frettedMode", "stringMask"};
+        outputs = {"signalOut"};
+    } else if (type == "doublePluck") {
+        inputs = {"pluckPos0", "pluckPos1", "pluckPos2", "pluckPos3", "pluckPos4", "pluckPos5",
+                  "plectrumHardness", "plectrumBrightness", "courseDetune",
+                  "sympatheticGain", "airResonance", "topResonance",
+                  "outputGain", "pitchMultiplier", "frettedMode", "courseMask"};
+        outputs = {"signalOut"};
     } else if (type == "Piano") {
         inputs = {"brightness", "detuning", "hammerHardness",
                   "stiffness", "softness", "pitchMultiplier"};
@@ -930,6 +953,14 @@ void Canvas::getPortsForContainerType(const QString &type, QStringList &inputs, 
     } else if (type == "Pan") {
         inputs = {"signalIn", "controlIn"};
         outputs = {"signalOut", "panOut"};
+    } else if (type == "VL70-m") {
+        // MIDI output container - port values read from the note context for
+        // now (Phase 6 will feed them via Modifier connections). Rows
+        // architecture: the static list is the full superset of row ports
+        // (deserialization builds the container before its params restore);
+        // the instance trims to its active rows via setInputPorts.
+        inputs = Vl70mRows::allInputPorts();
+        outputs = {"midiOut"};
     } else {
         qWarning() << "Unknown container type:" << type;
     }

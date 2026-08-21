@@ -4,6 +4,7 @@
 #include "harmonicgenerator.h"
 #include "sounitgraph.h"
 #include "note.h"
+#include "midioutput.h"  // MidiEvent
 #include <RtAudio.h>
 #include <memory>
 #include <atomic>
@@ -20,6 +21,16 @@
 
 // Forward declarations
 class Track;
+class MidiStreamPlayer;
+
+// One entry of the bake-wide reset union (rows architecture): an active row's
+// neutral value, used for play-start neutrals and closeMidiOut resets.
+struct MidiResetRow {
+    int kind = 0;              // 0 = CC, 1 = NRPN
+    int cc = -1;               // CC rows
+    int msb = -1, lsb = -1;    // NRPN rows
+    int neutral = 64;
+};
 
 #ifdef _WIN32
 class AudioDeviceNotifier;
@@ -106,6 +117,11 @@ signals:
     void audioDeviceChanged(QString deviceName);
     void audioDeviceError(QString msg);
     void playbackStopRequested();
+    // Natural end of track playback (emitted from the audio callback after
+    // the MIDI stream end-grace expires). KalaMain connects this to
+    // stopTrackPlayback() - a queued connection, so the WinMM teardown runs
+    // on the main thread, never in the callback.
+    void trackPlaybackEnded();
     // Render progress signals
     void renderProgressChanged(int percentage);  // 0-100, emitted during renderNotes()
     void renderStarted();                        // Emitted when rendering begins
@@ -150,6 +166,43 @@ private:
     std::atomic<double> trackPlaybackTimeMs; // Current playback position in milliseconds
     std::atomic<double> trackPlaybackEndMs;  // End time of composition (for auto-stop)
     std::mutex trackPlaybackMutex;          // Protect track list access
+
+    // MIDI dispatch (Phase 3 - continuous pitch/breath streams from VL70-m graphs).
+    // Events are baked at playFromTracks() time, serialized into a format-0
+    // SMF and handed to a WinMM stream session (midistream.h) that plays them
+    // on its own clock - the audio callback never touches MIDI (the old
+    // callback dispatch burst messages into buffers and stuttered). All
+    // WinMM calls run on the main thread.
+    std::vector<MidiEvent> m_midiEvents;
+    MidiStreamPlayer *m_midiStream = nullptr;
+    // Set once by the callback when the end-grace expires, so
+    // trackPlaybackEnded() fires exactly once per playback.
+    std::atomic<bool> m_endCloseSignaled{false};
+
+    // Rows architecture: union of active rows across the bake plus the
+    // channels used, feeding the play-start neutrals and closeMidiOut.
+    QVector<MidiResetRow> m_midiResetRows;
+    QVector<int> m_midiChannelsUsed;  // deterministic order (no QSet)
+
+    // Walk tracks and bake note on/off + resampled volume (CC7) and pitch bend
+    // streams for notes whose variation graph contains a VL70-m container.
+    // Per-note RPN 0,0 (bend sensitivity, matched to the note's pitch
+    // excursion) is baked into the stream before each note-on. Rows
+    // architecture: each active parameter row (element CCs, NRPN part
+    // offsets, breath/expression) streams its own curve on its own grid;
+    // play-start neutrals open the bake and end-of-note neutrals close each
+    // curve. The patch owns the CC assignments - no SysEx writes here.
+    // Fills outEndMs with the last event time.
+    void bakeMidiEvents(const QList<Track*> &tracks, double startTimeMs,
+                        double &outEndMs);
+
+    // The stop reset (per-row neutrals + per-channel All Notes Off CC123),
+    // built once per playback and handed to the stream session's stop().
+    std::vector<std::vector<unsigned char>> buildMidiStopMessages() const;
+
+    // Stop the stream session (reset neutrals + All Notes Off + handle
+    // close), delete it, clear events and reset rows.
+    void closeMidiOut();
 
     // Audio device change detection
     std::atomic<bool> m_deviceSwitchInProgress;

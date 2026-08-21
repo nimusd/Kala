@@ -308,6 +308,14 @@ uint64_t Note::computeHash() const
             hash ^= static_cast<uint64_t>(pt.curveType);
             hash *= prime;
         }
+        hash ^= static_cast<uint64_t>(vibrato.rateEnvelope.size());
+        hash *= prime;
+        for (const auto& pt : vibrato.rateEnvelope) {
+            mixDouble(pt.time);
+            mixDouble(pt.value);
+            hash ^= static_cast<uint64_t>(pt.curveType);
+            hash *= prime;
+        }
     }
 
     // Hash legato flag (affects attack/release rendering)

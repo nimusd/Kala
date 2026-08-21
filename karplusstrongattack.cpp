@@ -27,6 +27,7 @@ KarplusStrongAttack::KarplusStrongAttack(double sampleRate)
     , delayLength(0)
     , maxDelayLength(0)
     , currentDelay(0.0)
+    , targetDelay(0.0)
     , prevSample(0.0)
     , bqX1(0.0), bqX2(0.0)
     , bqY1(0.0), bqY2(0.0)
@@ -55,6 +56,7 @@ void KarplusStrongAttack::trigger(double pitch)
 
     // Fractional delay for interpolated read
     currentDelay = sampleRate / pitch;
+    targetDelay = currentDelay;
 
     // Max buffer allows pitch sweeps down to ~20 Hz
     size_t minForSweep = static_cast<size_t>(sampleRate / 20.0) + 2;
@@ -124,6 +126,12 @@ double KarplusStrongAttack::generateSample(double inputSignal)
     if (mode == KSMode::Attack) {
         if (!active || maxDelayLength == 0) {
             return inputSignal;
+        }
+
+        // Slew currentDelay toward targetDelay for smooth pitch transitions (~5ms)
+        if (std::abs(currentDelay - targetDelay) > 1e-9) {
+            double alpha = 1.0 - std::exp(-1.0 / (sampleRate * 0.005));
+            currentDelay += alpha * (targetDelay - currentDelay);
         }
 
         // Fractional delay read with linear interpolation
@@ -202,6 +210,12 @@ double KarplusStrongAttack::generateSample(double inputSignal)
         return 0.0;
     }
 
+    // Slew currentDelay toward targetDelay for smooth pitch transitions (~5ms)
+    if (std::abs(currentDelay - targetDelay) > 1e-9) {
+        double alpha = 1.0 - std::exp(-1.0 / (sampleRate * 0.005));
+        currentDelay += alpha * (targetDelay - currentDelay);
+    }
+
     // Fractional delay read with linear interpolation
     double readPos = static_cast<double>(writeIndex) - currentDelay;
     if (readPos < 0.0) readPos += static_cast<double>(maxDelayLength);
@@ -274,6 +288,7 @@ void KarplusStrongAttack::reset()
     envFollower = 0.0;
     filterState = 0.0;
     currentDelay = 0.0;
+    targetDelay = 0.0;
     maxDelayLength = 0;
     bqX1 = bqX2 = bqY1 = bqY2 = 0.0;
 
@@ -676,8 +691,8 @@ void KarplusStrongAttack::setBodyFreq(double f)
 void KarplusStrongAttack::setPitch(double pitch)
 {
     if (maxDelayLength == 0) return;
-    currentDelay = sampleRate / std::clamp(pitch, 20.0, 20000.0);
-    currentDelay = std::clamp(currentDelay, 2.0, static_cast<double>(maxDelayLength - 1));
+    double newTarget = sampleRate / std::clamp(pitch, 20.0, 20000.0);
+    targetDelay = std::clamp(newTarget, 2.0, static_cast<double>(maxDelayLength - 1));
 }
 
 void KarplusStrongAttack::setNonLinearAmount(double a)

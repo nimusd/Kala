@@ -4,15 +4,16 @@
 CompositionSettings::CompositionSettings()
     : compositionName("Untitled")
     , timeMode(Musical)
-    , tempo(60)
-    , referenceTempo(60)  // Initially matches tempo
+    , tempo(120)
+    , referenceTempo(120)  // Initially matches tempo
     , timeSigTop(5)
-    , timeSigBottom(4)
+    , timeSigBottom(0)
     , lengthMs(300000.0)
     , lengthBars(20)
     , sampleRate(48000)
     , bitDepth(24)
     , preRenderDelayMs(400)
+    , autoRender(true)
 {
 }
 
@@ -23,13 +24,11 @@ CompositionSettings CompositionSettings::defaults()
 
 double CompositionSettings::calculateBarDuration() const
 {
-    if (timeSigBottom == 0) {
-        // Simple mode: beat = tempo pulse
-        return (60000.0 / tempo) * timeSigTop;
-    } else {
-        // Scaled mode: adjust for note value
-        return (60000.0 / tempo) * (static_cast<double>(timeSigTop) / timeSigBottom);
-    }
+    // Bar duration = beat duration × beats per bar.
+    // Tempo is always "beats per minute" where a beat is one pulse (Kala)
+    // or one denominator-note (Western). Denominator is informational for
+    // display/notation and does not scale bar duration.
+    return (60000.0 / tempo) * timeSigTop;
 }
 
 void CompositionSettings::syncLengthFromBars()
@@ -59,6 +58,7 @@ QJsonObject CompositionSettings::toJson() const
     json["sampleRate"] = sampleRate;
     json["bitDepth"] = bitDepth;
     json["preRenderDelayMs"] = preRenderDelayMs;
+    json["autoRender"] = autoRender;
     return json;
 }
 
@@ -77,13 +77,14 @@ CompositionSettings CompositionSettings::fromJson(const QJsonObject &json)
     s.sampleRate = json["sampleRate"].toInt(48000);
     s.bitDepth = json["bitDepth"].toInt(24);
     s.preRenderDelayMs = json["preRenderDelayMs"].toInt(400);
+    s.autoRender = json["autoRender"].toBool(true);
     return s;
 }
 
 bool CompositionSettings::isValid() const
 {
-    return tempo >= 20 && tempo <= 300 &&
-           referenceTempo >= 20 && referenceTempo <= 300 &&
+    return tempo >= 1 && tempo <= 300 &&
+           referenceTempo >= 1 && referenceTempo <= 300 &&
            timeSigTop >= 1 && timeSigTop <= 99 &&
            timeSigBottom >= 0 && timeSigBottom <= 99 &&
            lengthMs > 0.0 &&

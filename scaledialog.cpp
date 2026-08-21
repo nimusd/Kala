@@ -1,5 +1,7 @@
 #include "scaledialog.h"
 #include "ui_scaledialog.h"
+#include <cmath>
+#include <QtMath>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -118,7 +120,8 @@ static QString getScaleDescription(int scaleId)
     case 14:
         return "<b>Raga Shankarabharana</b> &mdash; 7 notes &mdash; Indian Carnatic (29th Melakarta)<br><br>"
                "All shuddha (natural) swaras. Equivalent to the Bilawal/major scale. "
-               "Foundation for many other ragas.<br><br>"
+               "Foundation for many other ragas. "
+               "Same ratios as Just Intonation, with Indian solfege labels.<br><br>"
                "<b>Notes:</b> Sa &middot; Re &middot; Ga &middot; Ma &middot; Pa &middot; Dha &middot; Ni<br>"
                "<b>Ratios:</b> 1/1 &middot; 9/8 &middot; 5/4 &middot; 4/3 &middot; 3/2 &middot; 5/3 &middot; 15/8";
 
@@ -323,7 +326,7 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     // When ET is selected, key buttons rotate the scale (change which note is tonic)
     // Base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
 
-    QGroupBox *keyGroup = new QGroupBox("Key  (A\u202f=\u202f440\u202fHz)", this);
+    QGroupBox *keyGroup = new QGroupBox("Key", this);
     QHBoxLayout *keyLayout = new QHBoxLayout(keyGroup);
     keyLayout->setSpacing(2);
     keyLayout->setContentsMargins(6, 4, 6, 6);
@@ -349,10 +352,54 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(layout());
     mainLayout->insertWidget(1, keyGroup);
 
-    // Wire description panel
+    // --- Inflection group (per-degree cent offset sliders) ---
+    inflectionGroup = new QGroupBox("Inflection  (±50 cents per degree)", this);
+    inflectionLayout = new QVBoxLayout(inflectionGroup);
+    inflectionLayout->setSpacing(5);
+    inflectionLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->insertWidget(2, inflectionGroup);
+
+    // --- Degree frequency group (computed Hz per degree) ---
+    degreeFreqGroup = new QGroupBox("Degree Frequencies", this);
+    QVBoxLayout *degreeFreqMainLayout = new QVBoxLayout(degreeFreqGroup);
+    degreeFreqMainLayout->setSpacing(6);
+    degreeFreqMainLayout->setContentsMargins(10, 8, 10, 8);
+
+    // Reference frequency row
+    {
+        QHBoxLayout *refFreqRow = new QHBoxLayout();
+        QLabel *refFreqLabel = new QLabel("Reference Frequency:", degreeFreqGroup);
+        refFreqLabel->setStyleSheet("font-size:9px;");
+        refFreqRow->addWidget(refFreqLabel);
+        degreeRefFreqSpin = new QDoubleSpinBox(degreeFreqGroup);
+        degreeRefFreqSpin->setSuffix(" Hz");
+        degreeRefFreqSpin->setDecimals(2);
+        degreeRefFreqSpin->setMinimum(10.0);
+        degreeRefFreqSpin->setMaximum(2000.0);
+        degreeRefFreqSpin->setValue(ui->spinBaseFreq->value());
+        refFreqRow->addWidget(degreeRefFreqSpin);
+        refFreqRow->addStretch();
+        degreeFreqMainLayout->addLayout(refFreqRow);
+    }
+
+    // Degree labels row
+    degreeFreqLayout = new QHBoxLayout();
+    degreeFreqLayout->setSpacing(6);
+    degreeFreqMainLayout->addLayout(degreeFreqLayout);
+
+    mainLayout->insertWidget(3, degreeFreqGroup);
+
+    // Wire reference frequency spinner to update degree frequencies
+    connect(degreeRefFreqSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this]() { updateDegreeFrequencies(); });
+
+    // Wire description panel (onScaleChanged builds initial rows with zero offsets)
     connect(ui->comboScale, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ScaleDialog::onScaleChanged);
     onScaleChanged(ui->comboScale->currentIndex());
+
+    // Restore saved cent offsets (onScaleChanged reset them to zero)
+    rebuildInflectionRows(currentScale);
 }
 
 ScaleDialog::~ScaleDialog()
@@ -363,7 +410,9 @@ ScaleDialog::~ScaleDialog()
 Scale ScaleDialog::getSelectedScale() const
 {
     int scaleId = ui->comboScale->currentData().toInt();
-    return Scale::getScaleById(scaleId);
+    Scale scale = Scale::getScaleById(scaleId);
+    scale.setCentOffsets(getCurrentCentOffsets());
+    return scale;
 }
 
 double ScaleDialog::getBaseFrequency() const
@@ -389,10 +438,15 @@ void ScaleDialog::onScaleChanged(int index)
     }
     updateKeyButtonStyles();
 
-    // For Equal Temperament, base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
+    // Rebuild inflection rows for the new scale (resets all sliders to 0)
+    Scale scale = Scale::getScaleById(scaleId);
+    rebuildInflectionRows(scale);
 
     // Update description
     ui->textScaleInfo->setHtml(getScaleDescription(scaleId));
+
+    // Update degree frequency display
+    updateDegreeFrequencies();
 }
 
 void ScaleDialog::onKeyButtonClicked(int tonicIndex)
@@ -409,6 +463,9 @@ void ScaleDialog::onKeyButtonClicked(int tonicIndex)
     }
 
     // Base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
+
+    // Update degree frequency display for ET tonic change
+    updateDegreeFrequencies();
 }
 
 void ScaleDialog::updateKeyButtonStyles()
@@ -427,4 +484,139 @@ void ScaleDialog::updateKeyButtonStyles()
             btn->setStyleSheet("font-size:9px;");
         }
     }
+}
+
+void ScaleDialog::rebuildInflectionRows(const Scale &scale)
+{
+    // Delete and recreate the entire group — Qt parent-child cascade handles
+    // all widget and sub-layout cleanup safely.
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(layout());
+    int groupIdx = mainLayout->indexOf(inflectionGroup);
+    mainLayout->removeWidget(inflectionGroup);
+    delete inflectionGroup;
+
+    inflectionGroup = new QGroupBox("Inflection  (±50 cents per degree)", this);
+    inflectionLayout = new QVBoxLayout(inflectionGroup);
+    inflectionLayout->setSpacing(5);
+    inflectionLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->insertWidget(groupIdx, inflectionGroup);
+
+    inflectionSliders.clear();
+    inflectionCentsLabels.clear();
+
+    const QVector<double> &existingOffsets = scale.getCentOffsets();
+    int degreeCount = scale.getDegreeCount();
+
+    for (int d = 1; d < degreeCount; ++d) {
+        double rawRatio = scale.getRawRatio(d);
+
+        QHBoxLayout *row = new QHBoxLayout();
+        row->setSpacing(8);
+
+        // Degree label: ordinal number + ratio in cents
+        double centsFromTonic = 1200.0 * std::log2(rawRatio);
+        QString ordinal = QString("%1%2 degree")
+            .arg(d + 1)
+            .arg((d == 0) ? "st" : (d == 1) ? "nd" : (d == 2) ? "rd" : "th");
+        QString ratioText = QString("%1  (%2¢)").arg(ordinal).arg(centsFromTonic, 0, 'f', 1);
+        QLabel *label = new QLabel(ratioText, inflectionGroup);
+        label->setMinimumWidth(180);
+        label->setStyleSheet("font-size:10px;");
+        row->addWidget(label);
+
+        // Cents offset slider: -50 to +50
+        QSlider *slider = new QSlider(Qt::Horizontal, inflectionGroup);
+        slider->setRange(-50, 50);
+        int initialValue = (d < existingOffsets.size()) ? qRound(existingOffsets[d]) : 0;
+        slider->setValue(initialValue);
+        slider->setMinimumWidth(200);
+        slider->setToolTip(QString("Inflection for %1").arg(ordinal));
+        row->addWidget(slider);
+
+        // Cents offset label
+        QLabel *centsLabel = new QLabel(inflectionGroup);
+        if (initialValue >= 0)
+            centsLabel->setText(QString(" +%1¢").arg(initialValue));
+        else
+            centsLabel->setText(QString(" %1¢").arg(initialValue));
+        centsLabel->setMinimumWidth(50);
+        centsLabel->setStyleSheet("font-size:10px;");
+        row->addWidget(centsLabel);
+
+        // Connect slider to update the label and degree frequencies
+        connect(slider, &QSlider::valueChanged, this, [this, centsLabel](int value) {
+            if (value >= 0)
+                centsLabel->setText(QString(" +%1¢").arg(value));
+            else
+                centsLabel->setText(QString(" %1¢").arg(value));
+            updateDegreeFrequencies();
+        });
+
+        row->addStretch();
+        inflectionLayout->addLayout(row);
+
+        inflectionSliders.append(slider);
+        inflectionCentsLabels.append(centsLabel);
+    }
+}
+
+QVector<double> ScaleDialog::getCurrentCentOffsets() const
+{
+    QVector<double> offsets;
+    offsets.reserve(inflectionSliders.size() + 1);
+    offsets.append(0.0);  // tonic — always zero
+    for (const QSlider *slider : inflectionSliders)
+        offsets.append(slider->value());
+    return offsets;
+}
+
+void ScaleDialog::updateDegreeFrequencies()
+{
+    // Clear existing labels
+    for (QLabel *label : degreeFreqLabels) {
+        degreeFreqLayout->removeWidget(label);
+        delete label;
+    }
+    degreeFreqLabels.clear();
+
+    // Get current scale with cent offsets
+    Scale scale = getSelectedScale();
+    double refFreq = degreeRefFreqSpin->value();
+
+    // For ET with a non-C tonic, rotate ratios so frequencies start from the tonic
+    if (scale.getScaleId() == 2 && selectedTonicIndex > 0) {
+        scale = Scale::equalTemperamentWithTonic(selectedTonicIndex);
+        // Re-apply cent offsets (the rotated scale starts fresh)
+        scale.setCentOffsets(getCurrentCentOffsets());
+    }
+
+    int degreeCount = scale.getDegreeCount();
+    for (int d = 0; d < degreeCount; ++d) {
+        double ratio = scale.getRatio(d);  // includes cent offset
+        double freqHz = refFreq * ratio;
+
+        // Neutral ordinal: "1st", "2nd", "3rd", "4th", ...
+        int n = d + 1;
+        QString ordinal;
+        if (n % 100 >= 11 && n % 100 <= 13)
+            ordinal = QString("%1th").arg(n);
+        else switch (n % 10) {
+            case 1:  ordinal = QString("%1st").arg(n); break;
+            case 2:  ordinal = QString("%1nd").arg(n); break;
+            case 3:  ordinal = QString("%1rd").arg(n); break;
+            default: ordinal = QString("%1th").arg(n); break;
+        }
+
+        QLabel *label = new QLabel(degreeFreqGroup);
+        label->setText(QString("%1\n%2 Hz")
+            .arg(ordinal)
+            .arg(freqHz, 0, 'f', 2));
+        label->setAlignment(Qt::AlignCenter);
+        label->setMinimumWidth(50);
+        label->setStyleSheet("font-size:9px; padding: 2px; background-color:#2a2a2a; color:#e0e0e0; border-radius:3px;");
+        degreeFreqLayout->addWidget(label);
+        degreeFreqLabels.append(label);
+    }
+
+    degreeFreqLayout->addStretch();
 }

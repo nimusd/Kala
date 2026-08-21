@@ -36,6 +36,8 @@
 #include "tailprocessor.h"
 #include "percussionmodel.h"
 #include "panprocessor.h"
+#include "guitarmodel.h"
+#include "oudmodel.h"
 #include "spectrum.h"
 #include <QMap>
 #include <QVector>
@@ -104,6 +106,26 @@ public:
     // Returns true if graph contains a Pan container
     bool hasPan() const { return m_panContainer != nullptr; }
 
+    // Returns true if graph contains a VL70-m (MIDI out) container.
+    // Such a graph produces MIDI events instead of (or in addition to) audio.
+    bool hasMidiOut() const { return m_midiContainer != nullptr; }
+
+    // Returns the VL70-m container, or nullptr if the graph has none.
+    Container *getMidiContainer() const { return m_midiContainer; }
+
+    // Phase 6 (MIDI row ports): the bake's audio-rate walk reads the VL70-m
+    // container's row input ports exactly like an executeContainer branch
+    // reads a parameter port. isMidiPortConnected is an existence check, not
+    // activity-gated - a row is walk-marked even if its source is currently
+    // inactive (the value then rests at the base 0.5 = CC 64 = neutral).
+    // getMidiPortValue folds every cached connection to (m_midiContainer,
+    // portName) whose source is active through applyConnectionFunction with
+    // base 0.5 (row ports have no static parameter; 0.5 pivots modulate at
+    // the row neutral). Call only after generateSample() has executed the
+    // current sample, so source controlOut values are up to date.
+    bool isMidiPortConnected(const QString &portName) const;
+    double getMidiPortValue(const QString &portName) const;
+
     // Returns the current pan value (-1.0 to +1.0) from the Pan container, or 0.0 if none
     double getPanValue() const;
 
@@ -149,6 +171,12 @@ private:
         TailProcessor    *tailProc         = nullptr;
         PercussionModel  *percussionModel  = nullptr;
         PanProcessor     *panProc          = nullptr;
+        GuitarModel      *guitarModel      = nullptr;
+        OudModel         *oudModel         = nullptr;
+
+        // Runtime string damping value (from connected port or static parameter).
+        // >= 0.5 = fretted (cuts previous notes), < 0.5 = open (rings freely).
+        double effectiveStringDamping = 0.0;
 
         // Data storage for this container's outputs
         Spectrum spectrumOut;
@@ -170,6 +198,8 @@ private:
         // PADsynth wavetable (owned by this ProcessorData, S2S points into it)
         std::vector<float> padWavetable;
         double padFundamentalHz = 0.0;
+        double padBandwidth = 40.0;
+        double padBandwidthScale = 1.0;
 
         // True when irIn port has an incoming connection (set at build time)
         bool irInConnected = false;
@@ -212,6 +242,8 @@ private:
             delete tailProc;
             delete percussionModel;
             delete panProc;
+            delete guitarModel;
+            delete oudModel;
         }
     };
 
@@ -238,6 +270,9 @@ private:
 
     // Pan container tracking (for stereo rendering)
     Container *m_panContainer = nullptr;
+
+    // VL70-m container tracking (MIDI output; no audio processor)
+    Container *m_midiContainer = nullptr;
 
     // Cached connections - snapshot taken at build time so graph is independent of live canvas edits
     QVector<Canvas::Connection> cachedConnections;

@@ -2,6 +2,7 @@
 #define GOTODIALOG_H
 
 #include <QDialog>
+#include <QKeyEvent>
 #include "compositionsettings.h"
 
 class QSpinBox;
@@ -27,10 +28,15 @@ public:
 
     // Get target time in milliseconds (call after exec() returns Accepted)
     double getTargetTimeMs() const;
+    bool getSetNowTime() const { return setNowTime; }
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onAbsoluteTimeChanged();
     void onMusicalTimeChanged();
+    void onSetNow();
 
 private:
     void setupUI();
@@ -60,6 +66,7 @@ private:
 
     // Result
     double targetTimeMs;
+    bool setNowTime = false;
 };
 
 #endif // GOTODIALOG_H

@@ -4,6 +4,7 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QSpinBox>
+#include <QLineEdit>
 #include <QStackedWidget>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -122,6 +123,9 @@ void GotoDialog::setupUI()
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 
+    QPushButton *setNowButton = new QPushButton("Set &Now (N)", this);
+    buttonBox->addButton(setNowButton, QDialogButtonBox::ActionRole);
+
     mainLayout->addWidget(buttonBox);
 
     // Connect signals
@@ -139,8 +143,18 @@ void GotoDialog::setupUI()
     connect(musicalMilliseconds, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &GotoDialog::onMusicalTimeChanged);
 
+    connect(setNowButton, &QPushButton::clicked, this, &GotoDialog::onSetNow);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    // Install event filters on spinbox internal line edits so 'n' key
+    // reaches us even though focus lives inside the line edit
+    absMinutes->findChild<QLineEdit *>()->installEventFilter(this);
+    absSeconds->findChild<QLineEdit *>()->installEventFilter(this);
+    absMilliseconds->findChild<QLineEdit *>()->installEventFilter(this);
+    musicalMeasure->findChild<QLineEdit *>()->installEventFilter(this);
+    musicalBeat->findChild<QLineEdit *>()->installEventFilter(this);
+    musicalMilliseconds->findChild<QLineEdit *>()->installEventFilter(this);
 
     // Initial calculation
     if (timeMode == CompositionSettings::Musical) {
@@ -211,4 +225,22 @@ double GotoDialog::calculateBarDuration() const
 double GotoDialog::getTargetTimeMs() const
 {
     return targetTimeMs;
+}
+
+bool GotoDialog::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::KeyPress) {
+        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        if (ke->key() == Qt::Key_N && ke->modifiers() == Qt::NoModifier) {
+            onSetNow();
+            return true;
+        }
+    }
+    return QDialog::eventFilter(obj, event);
+}
+
+void GotoDialog::onSetNow()
+{
+    setNowTime = true;
+    accept();
 }

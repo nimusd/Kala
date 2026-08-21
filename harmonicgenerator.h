@@ -75,6 +75,19 @@ public:
         return 0.0;
     }
 
+    // Returns the 0-based harmonic index of the n-th active (amplitude > 0) harmonic.
+    // Returns -1 if fewer than n+1 active harmonics exist.
+    int getActiveHarmonicIndex(int n) const {
+        int found = 0;
+        for (int h = 0; h < harmonicAmplitudes.size(); h++) {
+            if (harmonicAmplitudes[h] > 0.0) {
+                if (found == n) return h;
+                found++;
+            }
+        }
+        return -1;
+    }
+
 private:
     double sampleRate;
     int numHarmonics;

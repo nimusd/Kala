@@ -45,6 +45,11 @@ public:
     QStringList getInputPorts() const;
     QStringList getOutputPorts() const;
 
+    // Rebuild the input ports (labels + circles) in place. Outputs stay
+    // untouched. Used by the VL70-m container to make ports follow the
+    // active parameter rows.
+    void setInputPorts(const QStringList &inputs);
+
     // Parameter management
     void setParameter(const QString &name, double value);
     double getParameter(const QString &name, double defaultValue = 0.0) const;
@@ -95,6 +100,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
      void resizeEvent(QResizeEvent *event) override;
+    bool event(QEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
     void showEvent(QShowEvent *event) override;
      void moveEvent(QMoveEvent *event) override;

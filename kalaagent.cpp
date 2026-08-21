@@ -261,10 +261,11 @@ Be concise. When building, narrate briefly as you work.
 ━━━ CONTAINER TYPES ━━━
 
 ESSENTIAL (Blue):
-Harmonic Generator — out: spectrum | in: purity, drift, digitWindowOffset | params: numHarmonics(64), dnaSelect(0–5,-1=custom), padEnabled, padBandwidth(cents), padBandwidthScale
+Harmonic Generator — out: spectrum | in: purity, drift, digitWindowOffset, h1amp, h2amp, h3amp, h4amp, h5amp, h6amp, h7amp, h8amp (each maps to the n-th active harmonic — the n-th harmonic with amplitude > 0 — not to harmonic number n), padBandwidth(cents, 1–200, source 0–1 scaled to full range), padBandwidthScale(0–2, how bandwidth grows with harmonic number) | params: numHarmonics(64), dnaSelect(0–5,-1=custom), padEnabled, padBandwidth(cents), padBandwidthScale
 Spectrum to Signal — in: spectrumIn, pitchMultiplier | out: signalOut | params: normalize(1), pitchMultiplier(1.0)
 Signal Mixer — in: signalA, signalB | out: signalOut | params: gainA(1.0), gainB(1.0)
 Note Tail — in: signalIn, length | out: signalOut | params: tailLength(ms, 1–9999)
+VL70-m — in: pitch + one port per active parameter row (volume has no port — it follows note dynamics) | out: midiOut | params: midiChannel(1–16), pitchBendRange(semitones, default 2), midiUpdateIntervalMs(ms, default 10, 1–100), plus per-row row.<name>.active/cc/ms/reset/neutral (23-row catalog in vl70mrows.h; defaults active: volume CC7, breath CC2, expression CC11, embouchure CC13, breathNoise CC14, filterCutoff/filterResonance NRPN 01 20/01 21; element rows default 25 ms, NRPN rows 12 ms; neutral defaults 64 offset-type / 127 expression — set per row to match the patch's DEPTH + MODE, where "off" lives). MIDI output to external hardware (monophonic, max 1 note). Produces no audio — notes on its graph dispatch as MIDI at playback: pitch + dynamics curves (with vibrato) resample into pitch bend + volume CC7 streams at the update interval, per-note RPN bend range matched to each note's excursion. Rows architecture: the patch on the module owns the CC assignments (VL-Wizard/module CONTROL NO.s) — Kala never writes the voice edit buffer; play start sends each active row's neutral once, curve rows stream at their own resolution and end-reset to neutral (reset flag), no-curve rows stay silent. Save the container as a sounit named after the patch it matches.
 Attack — out: signalOut | params: attackType(0=FluteChiff,1=ClarinetOnset,2=SaxHonk,3=BrassBuzz,4=PianoHammer,5=DrumHit)
 Karplus Strong — in: signalIn, pitchMultiplier,… | out: signalOut | params: mode(0=String,1=Attack)
 Bowed — in: bowPressure, bowVelocity, bowPosition, pitchMultiplier | out: signalOut | bowPosition: 0.05–0.12=ponticello, 0.127=normale
@@ -329,7 +330,7 @@ To copy/promote a variation to the base sounit: call variation(action:"copy_to_b
 3. Bowed gainA in Signal Mixer must be 0.12–0.14 max. Higher causes beating/detuning artifacts.
 4. LFO output is BIPOLAR. Use function=modulate for pitch/timbre. Use function=add for offset. NEVER use modulate on a 0–1 input port.
 5. ONE OUTPUT → ONE INPUT. Each output port of a container can only be connected to ONE input port total. You CANNOT connect the same output to two different inputs — not even on different containers and especially not on the same container (e.g. you cannot connect lfoOut → lowRolloff AND lfoOut → highRolloff of the same Rolloff container). Use a second LFO (or other source) for each additional target input.
-6. PADsynth safe params: padBandwidth 4–7 cents, padBandwidthScale 0.09–0.25. Higher causes out-of-tune doubling in upper register.
+6. PADsynth safe params: padBandwidth 4–7 cents, padBandwidthScale 0.09–0.25. Higher causes out-of-tune doubling in upper register. The padBandwidth/padBandwidthScale input ports regenerate the wavetable once per note (on first sample) when the connected value differs from cached — FFT cost is one-time per note. Works well with Frequency Mapper (pitch→bandwidth per note). Avoid fast LFOs (only first-sample value is used).
 7. IR Convolution: call browse_library(type:"ir"), then load_ir after adding the container.
 8. Connected port overrides the static parameter value. Static value is the fallback.
 9. Sounit files save to C:\Users\nimus\Music\kala\sounit\

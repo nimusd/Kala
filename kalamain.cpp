@@ -11,6 +11,7 @@
 #include "scorecanvaswindow.h"
 #include "canvas.h"
 #include "container.h"
+#include "vl70mrows.h"
 #include "spectrumvisualizer.h"
 #include "envelopevisualizer.h"
 #include "dnaeditordialog.h"
@@ -28,6 +29,7 @@
 #include "rendercache.h"
 #include "exportaudiodialog.h"
 #include "containersettings.h"
+#include "midioutput.h"
 #include "wavetablesynth.h"
 #include "vibratoeditordialog.h"
 #include "helpdialog.h"
@@ -80,6 +82,18 @@ KalaMain::KalaMain(QWidget *parent)
 {
     ui->setupUi(this);
 
+    // Restore window geometry, dock/toolbar state, and last active tab from last session
+    {
+        QSettings settings;
+        if (settings.contains("windows/mainWindow/geometry"))
+            restoreGeometry(settings.value("windows/mainWindow/geometry").toByteArray());
+        if (settings.contains("windows/mainWindow/state"))
+            restoreState(settings.value("windows/mainWindow/state").toByteArray());
+        int savedTab = settings.value("windows/mainWindow/tabIndex", 0).toInt();
+        if (savedTab >= 0 && savedTab < ui->MainTab->count())
+            ui->MainTab->setCurrentIndex(savedTab);
+    }
+
     // Initialize shared audio engine FIRST
     audioEngine = new AudioEngine();
     if (!audioEngine->initialize()) {
@@ -91,6 +105,12 @@ KalaMain::KalaMain(QWidget *parent)
 
     // Connect audio device change signals
     connect(audioEngine, &AudioEngine::playbackStopRequested, this, &KalaMain::stopAllPlayback);
+    // Natural end of track playback: the callback only flips flags; the MIDI
+    // stream session is torn down here on the main thread. Auto connection =
+    // queued (emitter is the RtAudio thread), so stopTrackPlayback() runs
+    // after the callback released the playback mutex.
+    connect(audioEngine, &AudioEngine::trackPlaybackEnded,
+            audioEngine, &AudioEngine::stopTrackPlayback);
     connect(audioEngine, &AudioEngine::audioDeviceChanged, this, [](const QString &name) {
         qDebug() << "Audio device changed:" << name;
     });
@@ -1043,6 +1063,10 @@ void KalaMain::onContainerSelected(Container *container)
         populateRecorderInspector();
     } else if (container->getName() == "Flute") {
         populateFluteInspector();
+    } else if (container->getName() == "singlePluck") {
+        populateGuitarInspector();
+    } else if (container->getName() == "doublePluck") {
+        populateOudInspector();
     } else if (container->getName() == "Piano") {
         populatePianoInspector();
     } else if (container->getName() == "Bass") {
@@ -1059,6 +1083,8 @@ void KalaMain::onContainerSelected(Container *container)
         populatePercussionInspector();
     } else if (container->getName() == "Pan") {
         populatePanInspector();
+    } else if (container->getName() == "VL70-m") {
+        populateVl70mInspector();
     }
 }
 
@@ -1780,6 +1806,58 @@ void KalaMain::addParameterSlider(QFormLayout *layout, const QString &label,
     });
 
     layout->addRow(label + ":", paramLayout);
+}
+
+void KalaMain::addStringSelection(QFormLayout *layout, const QString &label,
+                                   const QStringList &stringNames, const QString &paramName)
+{
+    if (!currentContainer) return;
+
+    // Get current bitmask value (default to all strings enabled = 0x3F = 63)
+    unsigned int currentMask = static_cast<unsigned int>(currentContainer->getParameter(paramName, 63.0));
+
+    QWidget *checkboxWidget = new QWidget();
+    QHBoxLayout *checkboxLayout = new QHBoxLayout(checkboxWidget);
+    checkboxLayout->setSpacing(12);
+
+    QVector<QCheckBox*> checkboxes;
+
+    for (int i = 0; i < stringNames.size(); ++i) {
+        QCheckBox *checkbox = new QCheckBox(stringNames[i]);
+        bool isChecked = (currentMask & (1 << i)) != 0;
+        checkbox->setChecked(isChecked);
+
+        checkboxes.append(checkbox);
+        checkboxLayout->addWidget(checkbox);
+
+        connect(checkbox, &QCheckBox::toggled, this, [this, paramName, checkboxes, i](bool checked) {
+            if (!currentContainer) return;
+
+            // Calculate new bitmask from all checkboxes
+            unsigned int newMask = 0;
+            for (int j = 0; j < checkboxes.size(); ++j) {
+                if (checkboxes[j]->isChecked()) {
+                    newMask |= (1 << j);
+                }
+            }
+
+            unsigned int oldMask = static_cast<unsigned int>(currentContainer->getParameter(paramName, 63.0));
+
+            if (oldMask != newMask) {
+                Canvas *c = sounitBuilder->getCanvas();
+                if (c) {
+                    c->getUndoStack()->push(
+                        new SetParameterCommand(currentContainer, paramName,
+                                                static_cast<double>(oldMask),
+                                                static_cast<double>(newMask)));
+                }
+            }
+        });
+    }
+
+    checkboxLayout->addStretch();
+
+    layout->addRow(label + ":", checkboxWidget);
 }
 
 // Rolloff Processor Inspector
@@ -3100,7 +3178,7 @@ void KalaMain::populateWavetableSynthInspector()
         filePathLabel->setVisible(false);
     }
 
-    connect(comboPreset, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    connect(comboPreset, QOverload<int>::of(&QComboBox::activated),
             this, [this, comboPreset, filePathLabel](int index) {
         if (!currentContainer) return;
 
@@ -3436,6 +3514,240 @@ void KalaMain::populateNoteTailInspector()
     mainLayout->addStretch();
 }
 
+// VL70-m (MIDI Out) Inspector
+void KalaMain::populateVl70mInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(10);
+
+    // MIDI channel
+    QHBoxLayout *channelLayout = new QHBoxLayout();
+    QSpinBox *spinChannel = new QSpinBox();
+    spinChannel->setRange(1, 16);
+    spinChannel->setValue(static_cast<int>(currentContainer->getParameter("midiChannel", 1.0)));
+    connect(spinChannel, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int value) {
+        if (currentContainer) {
+            currentContainer->setParameter("midiChannel", static_cast<double>(value));
+            int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
+            sounitBuilder->rebuildGraph(trackIndex);
+        }
+    });
+    channelLayout->addWidget(spinChannel);
+    channelLayout->addStretch();
+    formLayout->addRow("MIDI Channel:", channelLayout);
+
+    // Pitch bend range (used to map note Hz onto the bend value)
+    QHBoxLayout *bendLayout = new QHBoxLayout();
+    QSpinBox *spinBend = new QSpinBox();
+    spinBend->setRange(0, 24);
+    spinBend->setSuffix(" semitones");
+    spinBend->setValue(static_cast<int>(currentContainer->getParameter("pitchBendRange", 2.0)));
+    connect(spinBend, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int value) {
+        if (currentContainer) {
+            currentContainer->setParameter("pitchBendRange", static_cast<double>(value));
+            int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
+            sounitBuilder->rebuildGraph(trackIndex);
+        }
+    });
+    bendLayout->addWidget(spinBend);
+    bendLayout->addStretch();
+    formLayout->addRow("Pitch Bend Range:", bendLayout);
+
+    // MIDI update interval (how often volume/bend updates are sent while a
+    // note sounds). Bake-time only, so no rebuildGraph here - the
+    // parameterChanged -> rebuildGraph signal connection already covers the
+    // graph and the next playFromTracks re-bakes from the live value.
+    QHBoxLayout *updateLayout = new QHBoxLayout();
+    QSpinBox *spinUpdate = new QSpinBox();
+    spinUpdate->setRange(1, 100);
+    spinUpdate->setSuffix(" ms");
+    spinUpdate->setValue(static_cast<int>(currentContainer->getParameter("midiUpdateIntervalMs", 10.0)));
+    connect(spinUpdate, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int value) {
+        if (currentContainer) {
+            currentContainer->setParameter("midiUpdateIntervalMs", static_cast<double>(value));
+        }
+    });
+    updateLayout->addWidget(spinUpdate);
+    updateLayout->addStretch();
+    formLayout->addRow("MIDI Update Interval:", updateLayout);
+
+    // Parameter rows (rows architecture): the patch on the module owns the CC
+    // assignments; each row declares which parameter Kala drives, on which
+    // CC, at what resolution, and whether it returns to neutral at note end.
+    // Writes go through SetParameterCommand so toggles are undoable (same
+    // idiom as addParameterSlider).
+    auto addRowEditor = [&](const Vl70mRows::Row &row) {
+        QHBoxLayout *rowLayout = new QHBoxLayout();
+
+        const bool isVolume = (row.kind == Vl70mRows::Kind::Volume);
+        const bool hasCc = (row.kind == Vl70mRows::Kind::Cc);
+
+        // Active toggle. Volume (CC7) is toggleable too: off means no
+        // dynamics stream, so loudness must come from a breath/expression
+        // curve row (CC2/CC11) or the module's own volume setting.
+        QCheckBox *activeBox = new QCheckBox();
+        activeBox->setChecked(Vl70mRows::isActive(currentContainer, row));
+        if (isVolume)
+            activeBox->setToolTip("Off: no volume (CC7) stream - drive dynamics "
+                                  "with a breath or expression curve instead");
+        connect(activeBox, &QCheckBox::toggled, this, [this, row](bool checked) {
+            const QString key = Vl70mRows::pActive(row.name);
+            double oldVal = currentContainer->getParameter(key, row.defaultActive ? 1.0 : 0.0);
+            double newVal = checked ? 1.0 : 0.0;
+            if (oldVal != newVal) {
+                Canvas *c = sounitBuilder->getCanvas();
+                if (c) c->getUndoStack()->push(
+                    new SetParameterCommand(currentContainer, key, oldVal, newVal));
+            }
+        });
+        rowLayout->addWidget(activeBox);
+
+        QLabel *nameLabel = new QLabel(row.name);
+        nameLabel->setMinimumWidth(130);
+        rowLayout->addWidget(nameLabel);
+
+        // CC number (CC rows only; NRPN rows have fixed part-offset addresses)
+        QSpinBox *spinCc = new QSpinBox();
+        spinCc->setRange(1, 95);
+        spinCc->setValue(Vl70mRows::ccNum(currentContainer, row));
+        if (!hasCc) {
+            spinCc->setEnabled(false);
+            spinCc->setToolTip(isVolume ? "CC fixed (volume)" : "CC not used (NRPN part parameter)");
+        } else {
+            connect(spinCc, QOverload<int>::of(&QSpinBox::valueChanged),
+                    this, [this, row](int value) {
+                const QString key = Vl70mRows::pCc(row.name);
+                double oldVal = currentContainer->getParameter(key, row.defaultCc);
+                if (oldVal != value) {
+                    Canvas *c = sounitBuilder->getCanvas();
+                    if (c) c->getUndoStack()->push(
+                        new SetParameterCommand(currentContainer, key, oldVal, static_cast<double>(value)));
+                }
+            });
+        }
+        rowLayout->addWidget(spinCc);
+
+        // Resolution in ms (volume streams on the cheap-tier grid above)
+        QSpinBox *spinMs = new QSpinBox();
+        spinMs->setRange(1, 100);
+        spinMs->setSuffix(" ms");
+        spinMs->setValue(isVolume ? static_cast<int>(currentContainer->getParameter("midiUpdateIntervalMs", 10.0))
+                                  : Vl70mRows::resolutionMs(currentContainer, row));
+        if (isVolume) {
+            spinMs->setEnabled(false);
+            spinMs->setToolTip("Volume streams on the MIDI update interval");
+        } else {
+            connect(spinMs, QOverload<int>::of(&QSpinBox::valueChanged),
+                    this, [this, row](int value) {
+                const QString key = Vl70mRows::pMs(row.name);
+                double oldVal = currentContainer->getParameter(key, row.defaultMs);
+                if (oldVal != value) {
+                    Canvas *c = sounitBuilder->getCanvas();
+                    if (c) c->getUndoStack()->push(
+                        new SetParameterCommand(currentContainer, key, oldVal, static_cast<double>(value)));
+                }
+            });
+        }
+        rowLayout->addWidget(spinMs);
+
+        // Resting value: sent at play start and at note end (when reset @ end
+        // is on). The patch's DEPTH + MODE decide where "off" lives - 64 is
+        // center/off for symmetric ±DEPTH CENTER BASE patches, one-directional
+        // patches rest at 0 (or 127).
+        QLabel *restLabel = new QLabel("rest");
+        restLabel->setStyleSheet("color: gray; font-size: 10px;");
+        rowLayout->addWidget(restLabel);
+        QSpinBox *spinNeutral = new QSpinBox();
+        spinNeutral->setRange(0, 127);
+        spinNeutral->setValue(Vl70mRows::neutral(currentContainer, row));
+        if (isVolume) {
+            spinNeutral->setEnabled(false);
+        } else {
+            connect(spinNeutral, QOverload<int>::of(&QSpinBox::valueChanged),
+                    this, [this, row](int value) {
+                const QString key = Vl70mRows::pNeutral(row.name);
+                double oldVal = currentContainer->getParameter(key, row.neutral);
+                if (oldVal != value) {
+                    Canvas *c = sounitBuilder->getCanvas();
+                    if (c) c->getUndoStack()->push(
+                        new SetParameterCommand(currentContainer, key, oldVal, static_cast<double>(value)));
+                }
+            });
+        }
+        rowLayout->addWidget(spinNeutral);
+
+        // End-reset: return to neutral at note end (volume exempt)
+        QCheckBox *resetBox = new QCheckBox("reset @ end");
+        resetBox->setChecked(Vl70mRows::resetAtNoteEnd(currentContainer, row));
+        if (isVolume) {
+            resetBox->setEnabled(false);
+        } else {
+            connect(resetBox, &QCheckBox::toggled, this, [this, row](bool checked) {
+                const QString key = Vl70mRows::pReset(row.name);
+                double oldVal = currentContainer->getParameter(key, row.defaultReset ? 1.0 : 0.0);
+                double newVal = checked ? 1.0 : 0.0;
+                if (oldVal != newVal) {
+                    Canvas *c = sounitBuilder->getCanvas();
+                    if (c) c->getUndoStack()->push(
+                        new SetParameterCommand(currentContainer, key, oldVal, newVal));
+                }
+            });
+        }
+        rowLayout->addWidget(resetBox);
+
+        // NRPN rows: show the fixed part-offset address
+        if (row.kind == Vl70mRows::Kind::Nrpn) {
+            QLabel *addrLabel = new QLabel(QString("NRPN %1 %2")
+                                               .arg(row.nrpnMsb, 2, 16, QLatin1Char('0'))
+                                               .arg(row.nrpnLsb, 2, 16, QLatin1Char('0'))
+                                               .toUpper());
+            addrLabel->setStyleSheet("color: gray; font-size: 10px;");
+            rowLayout->addWidget(addrLabel);
+        }
+        rowLayout->addStretch();
+
+        formLayout->addRow("", rowLayout);
+    };
+
+    QLabel *rowsHeader = new QLabel("<b>Parameter Rows</b>");
+    formLayout->addRow("", rowsHeader);
+    for (const Vl70mRows::Row &row : Vl70mRows::catalog())
+        addRowEditor(row);
+
+    QLabel *polyLabel = new QLabel("Max polyphony: 1 (monophonic)");
+    polyLabel->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", polyLabel);
+
+    QLabel *descLabel = new QLabel("Sends notes to the VL70-m via the configured MIDI output "
+                                   "(Settings → MIDI Setup). Each note's pitch and dynamics "
+                                   "curves are resampled into pitch-bend and volume (CC7) "
+                                   "streams at the update interval; vibrato bakes into both. "
+                                   "Volume is optional: with the volume row off no dynamics "
+                                   "stream is sent - draw a breath or expression curve to "
+                                   "control loudness instead. "
+                                   "Parameter rows drive the patch-assigned parameters: a row "
+                                   "with a curve on the note streams it at its own resolution "
+                                   "and returns to neutral at note end; rows without a curve "
+                                   "stay silent. Assign the CCs on the module or in VL-Wizard "
+                                   "to match the rows — Kala never writes the voice edit "
+                                   "buffer. Save the container as a sounit named after the "
+                                   "patch it matches.");
+    descLabel->setStyleSheet("color: gray; font-size: 10px;");
+    descLabel->setWordWrap(true);
+    formLayout->addRow("", descLabel);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
 // Recorder Inspector
 void KalaMain::populateRecorderInspector()
 {
@@ -3518,6 +3830,205 @@ void KalaMain::populateFluteInspector()
     QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
     pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
     formLayout->addRow("", pitchMultDesc);
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Guitar Inspector
+void KalaMain::populateGuitarInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    // Per-string pluck positions
+    QLabel *pluckHeader = new QLabel("<b>String Pluck Positions</b> (0 = bridge, 1 = nut)");
+    formLayout->addRow("", pluckHeader);
+
+    addParameterSlider(formLayout, "String 0 (High E)", "pluckPos0",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    addParameterSlider(formLayout, "String 1 (B)", "pluckPos1",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    addParameterSlider(formLayout, "String 2 (G)", "pluckPos2",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    addParameterSlider(formLayout, "String 3 (D)", "pluckPos3",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    addParameterSlider(formLayout, "String 4 (A)", "pluckPos4",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    addParameterSlider(formLayout, "String 5 (Low E)", "pluckPos5",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    // Global parameters
+    QLabel *globalHeader = new QLabel("<b>Global Parameters</b>");
+    formLayout->addRow("", globalHeader);
+
+    addParameterSlider(formLayout, "Wound Damping", "woundDamping",
+                       0.0, 1.0, 0.3, 0.01, 2);
+
+    addParameterSlider(formLayout, "Sympathetic Gain", "sympatheticGain",
+                       0.0, 0.05, 0.01, 0.0001, 4);
+
+    addParameterSlider(formLayout, "Air Resonance (Hz)", "airResonance",
+                       80.0, 150.0, 100.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Top Resonance (Hz)", "topResonance",
+                       150.0, 300.0, 200.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Pluck Hardness", "pluckHardness",
+                       0.0, 1.0, 0.8, 0.01, 2);
+
+    addParameterSlider(formLayout, "Nail/Flesh Ratio", "nailFleshRatio",
+                       0.0, 1.0, 0.6, 0.01, 2);
+
+    addParameterSlider(formLayout, "Output Gain", "outputGain",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
+    QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchMultDesc);
+
+    // ── Amplitude-Dependent Pitch Glide ──
+    QLabel *glideHeader = new QLabel("Amplitude-Dependent Pitch Glide");
+    glideHeader->setStyleSheet("font-weight: bold; font-size: 11px; margin-top: 8px;");
+    formLayout->addRow(glideHeader);
+
+    addParameterSlider(formLayout, "Pitch Glide (cents)", "pitchGlideAmount",
+                       0.0, 50.0, 8.0, 0.1, 1);
+    QLabel *glideDesc = new QLabel("Max sharp detune at full dynamics — relaxes as note decays");
+    glideDesc->setStyleSheet("color: gray; font-size: 10px;");
+    glideDesc->setWordWrap(true);
+    formLayout->addRow("", glideDesc);
+
+    addParameterSlider(formLayout, "Jitter (cents)", "jitterAmount",
+                       0.0, 20.0, 3.0, 0.1, 1);
+    QLabel *jitterDesc = new QLabel("Irregular micro-detuning coupled to amplitude — not a periodic vibrato");
+    jitterDesc->setStyleSheet("color: gray; font-size: 10px;");
+    jitterDesc->setWordWrap(true);
+    formLayout->addRow("", jitterDesc);
+
+    // ── String Behavior ──
+    QLabel *stringHeader = new QLabel("String Behavior");
+    stringHeader->setStyleSheet("font-weight: bold; font-size: 11px; margin-top: 8px;");
+    formLayout->addRow(stringHeader);
+
+    QCheckBox *stringDampingCheck = new QCheckBox("Fretted Mode");
+    stringDampingCheck->setChecked(currentContainer->getParameter("stringDamping", 0.0) >= 0.5);
+    connect(stringDampingCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (currentContainer) {
+            currentContainer->setParameter("stringDamping", checked ? 1.0 : 0.0);
+            int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
+            sounitBuilder->rebuildGraph(trackIndex);
+        }
+    });
+    formLayout->addRow(stringDampingCheck);
+    QLabel *dampingDescLabel = new QLabel("On: each new note cuts the previous (guitar/fretted). Off: notes ring freely (harp/open string).");
+    dampingDescLabel->setStyleSheet("color: gray; font-size: 10px;");
+    dampingDescLabel->setWordWrap(true);
+    formLayout->addRow("", dampingDescLabel);
+
+    addStringSelection(formLayout, "String Selection",
+                      {"E (high)", "B", "G", "D", "A", "E (low)"}, "stringMask");
+
+    mainLayout->addWidget(formWidget);
+    mainLayout->addStretch();
+}
+
+// Oud Inspector
+void KalaMain::populateOudInspector()
+{
+    if (!currentContainer) return;
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout*>(ui->scrollAreaConfigContents->layout());
+    if (!mainLayout) return;
+
+    QWidget *formWidget = new QWidget();
+    QFormLayout *formLayout = new QFormLayout(formWidget);
+    formLayout->setSpacing(6);
+
+    // Per-course pluck positions
+    QLabel *pluckHeader = new QLabel("<b>Course Pluck Positions</b> (0 = bridge, 1 = nut)");
+    formLayout->addRow("", pluckHeader);
+
+    addParameterSlider(formLayout, "Course 0 (High C)", "pluckPos0",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Course 1 (G)", "pluckPos1",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Course 2 (D)", "pluckPos2",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Course 3 (A)", "pluckPos3",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Course 4 (F)", "pluckPos4",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Course 5 (Low C)", "pluckPos5",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    // Global parameters
+    QLabel *globalHeader = new QLabel("<b>Global Parameters</b>");
+    formLayout->addRow("", globalHeader);
+
+    addParameterSlider(formLayout, "Plectrum Hardness", "plectrumHardness",
+                       0.0, 1.0, 0.7, 0.01, 2);
+
+    addParameterSlider(formLayout, "Plectrum Brightness", "plectrumBrightness",
+                       0.0, 1.0, 0.6, 0.01, 2);
+
+    addParameterSlider(formLayout, "Course Detune", "courseDetune",
+                       0.0, 0.01, 0.003, 0.0001, 4);
+
+    addParameterSlider(formLayout, "Sympathetic Gain", "sympatheticGain",
+                       0.0, 0.05, 0.015, 0.0001, 4);
+
+    addParameterSlider(formLayout, "Air Resonance (Hz)", "airResonance",
+                       120.0, 180.0, 140.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Top Resonance (Hz)", "topResonance",
+                       250.0, 400.0, 300.0, 0.1, 1);
+
+    addParameterSlider(formLayout, "Output Gain", "outputGain",
+                       0.0, 1.0, 0.5, 0.01, 2);
+
+    addParameterSlider(formLayout, "Pitch Multiplier", "pitchMultiplier", 0.25, 4.0, 1.0, 0.0001, 4);
+    QLabel *pitchMultDesc = new QLabel("1.0 = note pitch · 2.0 = octave up · 0.5 = octave down");
+    pitchMultDesc->setStyleSheet("color: gray; font-size: 10px;");
+    formLayout->addRow("", pitchMultDesc);
+
+    // ── String Behavior ──
+    QLabel *stringHeader = new QLabel("String Behavior");
+    stringHeader->setStyleSheet("font-weight: bold; font-size: 11px; margin-top: 8px;");
+    formLayout->addRow(stringHeader);
+
+    QCheckBox *stringDampingCheck = new QCheckBox("Fretted Mode");
+    stringDampingCheck->setChecked(currentContainer->getParameter("stringDamping", 0.0) >= 0.5);
+    connect(stringDampingCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (currentContainer) {
+            currentContainer->setParameter("stringDamping", checked ? 1.0 : 0.0);
+            int trackIndex = (currentEditingTrack >= 0) ? currentEditingTrack : 0;
+            sounitBuilder->rebuildGraph(trackIndex);
+        }
+    });
+    formLayout->addRow(stringDampingCheck);
+    QLabel *dampingDescLabel = new QLabel("On: each new note cuts the previous (oud/fretted). Off: notes ring freely (harp/open string).");
+    dampingDescLabel->setStyleSheet("color: gray; font-size: 10px;");
+    dampingDescLabel->setWordWrap(true);
+    formLayout->addRow("", dampingDescLabel);
+
+    addStringSelection(formLayout, "Course Selection",
+                      {"C (high)", "G", "D", "A", "F", "C (low)"}, "courseMask");
 
     mainLayout->addWidget(formWidget);
     mainLayout->addStretch();
@@ -4201,6 +4712,14 @@ void KalaMain::updateEnvelopePreview()
 
 void KalaMain::closeEvent(QCloseEvent *event)
 {
+    // Save window geometry, dock/toolbar state, and active tab for next session
+    {
+        QSettings settings;
+        settings.setValue("windows/mainWindow/geometry", saveGeometry());
+        settings.setValue("windows/mainWindow/state", saveState());
+        settings.setValue("windows/mainWindow/tabIndex", ui->MainTab->currentIndex());
+    }
+
     // Check for unsaved changes before closing
     if (!checkUnsavedChanges()) {
         event->ignore();
@@ -4412,8 +4931,8 @@ void KalaMain::newProject()
     // Reset tempo/time signature to defaults
     ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
     sc->clearTempoChanges();
-    sc->setDefaultTempo(6.0);
-    sc->setDefaultTimeSignature(4, 4);
+    sc->setDefaultTempo(120.0);
+    sc->setDefaultTimeSignature(5, 0);
 
     // Clear timeline tempo markers
     Timeline *timeline = scoreCanvasWindow->getTimeline();
@@ -6805,7 +7324,8 @@ void KalaMain::onTempoEditClicked()
     // Can only delete non-default markers
     bool canDelete = (selectedMarkerTime > 0.0);
 
-    TempoDialog dialog(currentTts, !canDelete, this);  // Disable delete if we can't delete
+    bool isKalaMode = (scoreCanvas->getDefaultTimeSigDenom() == 0);
+    TempoDialog dialog(currentTts, !canDelete, isKalaMode, this);
     if (dialog.exec() == QDialog::Accepted) {
         if (dialog.isDeleteRequested() && canDelete) {
             // Delete the marker — undoable
@@ -6844,16 +7364,7 @@ void KalaMain::onTempoEditClicked()
         updateTempoDisplay();
 
         // Update timeline visual indicators
-        QMap<double, TempoTimeSignature> tempoChangesMap = scoreCanvas->getTempoChanges();
-        QMap<double, QString> tempoDescsForTimeline;
-        for (auto it = tempoChangesMap.constBegin(); it != tempoChangesMap.constEnd(); ++it) {
-            QString desc = QString("%1").arg(static_cast<int>(it.value().bpm));
-            if (it.value().gradualTransition) {
-                desc += "~";  // Indicate gradual transition
-            }
-            tempoDescsForTimeline[it.key()] = desc;
-        }
-        timeline->setTempoChanges(tempoDescsForTimeline);
+        updateTimelineTempoMarkers();
 
         // Mark project as dirty
         markProjectDirty();
@@ -6886,7 +7397,8 @@ void KalaMain::onTempoAddClicked()
     TempoTimeSignature currentTts = scoreCanvas->getTempoTimeSignatureAtTime(timelinePosition);
 
     // Open the tempo dialog (delete disabled since we're creating new)
-    TempoDialog dialog(currentTts, true, this);  // true = disable delete
+    bool isKalaMode = (scoreCanvas->getDefaultTimeSigDenom() == 0);
+    TempoDialog dialog(currentTts, true, isKalaMode, this);
     if (dialog.exec() == QDialog::Accepted) {
         TempoTimeSignature newTts = dialog.getTempoTimeSignature();
 
@@ -6898,22 +7410,35 @@ void KalaMain::onTempoAddClicked()
 
         // Update the tempo display
         updateTempoDisplay();
-
-        // Update timeline visual indicators
-        QMap<double, TempoTimeSignature> tempoChangesMap = scoreCanvas->getTempoChanges();
-        QMap<double, QString> tempoDescsForTimeline;
-        for (auto it = tempoChangesMap.constBegin(); it != tempoChangesMap.constEnd(); ++it) {
-            QString desc = QString("%1").arg(static_cast<int>(it.value().bpm));
-            if (it.value().gradualTransition) {
-                desc += "~";
-            }
-            tempoDescsForTimeline[it.key()] = desc;
-        }
-        timeline->setTempoChanges(tempoDescsForTimeline);
+        updateTimelineTempoMarkers();
 
         // Mark project as dirty
         markProjectDirty();
     }
+}
+
+void KalaMain::updateTimelineTempoMarkers()
+{
+    ScoreCanvas *scoreCanvas = scoreCanvasWindow->getScoreCanvas();
+    Timeline *timeline = scoreCanvasWindow->getTimeline();
+    bool isKalaMode = (scoreCanvas->getDefaultTimeSigDenom() == 0);
+
+    QMap<double, TempoTimeSignature> tempoChangesMap = scoreCanvas->getTempoChanges();
+    QMap<double, QString> tempoDescsForTimeline;
+    for (auto it = tempoChangesMap.constBegin(); it != tempoChangesMap.constEnd(); ++it) {
+        QString desc;
+        if (isKalaMode) {
+            int pulseMs = static_cast<int>(60000.0 / it.value().bpm);
+            desc = QString("%1 ms/%2").arg(pulseMs).arg(it.value().timeSigNumerator);
+        } else {
+            desc = QString("%1").arg(static_cast<int>(it.value().bpm));
+        }
+        if (it.value().gradualTransition) {
+            desc += "~";
+        }
+        tempoDescsForTimeline[it.key()] = desc;
+    }
+    timeline->setTempoChanges(tempoDescsForTimeline);
 }
 
 void KalaMain::updateTempoDisplay()
@@ -6971,10 +7496,10 @@ void KalaMain::onTempoMarkerChanged(int markerIndex)
     // Build display string: timestamp | tempo | time signature
     QString displayStr;
     if (tts.timeSigDenominator == 0) {
-        // Simple mode: show just numerator
-        displayStr = QString("%1 | %2 BPM | %3")
+        int pulseMs = static_cast<int>(60000.0 / tts.bpm);
+        displayStr = QString("%1 | %2 ms | %3 pulses")
                          .arg(timestamp)
-                         .arg(static_cast<int>(tts.bpm))
+                         .arg(pulseMs)
                          .arg(tts.timeSigNumerator);
     } else {
         displayStr = QString("%1 | %2 BPM | %3/%4")
@@ -7196,8 +7721,12 @@ void KalaMain::onVariationSelectorChanged(int index)
     qDebug() << "KalaMain: Loading variation index" << index << "to canvas";
 
     if (track->loadVariationToCanvas(index)) {
-        // Rebuild the graph with the new canvas state
-        sounitBuilder->rebuildGraph(track->getTrackId());
+        // When editing a variation (index > 0), only rebuild the preview graph.
+        // The track's base compiled graph must NOT be overwritten with the
+        // variation's canvas state.
+        const bool isVariation = (index > 0);
+        sounitBuilder->setEditingVariation(isVariation);
+        sounitBuilder->rebuildGraph(track->getTrackId(), !isVariation);
 
         // Reset pending connection state (old containers were deleted)
         // and reconnect signals for the new containers
@@ -7837,6 +8366,92 @@ void KalaMain::populateSettingsTab()
     QFormLayout *easingLayout = new QFormLayout(easingGroup);
     populateEasingSettings(easingLayout);
     scrollLayout->addWidget(easingGroup);
+
+    // ── MIDI Setup ────────────────────────────────────────────────────────────
+    QLabel *midiTitle = new QLabel("MIDI Setup");
+    midiTitle->setStyleSheet("font-size: 16px; font-weight: bold; margin-top: 15px; margin-bottom: 5px;");
+    scrollLayout->addWidget(midiTitle);
+
+    QLabel *midiDesc = new QLabel(
+        "MIDI output device for external hardware (e.g. Yamaha VL70-m). "
+        "The \"MIDI test\" button in the score window sends a note to the device selected here.");
+    midiDesc->setWordWrap(true);
+    midiDesc->setStyleSheet("color: gray; margin-bottom: 10px;");
+    scrollLayout->addWidget(midiDesc);
+
+    QGroupBox *midiGroup = new QGroupBox("MIDI Output");
+    midiGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    QFormLayout *midiLayout = new QFormLayout(midiGroup);
+    midiLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+    // Output device selector (+ refresh for devices plugged in after the tab opened)
+    QComboBox *midiDeviceCombo = new QComboBox();
+    midiDeviceCombo->setMinimumWidth(260);
+    QPushButton *midiRefreshBtn = new QPushButton("Refresh");
+    midiRefreshBtn->setFixedWidth(80);
+    QWidget *midiDeviceRow = new QWidget();
+    QHBoxLayout *midiDeviceRowLayout = new QHBoxLayout(midiDeviceRow);
+    midiDeviceRowLayout->setContentsMargins(0, 0, 0, 0);
+    midiDeviceRowLayout->setSpacing(6);
+    midiDeviceRowLayout->addWidget(midiDeviceCombo, 1);
+    midiDeviceRowLayout->addWidget(midiRefreshBtn);
+    midiLayout->addRow("Output device:", midiDeviceRow);
+
+    auto repopulateMidiDevices = [midiDeviceCombo]() {
+        const QString current = midiDeviceCombo->currentText();
+        midiDeviceCombo->clear();
+        const QStringList ports = MidiOutput::availablePorts();
+        if (ports.isEmpty()) {
+            midiDeviceCombo->addItem("No MIDI output devices found", false);
+            return;
+        }
+        for (const QString &port : ports)
+            midiDeviceCombo->addItem(port, true);
+        int idx = midiDeviceCombo->findText(current);
+        if (idx < 0) idx = midiDeviceCombo->findText(MidiOutput::configuredDevice());
+        if (idx < 0) idx = 0;
+        midiDeviceCombo->setCurrentIndex(idx);
+    };
+    repopulateMidiDevices();
+    connect(midiRefreshBtn, &QPushButton::clicked, this, repopulateMidiDevices);
+    connect(midiDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [midiDeviceCombo]() {
+        if (midiDeviceCombo->currentData().toBool())  // ignore the placeholder item
+            MidiOutput::setConfiguredDevice(midiDeviceCombo->currentText());
+    });
+
+    // Test button — same hello note as the score-window toolbar button
+    QPushButton *midiTestBtn = new QPushButton("Send test note");
+    midiTestBtn->setFixedWidth(140);
+    connect(midiTestBtn, &QPushButton::clicked, this, [this]() {
+        const QString error = MidiOutput::sendTestNote();
+        if (!error.isEmpty())
+            QMessageBox::warning(this, "MIDI test", error);
+    });
+    midiLayout->addRow("", midiTestBtn);
+
+    // Bandwidth ceiling test (Phase 4): pushes NRPN/SysEx/CC streams at the
+    // module to measure how many simultaneous streams it can take.
+    QPushButton *midiBwBtn = new QPushButton("Bandwidth test…");
+    midiBwBtn->setFixedWidth(140);
+    connect(midiBwBtn, &QPushButton::clicked, this, [this]() {
+        // Stop any playback first: the engine would send MIDI into the same
+        // port from the audio thread and pollute the measurement.
+        if (audioEngine && audioEngine->isPlayingBuffer()) {
+            const QMessageBox::StandardButton choice = QMessageBox::question(
+                this, "Bandwidth test",
+                "Playback is running. Stop it and continue?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+            if (choice != QMessageBox::Yes) return;
+            stopAllPlayback();
+            audioEngine->stopTrackPlayback();
+        }
+        BandwidthTestDialog dlg(this);
+        dlg.exec();
+    });
+    midiLayout->addRow("", midiBwBtn);
+
+    scrollLayout->addWidget(midiGroup);
 
     // ── AI Companion Settings ─────────────────────────────────────────────────
     QLabel *aiTitle = new QLabel("Anima");

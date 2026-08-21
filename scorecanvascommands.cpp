@@ -1581,29 +1581,9 @@ LinkAsLegatoCommand::LinkAsLegatoCommand(Phrase *phrase, const QVector<int> &not
     m_mergedNote.setPitchCurve(pitchCurve);
     m_mergedNote.setPitchHz(firstNote.getPitchAt(0.5));  // Base pitch fallback
 
-    // Build concatenated dynamics curve using the same tiled regions
-    Curve dynamicsCurve;
-    for (int i = 0; i < m_originalNotes.size(); ++i) {
-        double normStart = (regionStart[i] - totalStart) / totalDuration;
-        double normEnd   = (regionEnd[i]   - totalStart) / totalDuration;
-        double normSpan  = normEnd - normStart;
-
-        const Curve &srcDyn = m_originalNotes[i].note.getDynamicsCurve();
-        const auto &srcPoints = srcDyn.getPoints();
-
-        if (srcPoints.isEmpty()) {
-            // No dynamics curve — use a flat default (0.7)
-            dynamicsCurve.addPoint(normStart, 0.7);
-            dynamicsCurve.addPoint(normEnd, 0.7);
-        } else {
-            // Remap each dynamics point into the merged note's time space
-            for (const auto &pt : srcPoints) {
-                double remappedTime = normStart + pt.time * normSpan;
-                dynamicsCurve.addPoint(remappedTime, pt.value, pt.pressure);
-            }
-        }
-    }
-    m_mergedNote.setDynamicsCurve(dynamicsCurve);
+    // Dynamics: use only the first note's curve, stretched across the full merged
+    // duration (m_mergedNote = firstNote already copied it, normalized 0-1).
+    // Per-note dynamics changes can be applied afterward via the envelope editor.
 
     // Build segments
     m_mergedNote.clearSegments();

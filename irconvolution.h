@@ -138,6 +138,7 @@ private:
     bool               m_irCaptureCommitted;  // true once auto-commit has fired this note
 
     void prepareIR();
+    std::vector<float> preprocessIR(const std::vector<float>& ir) const;
     void processBlock();
     void resetConvolutionState();  // resets convolution buffers only (not capture state)
 

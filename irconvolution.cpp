@@ -277,9 +277,88 @@ void IRConvolution::commitCapturedIR()
     m_irCaptureCommitted = true;
 }
 
+std::vector<float> IRConvolution::preprocessIR(const std::vector<float>& ir) const
+{
+    if (ir.empty()) return ir;
+
+    // 1. Find peak for a relative silence threshold
+    float peak = 0.0f;
+    for (float s : ir) peak = std::max(peak, std::abs(s));
+    if (peak < 1e-10f) return ir;  // silent IR, return as-is
+
+    const float silenceThresh = peak * 1e-4f;   // -80 dB from peak
+
+    // 2. Skip leading silence
+    int start = 0;
+    while (start < static_cast<int>(ir.size()) && std::abs(ir[start]) < silenceThresh)
+        start++;
+    if (start >= static_cast<int>(ir.size())) return ir;  // all silent
+
+    // 3. Find natural end — allow up to 100 ms of consecutive silence
+    //    before declaring the tail finished, so low-level noise between
+    //    reflections isn't mistaken for the end.
+    int end = static_cast<int>(ir.size()) - 1;
+    int silenceCount = 0;
+    const int maxSilence = static_cast<int>(0.1 * m_sampleRate);  // 100 ms
+    while (end > start && silenceCount < maxSilence) {
+        if (std::abs(ir[end]) < silenceThresh)
+            silenceCount++;
+        else
+            silenceCount = 0;
+        end--;
+    }
+    end += silenceCount;              // include the silent tail we just walked past
+    if (end < start) end = static_cast<int>(ir.size()) - 1;  // no trim needed
+    if (end >= static_cast<int>(ir.size()))
+        end = static_cast<int>(ir.size()) - 1;
+
+    // 4. Trim the IR to [start, end]
+    std::vector<float> out(ir.begin() + start, ir.begin() + end + 1);
+
+    // 5. Short fade-in (~0.7 ms @ 44.1 kHz) to suppress FFT pre-ringing
+    const int fadeInLen = std::min(32, static_cast<int>(out.size()) / 2);
+    for (int i = 0; i < fadeInLen; i++) {
+        const double t = static_cast<double>(i) / fadeInLen;
+        out[i] *= static_cast<float>(0.5 * (1.0 - std::cos(M_PI * t)));
+    }
+
+    // 6. Fade-out — always applied so the IR reaches exactly zero at its end,
+    //    preventing a tick when the convolution FDL drains past the last partition.
+    //    Length is proportional to IR size: short enough to be transparent for
+    //    naturally-decayed IRs, extended when the capture truncated the tail early.
+    const int tailCheckLen = std::min(static_cast<int>(0.01 * m_sampleRate),
+                                      static_cast<int>(out.size()) / 4);
+    float tailPeak = 0.0f;
+    if (tailCheckLen > 0) {
+        for (int i = static_cast<int>(out.size()) - tailCheckLen;
+             i < static_cast<int>(out.size()); i++) {
+            tailPeak = std::max(tailPeak, std::abs(out[i]));
+        }
+    }
+    // Base: 2.5 % of IR length, clamped to [5 ms, 50 ms]
+    int fadeOutLen = std::max(static_cast<int>(0.025 * out.size()),
+                              static_cast<int>(0.005 * m_sampleRate));   // min  5 ms
+    fadeOutLen = std::min(fadeOutLen, static_cast<int>(0.05 * m_sampleRate));  // max 50 ms
+    fadeOutLen = std::min(fadeOutLen, static_cast<int>(out.size()) / 4);       // cap 25 % IR
+    // If the tail was truncated (still above -40 dB), double the window
+    if (tailPeak > peak * 1e-2f && fadeOutLen > 0) {
+        fadeOutLen = std::min(fadeOutLen * 2, static_cast<int>(0.05 * m_sampleRate));
+        fadeOutLen = std::min(fadeOutLen, static_cast<int>(out.size()) / 3);
+    }
+    if (fadeOutLen > 0) {
+        for (int i = 0; i < fadeOutLen; i++) {
+            const int    idx = static_cast<int>(out.size()) - fadeOutLen + i;
+            const double t   = static_cast<double>(i) / fadeOutLen;
+            out[idx] *= static_cast<float>(0.5 * (1.0 + std::cos(M_PI * t)));
+        }
+    }
+
+    return out;
+}
+
 void IRConvolution::setImpulseResponse(const std::vector<float>& ir)
 {
-    m_ir = ir;
+    m_ir = preprocessIR(ir);
     if (!m_ir.empty()) {
         prepareIR();
     } else {
@@ -298,11 +377,12 @@ void IRConvolution::prepareIR()
     m_fftSize       = m_blockSize * 2;
     m_numPartitions = (static_cast<int>(m_ir.size()) + m_blockSize - 1) / m_blockSize;
 
-    // Normalize IR by its energy so output stays at input signal level
-    double sumSq = 0.0;
-    for (float s : m_ir) sumSq += static_cast<double>(s) * s;
-    double rms = std::sqrt(sumSq);
-    float normScale = (rms > 1e-8) ? static_cast<float>(1.0 / rms) : 1.0f;
+    // Peak normalization — preserves the IR's natural dynamic range.
+    // Energy-based normalization (1/Σx²) would flatten the relationship
+    // between early reflections and tail, destroying the IR's character.
+    float peak = 0.0f;
+    for (float s : m_ir) peak = std::max(peak, std::abs(s));
+    float normScale = (peak > 1e-8f) ? (1.0f / peak) : 1.0f;
 
     // Exponential decay envelope
     double decayRate = 0.0;

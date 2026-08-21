@@ -14,11 +14,16 @@ public:
     // Getters
     QString getName() const { return name; }
     int getScaleId() const { return scaleId; }
-    double getRatio(int degree) const;  // degree is 0 to (degreeCount-1)
+    double getRatio(int degree) const;       // degree is 0 to (degreeCount-1), incorporates cent offset
+    double getRawRatio(int degree) const;    // raw ratio without cent offset applied
     int getDegreeCount() const { return ratios.size(); }
     QString getNoteName(int degree) const;  // Get note name for this degree
     bool getIsAccidental(int degree) const; // True for chromatic degrees not in the diatonic core
     int getTonicIndex() const { return tonicIndex; }  // For ET: which degree is tonic (0-11, -1 = C)
+
+    // Per-degree cent offsets for microtonal inflection (±50¢ per degree)
+    void setCentOffsets(const QVector<double> &offsets);
+    const QVector<double>& getCentOffsets() const { return centOffsets; }
 
     // Static factory methods for predefined scales
     static Scale justIntonation();
@@ -111,6 +116,7 @@ private:
     QVector<double> ratios;      // Ratios for scale degrees (variable count)
     QVector<QString> noteNames;  // Note names for each degree
     QVector<bool> accidentals;   // True for degrees that are chromatic/accidental (drawn dark grey)
+    QVector<double> centOffsets; // Per-degree cent offsets (-50 to +50, default 0)
     int tonicIndex;             // For ET: which degree is the tonic (0-11, -1 = C)
 
     // Private constructor for setting custom ratios and names

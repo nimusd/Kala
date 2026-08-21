@@ -1,5 +1,6 @@
 #include "scale.h"
 #include <cmath>
+#include <QJsonArray>
 #include <QJsonObject>
 
 // Default constructor
@@ -9,6 +10,7 @@ Scale::Scale(const QString &name, int scaleId)
     // Default to Just Intonation
     ratios = {1.0, 9.0/8.0, 5.0/4.0, 4.0/3.0, 3.0/2.0, 5.0/3.0, 15.0/8.0};
     noteNames = {"C", "D", "E", "F", "G", "A", "B"};
+    centOffsets = QVector<double>(ratios.size(), 0.0);
 }
 
 // Private constructor with custom ratios and names
@@ -16,14 +18,28 @@ Scale::Scale(const QString &name, int scaleId, const QVector<double> &ratios, co
              const QVector<bool> &accidentals, int tonicIdx)
     : name(name), scaleId(scaleId), ratios(ratios), noteNames(noteNames), accidentals(accidentals), tonicIndex(tonicIdx)
 {
+    centOffsets = QVector<double>(ratios.size(), 0.0);
 }
 
 double Scale::getRatio(int degree) const
 {
     if (degree >= 0 && degree < ratios.size()) {
-        return ratios[degree];
+        double r = ratios[degree];
+        if (degree < centOffsets.size()) {
+            double cents = centOffsets[degree];
+            if (cents != 0.0)
+                r *= std::pow(2.0, cents / 1200.0);
+        }
+        return r;
     }
     return 1.0;  // Fallback to tonic
+}
+
+double Scale::getRawRatio(int degree) const
+{
+    if (degree >= 0 && degree < ratios.size())
+        return ratios[degree];
+    return 1.0;
 }
 
 QString Scale::getNoteName(int degree) const
@@ -40,6 +56,17 @@ bool Scale::getIsAccidental(int degree) const
         return accidentals[degree];
     }
     return false;
+}
+
+void Scale::setCentOffsets(const QVector<double> &offsets)
+{
+    centOffsets = offsets;
+    if (centOffsets.size() < ratios.size())
+        centOffsets.resize(ratios.size());
+    // Clamp to ±50 cents
+    for (int i = 0; i < centOffsets.size(); ++i) {
+        centOffsets[i] = qBound(-50.0, centOffsets[i], 50.0);
+    }
 }
 
 // ============================================================================
@@ -379,7 +406,7 @@ Scale Scale::pelog()
         16.0/9.0        // 7 (Barang)
     };
     QVector<QString> names = {"1", "2", "3", "4", "5", "6", "7"};
-    return Scale("Pelog", 14, ratios, names);
+    return Scale("Pelog", 16, ratios, names);
 }
 
 Scale Scale::slendro()
@@ -394,7 +421,7 @@ Scale Scale::slendro()
         std::pow(2.0, 4.0/5)    // 6 (Nem) - ~960 cents
     };
     QVector<QString> names = {"1", "2", "3", "5", "6"};
-    return Scale("Slendro", 15, ratios, names);
+    return Scale("Slendro", 17, ratios, names);
 }
 
 // ============================================================================
@@ -413,7 +440,7 @@ Scale Scale::chinesePentatonic()
         5.0/3.0         // Yu (A)
     };
     QVector<QString> names = {"Gong", "Shang", "Jue", "Zhi", "Yu"};
-    return Scale("Chinese Pentatonic", 16, ratios, names);
+    return Scale("Chinese Pentatonic", 18, ratios, names);
 }
 
 // ============================================================================
@@ -432,7 +459,7 @@ Scale Scale::hirajoshi()
         8.0/5.0         // Ab
     };
     QVector<QString> names = {"C", "D", "Eb", "G", "Ab"};
-    return Scale("Hirajoshi", 17, ratios, names);
+    return Scale("Hirajoshi", 19, ratios, names);
 }
 
 // ============================================================================
@@ -1134,24 +1161,53 @@ QJsonObject Scale::toJson() const
     json["scaleId"] = scaleId;
     json["name"] = name;  // For human readability in the file
     json["tonicIndex"] = tonicIndex;
+
+    // Save cent offsets if any are non-zero
+    bool hasOffsets = false;
+    for (double offset : centOffsets) {
+        if (offset != 0.0) { hasOffsets = true; break; }
+    }
+    if (hasOffsets) {
+        QJsonArray arr;
+        for (double offset : centOffsets)
+            arr.append(offset);
+        json["centOffsets"] = arr;
+    }
+
     return json;
 }
 
 Scale Scale::fromJson(const QJsonObject &json)
 {
     int id = json["scaleId"].toInt(0);
+    Scale scale;
+
     // Check if tonicIndex is stored (for ET scales with rotated tonic)
     if (json.contains("tonicIndex")) {
         int tonicIdx = json["tonicIndex"].toInt(-1);
         // Only apply tonic rotation for Equal Temperament (scaleId == 2)
         if (id == 2) {
             if (tonicIdx >= 0 && tonicIdx <= 11) {
-                return equalTemperamentWithTonic(tonicIdx);
+                scale = equalTemperamentWithTonic(tonicIdx);
+            } else {
+                scale = getScaleById(id);
             }
-            // tonicIdx == -1 means default C (tonicIndex = 0)
-            // fall through to getScaleById which returns ET with tonicIndex=0
+        } else {
+            scale = getScaleById(id);
         }
-        // For non-ET scales, tonicIdx is ignored (scale's tonicIndex remains -1)
+    } else {
+        scale = getScaleById(id);
     }
-    return getScaleById(id);
+
+    // Restore cent offsets if present
+    if (json.contains("centOffsets")) {
+        QJsonArray arr = json["centOffsets"].toArray();
+        QVector<double> offsets;
+        offsets.reserve(arr.size());
+        for (const QJsonValue &v : arr)
+            offsets.append(v.toDouble());
+        scale.setCentOffsets(offsets);
+    }
+
+    return scale;
 }

@@ -200,15 +200,23 @@ whether the composition length is specified in clock time or in
 bars.</td>
 </tr>
 <tr>
-<td>Tempo</td>
+<td>Tempo / Pulse Duration</td>
 <td>QSpinBox</td>
-<td>Range: 20 - 300 BPM. Suffix: ” BPM”.</td>
+<td>In Western mode: range 1–300 BPM, suffix “ BPM”. In Kala mode:
+range 1–60000 ms, suffix “ ms” — the duration of a single
+pulse. The toolbar switches fields automatically when you change
+the Time Signature denominator.</td>
 </tr>
 <tr>
 <td>Time Signature</td>
 <td>Two QSpinBoxes</td>
-<td>Numerator (1-99) / Denominator (0-99), displayed side by side with a
-“/” separator.</td>
+<td>Numerator (1–99) / Denominator (0–99), displayed side by side
+with a “/” separator. <strong>Denominator = 0 selects Kala
+mode</strong> (pulses per bar + pulse duration ms).
+<strong>Denominator ≥ 1 selects Western mode</strong>
+(conventional time signature with BPM tempo). This is a
+project-wide setting — every marker in the project uses the
+same mode.</td>
 </tr>
 <tr>
 <td>Length (Absolute)</td>
@@ -297,11 +305,158 @@ ground: fast enough to feel responsive, conservative enough not to
 interrupt your flow.</li>
 </ul>
 <hr />
-<h2 id="go-to-dialog">4. Go To Dialog</h2>
+<h2 id="tempo-settings-dialog">4. Tempo Settings Dialog</h2>
+<p><strong>Window Title:</strong> Tempo Settings <strong>Size:</strong> 350 × 240
+<strong>Modal:</strong> Yes <strong>Source:</strong>
+<code>tempodialog.h</code>, <code>tempodialog.cpp</code>,
+<code>tempodialog.ui</code></p>
+<h3 id="how-to-open-3">How to Open</h3>
+<p>Opened from the Tempo toolbar group on the Score Canvas:</p>
+<ul>
+<li><strong>Edit</strong> — Opens the dialog pre-filled with the selected
+marker's values. For the default marker (time 0) the Delete button is
+disabled.</li>
+<li><strong>Add</strong> — Opens the dialog at the current timeline position
+to create a new tempo/time-signature marker. Cannot be used at time 0.</li>
+</ul>
+<h3 id="ui-components-3">UI Components</h3>
+<p>The dialog adapts its layout based on the project's current time
+signature mode (set globally via the toolbar or Composition Settings):</p>
+<p><strong>Western Mode (denom ≥ 1):</strong></p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tempo</td>
+<td>QSpinBox</td>
+<td>Range: 1–300. Suffix: " BPM". Default: 120.</td>
+</tr>
+<tr>
+<td>Time Signature</td>
+<td>Two QSpinBoxes</td>
+<td>Numerator (1–99) / Denominator (1–99). Default: 4/4. Both
+fields accept any value 1–99, allowing unconventional ratios like
+13/43 or 51/97 for exploring rhythmic territory beyond standard
+notation.</td>
+</tr>
+<tr>
+<td>Gradual transition</td>
+<td>QCheckBox</td>
+<td>When checked, tempo interpolates smoothly to the next marker
+instead of changing abruptly.</td>
+</tr>
+<tr>
+<td>Delete Marker</td>
+<td>QPushButton</td>
+<td>Removes this tempo marker (disabled for the default marker at
+time 0).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Kala Mode (denom = 0):</strong></p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 20%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pulses per bar</td>
+<td>QSpinBox</td>
+<td>Range: 1–99. Number of pulses in one bar. Default: 5.</td>
+</tr>
+<tr>
+<td>Pulse duration</td>
+<td>QSpinBox</td>
+<td>Range: 1–60000. Suffix: " ms". Duration of a single pulse.
+Default: 500 ms (equivalent to 120 BPM). Internally stored as
+BPM (60000 ÷ pulseMs).</td>
+</tr>
+<tr>
+<td>Gradual transition</td>
+<td>QCheckBox</td>
+<td>Same behaviour as Western mode.</td>
+</tr>
+<tr>
+<td>Delete Marker</td>
+<td>QPushButton</td>
+<td>Same behaviour as Western mode.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-3">Interaction Flow</h3>
+<ol>
+<li>Dialog opens pre-populated with the current marker's values.</li>
+<li>In <strong>Kala mode</strong>, pulse duration is shown in milliseconds;
+the value is converted to/from BPM internally for storage.</li>
+<li>In <strong>Western mode</strong>, tempo and time signature are shown
+conventionally.</li>
+<li>Clicking <strong>OK</strong> applies the changes (undoable). Clicking
+<strong>Cancel</strong> discards them.</li>
+<li>Clicking <strong>Delete Marker</strong> removes the marker entirely
+(undoable, disabled for the default marker at time 0).</li>
+</ol>
+<h3 id="tempo-marker-display">Marker List Display</h3>
+<p>The Tempo toolbar group shows a spinbox to step through markers and a
+label showing the current marker's values:</p>
+<ul>
+<li><strong>Western mode</strong>: <code>0:00:000 | 120 BPM | 4/4</code></li>
+<li><strong>Kala mode</strong>: <code>0:00:000 | 500 ms | 5 pulses</code></li>
+<li>A tilde (<code>~</code>) suffix indicates gradual transition to the
+next marker.</li>
+<li>Timeline tempo markers show compact labels: BPM in Western mode, pulse
+ms in Kala mode.</li>
+</ul>
+<h3 id="tempo-kala-vs-western">Kala Mode vs Western Mode</h3>
+<p>Kala mode and Western mode are two ways to express musical time. The
+mode is a <strong>project-wide setting</strong>: every tempo marker in the
+project uses the same mode.</p>
+<p><strong>Western mode</strong> (denom ≥ 1) uses the familiar BPM + time
+signature convention:</p>
+<ul>
+<li>Tempo: beats per minute (BPM)</li>
+<li>Time signature: numerator = beats per bar, denominator = note value
+(4 = quarter, 8 = eighth, etc.)</li>
+<li>Bar duration = (60000 ÷ BPM) × (numerator ÷ denominator)</li>
+</ul>
+<p><strong>Kala mode</strong> (denom = 0) replaces BPM with direct
+millisecond timing:</p>
+<ul>
+<li>Pulse duration: the length of one pulse in milliseconds</li>
+<li>Pulses per bar: how many pulses make one bar</li>
+<li>Bar duration = pulseDuration × pulsesPerBar</li>
+<li>There is no BPM or note-value concept — time is purely
+pulse-duration based</li>
+</ul>
+<p>Kala mode is useful when you think in terms of absolute pulse lengths
+rather than beats-per-minute ratios. The two modes are mathematically
+equivalent (120 BPM = 500 ms pulse), and you can switch between them at
+any time via the toolbar or Composition Settings dialog.</p>
+<hr />
+<h2 id="go-to-dialog">5. Go To Dialog</h2>
 <p><strong>Window Title:</strong> Go To <strong>Size:</strong> 350 x 200
 <strong>Modal:</strong> Yes <strong>Source:</strong>
 <code>gotodialog.h</code>, <code>gotodialog.cpp</code></p>
-<h3 id="how-to-open-3">How to Open</h3>
+<h3 id="how-to-open-4">How to Open</h3>
 <p>Triggered by pressing the <strong>G</strong> keyboard shortcut in the
 Composition tab.</p>
 <h3 id="ui-components-3">UI Components</h3>

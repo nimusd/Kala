@@ -161,6 +161,8 @@ public:
     void performSelectAll();
     void performSelectToEnd();   // E: extend selection to last note on active track
     void performRetrograde();    // R: copy selection in reverse temporal order at now marker
+    void transposeSelectedNotesByDegrees(int steps);  // Shift+Up/Down: transpose selection by scale degrees
+    void selectNextNote(int direction);  // +1 = next in time, -1 = previous in time
     void deselectAll();
 
     // Dynamics curve dialog
@@ -249,9 +251,9 @@ private:
     QMap<double, QPair<Scale, double>> scaleChanges;  // Time (ms) -> (Scale, BaseFreq) for modulation
 
     // Tempo/time signature map
-    double defaultTempo = 60.0;        // Default tempo at time 0
+    double defaultTempo = 120.0;        // Default tempo at time 0
     int defaultTimeSigNum = 5;          // Default time signature numerator
-    int defaultTimeSigDenom = 4;        // Default time signature denominator
+    int defaultTimeSigDenom = 0;        // Default time signature denominator (0 = Kala mode)
     QMap<double, TempoTimeSignature> tempoChanges;  // Time (ms) -> tempo/timesig for changes
 
     Phrase phrase;  // Notes storage

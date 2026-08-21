@@ -49,6 +49,7 @@ SounitGraph* SounitGraph::clone() const
     copy->m_currentIsLegato = m_currentIsLegato;
     copy->m_hasTailProcessor = m_hasTailProcessor;
     copy->m_panContainer = m_panContainer;
+    copy->m_midiContainer = m_midiContainer;
     copy->m_needsIRPreroll = m_needsIRPreroll;
     copy->cachedConnections = cachedConnections;
     copy->m_postRenderIRContainer = m_postRenderIRContainer;
@@ -85,6 +86,8 @@ SounitGraph* SounitGraph::clone() const
         if (src.irConvolution)        dst.irConvolution = new IRConvolution(*src.irConvolution);
         if (src.recorderModel)        dst.recorderModel   = new RecorderModel(*src.recorderModel);
         if (src.fluteModel)           dst.fluteModel      = new FluteModel(*src.fluteModel);
+        if (src.guitarModel)         dst.guitarModel     = new GuitarModel(*src.guitarModel);
+        if (src.oudModel)            dst.oudModel        = new OudModel(*src.oudModel);
         if (src.pianoModel)          dst.pianoModel      = new PianoModel(*src.pianoModel);
         if (src.bassModel)           dst.bassModel       = new BassModel(*src.bassModel);
         if (src.tibetanBowlModel)  dst.tibetanBowlModel = new TibetanBowlModel(*src.tibetanBowlModel);
@@ -105,6 +108,8 @@ SounitGraph* SounitGraph::clone() const
         dst.gateReleaseTrigger = src.gateReleaseTrigger;
         dst.padWavetable = src.padWavetable;
         dst.padFundamentalHz = src.padFundamentalHz;
+        dst.padBandwidth = src.padBandwidth;
+        dst.padBandwidthScale = src.padBandwidthScale;
         dst.prevImpulse = src.prevImpulse;
         dst.irInConnected = src.irInConnected;
     }
@@ -129,6 +134,7 @@ void SounitGraph::buildFromCanvas(Canvas *canvas)
     m_postRenderIRContainer = nullptr;
     m_postRenderIRConv = nullptr;
     m_panContainer = nullptr;
+    m_midiContainer = nullptr;
 
     if (!canvas) {
         qDebug() << "SounitGraph::buildFromCanvas - canvas is null!";
@@ -460,6 +466,8 @@ void SounitGraph::createProcessors()
                 data.harmonicGen->setPadBandwidthScale(container->getParameter("padBandwidthScale", 1.0));
                 data.harmonicGen->setPadProfileShape(static_cast<int>(container->getParameter("padProfileShape", 0.0)));
                 data.harmonicGen->setPadFftSize(static_cast<int>(container->getParameter("padFftSize", 262144.0)));
+                data.padBandwidth = data.harmonicGen->getPadBandwidth();
+                data.padBandwidthScale = data.harmonicGen->getPadBandwidthScale();
 
                 // Generate wavetable using a reference pitch (131 Hz ≈ C3)
                 double refPitch = 131.0;
@@ -716,6 +724,48 @@ void SounitGraph::createProcessors()
             data.fluteModel->setVibratoGain(container->getParameter("vibratoGain", 0.0));
             data.fluteModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
 
+        } else if (container->getName() == "singlePluck") {
+            data.guitarModel = new GuitarModel(sampleRate);
+            // Per-string pluck positions (all strings default to 0.8)
+            for (int i = 0; i < 6; i++) {
+                QString paramName = QString("pluckPos%1").arg(i);
+                data.guitarModel->setPluckPosition(i, container->getParameter(paramName, 0.8));
+            }
+            // Global parameters
+            data.guitarModel->setWoundDamping(container->getParameter("woundDamping", 0.3));
+            data.guitarModel->setSympatheticGain(container->getParameter("sympatheticGain", 0.01));
+            data.guitarModel->setAirResonance(container->getParameter("airResonance", 100.0));
+            data.guitarModel->setTopResonance(container->getParameter("topResonance", 200.0));
+            data.guitarModel->setPluckHardness(container->getParameter("pluckHardness", 0.8));
+            data.guitarModel->setNailFleshRatio(container->getParameter("nailFleshRatio", 0.6));
+            data.guitarModel->setOutputGain(container->getParameter("outputGain", 0.5));
+            data.guitarModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
+            data.guitarModel->setPitchGlideAmount(container->getParameter("pitchGlideAmount", 8.0));
+            data.guitarModel->setJitterAmount(container->getParameter("jitterAmount", 3.0));
+            // String selection (all strings active by default)
+            data.guitarModel->setActiveStringMask(container->getParameter("stringMask", 0x3F));
+            data.effectiveStringDamping = container->getParameter("stringDamping", 0.0);
+
+        } else if (container->getName() == "doublePluck") {
+            data.oudModel = new OudModel(sampleRate);
+            // Per-course pluck positions (all courses default to 0.5)
+            for (int i = 0; i < 6; i++) {
+                QString paramName = QString("pluckPos%1").arg(i);
+                data.oudModel->setPluckPosition(i, container->getParameter(paramName, 0.5));
+            }
+            // Global parameters
+            data.oudModel->setPlectrumHardness(container->getParameter("plectrumHardness", 0.7));
+            data.oudModel->setPlectrumBrightness(container->getParameter("plectrumBrightness", 0.6));
+            data.oudModel->setCourseDetune(container->getParameter("courseDetune", 0.003));
+            data.oudModel->setSympatheticGain(container->getParameter("sympatheticGain", 0.015));
+            data.oudModel->setAirResonance(container->getParameter("airResonance", 140.0));
+            data.oudModel->setTopResonance(container->getParameter("topResonance", 300.0));
+            data.oudModel->setOutputGain(container->getParameter("outputGain", 0.5));
+            data.oudModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
+            // Course selection (all courses active by default)
+            data.oudModel->setActiveCourseMask(container->getParameter("courseMask", 0x3F));
+            data.effectiveStringDamping = container->getParameter("stringDamping", 0.0);
+
         } else if (container->getName() == "Piano") {
             data.pianoModel = new PianoModel(sampleRate);
             data.pianoModel->setBrightness(container->getParameter("brightness", 0.0));
@@ -816,6 +866,11 @@ void SounitGraph::createProcessors()
             data.percussionModel->setNumModes(static_cast<int>(container->getParameter("numModes", 12.0)));
             data.percussionModel->setNoiseGain(container->getParameter("noiseGain", 0.15));
             data.percussionModel->setPitchMultiplier(container->getParameter("pitchMultiplier", 1.0));
+
+        } else if (container->getName() == "VL70-m") {
+            // MIDI output container - no audio processor. Events are baked from
+            // the note data at playback start (see AudioEngine::bakeMidiEvents).
+            m_midiContainer = container;
         }
     }
 
@@ -829,7 +884,8 @@ void SounitGraph::createProcessors()
 
 void SounitGraph::reset(bool isLegato)
 {
-    for (auto &data : processors) {
+    for (auto it = processors.begin(); it != processors.end(); ++it) {
+        auto &data = it.value();
         if (data.harmonicGen) {
             data.harmonicGen->reset();
         }
@@ -904,6 +960,18 @@ void SounitGraph::reset(bool isLegato)
         }
         if (data.fluteModel) {
             data.fluteModel->reset(isLegato);
+        }
+        if (data.guitarModel) {
+            // When fretted (stringDamping on), always instanceClear() even on legato —
+            // the string stops resonating when a new note is struck
+            bool fretted = data.effectiveStringDamping >= 0.5;
+            data.guitarModel->reset(fretted ? false : isLegato);
+        }
+        if (data.oudModel) {
+            // When fretted (stringDamping on), always instanceClear() even on legato —
+            // the strings stop resonating when a new note is struck
+            bool fretted = data.effectiveStringDamping >= 0.5;
+            data.oudModel->reset(fretted ? false : isLegato);
         }
         if (data.pianoModel) {
             data.pianoModel->reset(isLegato);
@@ -981,6 +1049,8 @@ bool SounitGraph::hasTail() const
         if (data.combFilter) return true;
         if (data.recorderModel) return true;
         if (data.fluteModel) return true;
+        if (data.guitarModel) return true;
+        if (data.oudModel) return true;
         if (data.pianoModel) return true;
         if (data.bassModel) return true;
         if (data.tibetanBowlModel) return true;
@@ -999,6 +1069,16 @@ bool SounitGraph::hasStringDamping() const
         if (it.value().karplusStrongAttack) {
             Container *container = it.key();
             if (container->getParameter("stringDamping", 0.0) >= 0.5) {
+                return true;
+            }
+        }
+        if (it.value().guitarModel) {
+            if (it.value().effectiveStringDamping >= 0.5) {
+                return true;
+            }
+        }
+        if (it.value().oudModel) {
+            if (it.value().effectiveStringDamping >= 0.5) {
                 return true;
             }
         }
@@ -1050,7 +1130,12 @@ void SounitGraph::runIRPreroll(double pitch)
 
 double SounitGraph::generateSample(double pitch, double noteProgress, bool isLegato, bool tailMode, double currentDynamics, const QVector<double> &scoreCurveValues, const QStringList &scoreCurveNames)
 {
-    if (!hasValidSignalOutput) {
+    // MIDI-only graphs (VL70-m without an audio chain) have no signalOut port
+    // and are never "valid", but the Phase 6 bake walks them at audio rate to
+    // evaluate the modifier subgraph feeding the MIDI container's row ports.
+    // Allow execution in that case; signalOutputContainer stays null and the
+    // return below is still 0.0.
+    if (!hasValidSignalOutput && !m_midiContainer) {
         return 0.0;
     }
 
@@ -1114,6 +1199,26 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                     pitchMult = processors[c.fromContainer].controlOut;
             proc.signalOut = proc.fluteModel->tick(pitch * pitchMult, 1.0,
                                                     m_currentIsLegato, true, m_currentDynamics);
+            return;
+        }
+        // Guitar: keep running in tail mode with gate=0 so strings ring down
+        if (name == "singlePluck" && proc.guitarModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.guitarModel->tick(pitch * pitchMult, 1.0,
+                                                     m_currentIsLegato, true, m_currentDynamics);
+            return;
+        }
+        // Oud: keep running in tail mode with gate=0 so strings ring down
+        if (name == "doublePluck" && proc.oudModel) {
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            for (const Canvas::Connection &c : cachedConnections)
+                if (c.toContainer == container && c.toPort == "pitchMultiplier" && isSourceActive(c.fromContainer))
+                    pitchMult = processors[c.fromContainer].controlOut;
+            proc.signalOut = proc.oudModel->tick(pitch * pitchMult, 1.0,
+                                                   m_currentIsLegato, true, m_currentDynamics);
             return;
         }
         // Piano: keep running in tail mode with gate=0 so resonators ring down
@@ -1224,29 +1329,81 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
             // Initialize input values with defaults
             double purityValue = 0.0;  // Default purity (0.0 = pure DNA, 1.0 = flat spectrum)
             double driftValue = 0.0;   // Default drift
+            double hAmpScale[8] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
 
-            // Check for connections to purity and drift ports
+            // Check for connections to input ports
             // Use cached connections (snapshot at build time) for graph independence
             for (const Canvas::Connection &conn : cachedConnections) {
                 if (conn.toContainer == container) {
                     if (conn.toPort == "purity") {
-                        // Get purity modulation from source container (control output 0.0-1.0)
                         if (isSourceActive(conn.fromContainer)) {
                             double sourceValue = processors[conn.fromContainer].controlOut;
                             purityValue = applyConnectionFunction(purityValue, sourceValue,
                                                                 conn.function, conn.weight);
-                            // Clamp to valid range
                             purityValue = qBound(0.0, purityValue, 1.0);
                         }
                     } else if (conn.toPort == "drift") {
-                        // Get drift modulation from source container (control output)
                         if (isSourceActive(conn.fromContainer)) {
-                            // Scale to drift range (0.0 to 0.1)
                             double sourceValue = processors[conn.fromContainer].controlOut * 0.1;
                             driftValue = applyConnectionFunction(driftValue, sourceValue,
                                                                conn.function, conn.weight);
-                            // Clamp to valid range
                             driftValue = qBound(0.0, driftValue, 0.1);
+                        }
+                    } else if (conn.toPort == "h1amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[0] = applyConnectionFunction(hAmpScale[0], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[0] = qBound(0.0, hAmpScale[0], 2.0);
+                        }
+                    } else if (conn.toPort == "h2amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[1] = applyConnectionFunction(hAmpScale[1], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[1] = qBound(0.0, hAmpScale[1], 2.0);
+                        }
+                    } else if (conn.toPort == "h3amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[2] = applyConnectionFunction(hAmpScale[2], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[2] = qBound(0.0, hAmpScale[2], 2.0);
+                        }
+                    } else if (conn.toPort == "h4amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[3] = applyConnectionFunction(hAmpScale[3], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[3] = qBound(0.0, hAmpScale[3], 2.0);
+                        }
+                    } else if (conn.toPort == "h5amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[4] = applyConnectionFunction(hAmpScale[4], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[4] = qBound(0.0, hAmpScale[4], 2.0);
+                        }
+                    } else if (conn.toPort == "h6amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[5] = applyConnectionFunction(hAmpScale[5], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[5] = qBound(0.0, hAmpScale[5], 2.0);
+                        }
+                    } else if (conn.toPort == "h7amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[6] = applyConnectionFunction(hAmpScale[6], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[6] = qBound(0.0, hAmpScale[6], 2.0);
+                        }
+                    } else if (conn.toPort == "h8amp") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut;
+                            hAmpScale[7] = applyConnectionFunction(hAmpScale[7], sourceValue,
+                                                                   conn.function, conn.weight);
+                            hAmpScale[7] = qBound(0.0, hAmpScale[7], 2.0);
                         }
                     }
                 }
@@ -1272,15 +1429,64 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                 proc.harmonicGen->setDigitWindowOffset(intOffset);
             }
 
+            // PAD bandwidth modulation via input ports
+            // Regenerates wavetable once per note (on first sample) if bandwidth changed.
+            {
+                double bwValue = container->getParameter("padBandwidth", 40.0);
+                double bwScaleValue = container->getParameter("padBandwidthScale", 1.0);
+
+                for (const Canvas::Connection &conn : cachedConnections) {
+                    if (conn.toContainer == container && conn.toPort == "padBandwidth") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut * 199.0 + 1.0;
+                            bwValue = applyConnectionFunction(bwValue, sourceValue,
+                                                              conn.function, conn.weight);
+                            bwValue = qBound(1.0, bwValue, 200.0);
+                        }
+                    }
+                    if (conn.toContainer == container && conn.toPort == "padBandwidthScale") {
+                        if (isSourceActive(conn.fromContainer)) {
+                            double sourceValue = processors[conn.fromContainer].controlOut * 2.0;
+                            bwScaleValue = applyConnectionFunction(bwScaleValue, sourceValue,
+                                                                    conn.function, conn.weight);
+                            bwScaleValue = qBound(0.0, bwScaleValue, 2.0);
+                        }
+                    }
+                }
+
+                proc.harmonicGen->setPadBandwidth(bwValue);
+                proc.harmonicGen->setPadBandwidthScale(bwScaleValue);
+
+                if (noteProgress == 0.0 && !m_tailMode
+                    && proc.harmonicGen->getPadEnabled() && !proc.padWavetable.empty()
+                    && (bwValue != proc.padBandwidth || bwScaleValue != proc.padBandwidthScale)) {
+                    proc.padBandwidth = bwValue;
+                    proc.padBandwidthScale = bwScaleValue;
+                    double fundHz = proc.padFundamentalHz > 0.0 ? proc.padFundamentalHz : 131.0;
+                    proc.harmonicGen->generatePadWavetable(fundHz, sampleRate);
+                    proc.padWavetable = proc.harmonicGen->getPadWavetable();
+                }
+            }
+
             // Generate harmonic spectrum using HarmonicGenerator's pre-calculated amplitudes
             // (which include DNA preset characteristics and purity blending)
             int numHarmonics = proc.harmonicGen->getNumHarmonics();
             proc.spectrumOut.resize(numHarmonics);
 
-            // Use the pre-calculated amplitudes from HarmonicGenerator
-            // (already normalized and DNA-aware)
+            // Map each hNamp port to the N-th active (amplitude > 0) harmonic
+            int activeToIndex[8];
+            for (int i = 0; i < 8; i++) {
+                activeToIndex[i] = proc.harmonicGen->getActiveHarmonicIndex(i);
+            }
+
             for (int h = 0; h < numHarmonics; h++) {
                 double amp = proc.harmonicGen->getHarmonicAmplitude(h);
+                for (int i = 0; i < 8; i++) {
+                    if (activeToIndex[i] == h) {
+                        amp *= hAmpScale[i];
+                        break;
+                    }
+                }
                 proc.spectrumOut.setAmplitude(h, amp);
             }
         }
@@ -2282,6 +2488,220 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                                                     m_currentIsLegato, false, m_currentDynamics);
         }
 
+    } else if (container->getName() == "singlePluck") {
+        if (proc.guitarModel) {
+            // Get default parameters from container
+            double effectiveWoundDamping = container->getParameter("woundDamping", 0.3);
+            double effectiveSympatheticGain = container->getParameter("sympatheticGain", 0.01);
+            double effectiveAirResonance = container->getParameter("airResonance", 100.0);
+            double effectiveTopResonance = container->getParameter("topResonance", 200.0);
+            double effectivePluckHardness = container->getParameter("pluckHardness", 0.8);
+            double effectiveNailFleshRatio = container->getParameter("nailFleshRatio", 0.6);
+            double effectiveOutputGain = container->getParameter("outputGain", 0.5);
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            double effectivePitchGlide = container->getParameter("pitchGlideAmount", 8.0);
+            double effectiveJitter = container->getParameter("jitterAmount", 3.0);
+            double effectiveStringDamping = container->getParameter("stringDamping", 0.0);
+            unsigned int stringMask = static_cast<unsigned int>(container->getParameter("stringMask", 0x3F));
+
+            // Per-string pluck positions
+            QVector<double> pluckPositions;
+            for (int i = 0; i < 6; i++) {
+                QString paramName = QString("pluckPos%1").arg(i);
+                pluckPositions.append(container->getParameter(paramName, 0.8));
+            }
+
+            // Apply modulations from connections
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
+                double sv = processors[conn.fromContainer].controlOut;
+
+                if (conn.toPort == "woundDamping") {
+                    effectiveWoundDamping = applyConnectionFunction(
+                        effectiveWoundDamping, sv, conn.function, conn.weight);
+                    effectiveWoundDamping = qBound(0.0, effectiveWoundDamping, 1.0);
+                } else if (conn.toPort == "sympatheticGain") {
+                    effectiveSympatheticGain = applyConnectionFunction(
+                        effectiveSympatheticGain, sv, conn.function, conn.weight);
+                    effectiveSympatheticGain = qBound(0.0, effectiveSympatheticGain, 0.05);
+                } else if (conn.toPort == "airResonance") {
+                    double scaled = sv * 70.0 + 80.0;
+                    effectiveAirResonance = applyConnectionFunction(
+                        effectiveAirResonance, scaled, conn.function, conn.weight);
+                    effectiveAirResonance = qBound(80.0, effectiveAirResonance, 150.0);
+                } else if (conn.toPort == "topResonance") {
+                    double scaled = sv * 150.0 + 150.0;
+                    effectiveTopResonance = applyConnectionFunction(
+                        effectiveTopResonance, scaled, conn.function, conn.weight);
+                    effectiveTopResonance = qBound(150.0, effectiveTopResonance, 300.0);
+                } else if (conn.toPort == "pluckHardness") {
+                    effectivePluckHardness = applyConnectionFunction(
+                        effectivePluckHardness, sv, conn.function, conn.weight);
+                    effectivePluckHardness = qBound(0.0, effectivePluckHardness, 1.0);
+                } else if (conn.toPort == "nailFleshRatio") {
+                    effectiveNailFleshRatio = applyConnectionFunction(
+                        effectiveNailFleshRatio, sv, conn.function, conn.weight);
+                    effectiveNailFleshRatio = qBound(0.0, effectiveNailFleshRatio, 1.0);
+                } else if (conn.toPort == "outputGain") {
+                    effectiveOutputGain = applyConnectionFunction(
+                        effectiveOutputGain, sv, conn.function, conn.weight);
+                    effectiveOutputGain = qBound(0.0, effectiveOutputGain, 1.0);
+                } else if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = applyConnectionFunction(pitchMult, sv, conn.function, conn.weight);
+                } else if (conn.toPort == "pitchGlideAmount") {
+                    effectivePitchGlide = applyConnectionFunction(
+                        effectivePitchGlide, sv * 50.0, conn.function, conn.weight);
+                    effectivePitchGlide = qBound(0.0, effectivePitchGlide, 50.0);
+                } else if (conn.toPort == "jitterAmount") {
+                    effectiveJitter = applyConnectionFunction(
+                        effectiveJitter, sv * 20.0, conn.function, conn.weight);
+                    effectiveJitter = qBound(0.0, effectiveJitter, 20.0);
+                } else if (conn.toPort == "stringMask") {
+                    double maskVal = applyConnectionFunction(static_cast<double>(stringMask), sv, conn.function, conn.weight);
+                    stringMask = static_cast<unsigned int>(qBound(0.0, maskVal, 63.0));
+                } else if (conn.toPort == "frettedMode") {
+                    effectiveStringDamping = applyConnectionFunction(
+                        effectiveStringDamping, sv, conn.function, conn.weight);
+                    effectiveStringDamping = qBound(0.0, effectiveStringDamping, 1.0);
+                } else if (conn.toPort.startsWith("pluckPos")) {
+                    // Parse pluckPos0-5
+                    bool ok;
+                    int stringIdx = conn.toPort.mid(8).toInt(&ok);
+                    if (ok && stringIdx >= 0 && stringIdx < 6) {
+                        pluckPositions[stringIdx] = applyConnectionFunction(
+                            pluckPositions[stringIdx], sv, conn.function, conn.weight);
+                        pluckPositions[stringIdx] = qBound(0.0, pluckPositions[stringIdx], 1.0);
+                    }
+                }
+            }
+
+            // Set all parameters
+            proc.guitarModel->setWoundDamping(effectiveWoundDamping);
+            proc.guitarModel->setSympatheticGain(effectiveSympatheticGain);
+            proc.guitarModel->setAirResonance(effectiveAirResonance);
+            proc.guitarModel->setTopResonance(effectiveTopResonance);
+            proc.guitarModel->setPluckHardness(effectivePluckHardness);
+            proc.guitarModel->setNailFleshRatio(effectiveNailFleshRatio);
+            proc.guitarModel->setOutputGain(effectiveOutputGain);
+            proc.guitarModel->setPitchMultiplier(pitchMult);
+            proc.guitarModel->setPitchGlideAmount(effectivePitchGlide);
+            proc.guitarModel->setJitterAmount(effectiveJitter);
+            proc.guitarModel->setActiveStringMask(stringMask);
+
+            // Set per-string pluck positions
+            for (int i = 0; i < 6; i++) {
+                proc.guitarModel->setPluckPosition(i, pluckPositions[i]);
+            }
+
+            // Store runtime string damping for reset() and hasStringDamping()
+            proc.effectiveStringDamping = effectiveStringDamping;
+
+            proc.signalOut = proc.guitarModel->tick(pitch * pitchMult, noteProgress,
+                                                     m_currentIsLegato, false, m_currentDynamics);
+        }
+
+    } else if (container->getName() == "doublePluck") {
+        if (proc.oudModel) {
+            // Get default parameters from container
+            double effectivePlectrumHardness = container->getParameter("plectrumHardness", 0.7);
+            double effectivePlectrumBrightness = container->getParameter("plectrumBrightness", 0.6);
+            double effectiveCourseDetune = container->getParameter("courseDetune", 0.003);
+            double effectiveSympatheticGain = container->getParameter("sympatheticGain", 0.015);
+            double effectiveAirResonance = container->getParameter("airResonance", 140.0);
+            double effectiveTopResonance = container->getParameter("topResonance", 300.0);
+            double effectiveOutputGain = container->getParameter("outputGain", 0.5);
+            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
+            double effectiveStringDamping = container->getParameter("stringDamping", 0.0);
+            unsigned int courseMask = static_cast<unsigned int>(container->getParameter("courseMask", 0x3F));
+
+            // Per-course pluck positions
+            QVector<double> pluckPositions;
+            for (int i = 0; i < 6; i++) {
+                QString paramName = QString("pluckPos%1").arg(i);
+                pluckPositions.append(container->getParameter(paramName, 0.5));
+            }
+
+            // Apply modulations from connections
+            for (const Canvas::Connection &conn : cachedConnections) {
+                if (conn.toContainer != container) continue;
+                if (!isSourceActive(conn.fromContainer)) continue;
+                double sv = processors[conn.fromContainer].controlOut;
+
+                if (conn.toPort == "plectrumHardness") {
+                    effectivePlectrumHardness = applyConnectionFunction(
+                        effectivePlectrumHardness, sv, conn.function, conn.weight);
+                    effectivePlectrumHardness = qBound(0.0, effectivePlectrumHardness, 1.0);
+                } else if (conn.toPort == "plectrumBrightness") {
+                    effectivePlectrumBrightness = applyConnectionFunction(
+                        effectivePlectrumBrightness, sv, conn.function, conn.weight);
+                    effectivePlectrumBrightness = qBound(0.0, effectivePlectrumBrightness, 1.0);
+                } else if (conn.toPort == "courseDetune") {
+                    effectiveCourseDetune = applyConnectionFunction(
+                        effectiveCourseDetune, sv, conn.function, conn.weight);
+                    effectiveCourseDetune = qBound(0.0, effectiveCourseDetune, 0.01);
+                } else if (conn.toPort == "sympatheticGain") {
+                    effectiveSympatheticGain = applyConnectionFunction(
+                        effectiveSympatheticGain, sv, conn.function, conn.weight);
+                    effectiveSympatheticGain = qBound(0.0, effectiveSympatheticGain, 0.05);
+                } else if (conn.toPort == "airResonance") {
+                    double scaled = sv * 60.0 + 120.0;
+                    effectiveAirResonance = applyConnectionFunction(
+                        effectiveAirResonance, scaled, conn.function, conn.weight);
+                    effectiveAirResonance = qBound(120.0, effectiveAirResonance, 180.0);
+                } else if (conn.toPort == "topResonance") {
+                    double scaled = sv * 150.0 + 250.0;
+                    effectiveTopResonance = applyConnectionFunction(
+                        effectiveTopResonance, scaled, conn.function, conn.weight);
+                    effectiveTopResonance = qBound(250.0, effectiveTopResonance, 400.0);
+                } else if (conn.toPort == "outputGain") {
+                    effectiveOutputGain = applyConnectionFunction(
+                        effectiveOutputGain, sv, conn.function, conn.weight);
+                    effectiveOutputGain = qBound(0.0, effectiveOutputGain, 1.0);
+                } else if (conn.toPort == "pitchMultiplier") {
+                    pitchMult = applyConnectionFunction(pitchMult, sv, conn.function, conn.weight);
+                } else if (conn.toPort == "courseMask") {
+                    double maskVal = applyConnectionFunction(static_cast<double>(courseMask), sv, conn.function, conn.weight);
+                    courseMask = static_cast<unsigned int>(qBound(0.0, maskVal, 63.0));
+                } else if (conn.toPort == "stringDamping") {
+                    effectiveStringDamping = applyConnectionFunction(
+                        effectiveStringDamping, sv, conn.function, conn.weight);
+                    effectiveStringDamping = qBound(0.0, effectiveStringDamping, 1.0);
+                } else if (conn.toPort.startsWith("pluckPos")) {
+                    // Parse pluckPos0-5
+                    bool ok;
+                    int courseIdx = conn.toPort.mid(8).toInt(&ok);
+                    if (ok && courseIdx >= 0 && courseIdx < 6) {
+                        pluckPositions[courseIdx] = applyConnectionFunction(
+                            pluckPositions[courseIdx], sv, conn.function, conn.weight);
+                        pluckPositions[courseIdx] = qBound(0.0, pluckPositions[courseIdx], 1.0);
+                    }
+                }
+            }
+
+            // Set all parameters
+            proc.oudModel->setPlectrumHardness(effectivePlectrumHardness);
+            proc.oudModel->setPlectrumBrightness(effectivePlectrumBrightness);
+            proc.oudModel->setCourseDetune(effectiveCourseDetune);
+            proc.oudModel->setSympatheticGain(effectiveSympatheticGain);
+            proc.oudModel->setAirResonance(effectiveAirResonance);
+            proc.oudModel->setTopResonance(effectiveTopResonance);
+            proc.oudModel->setOutputGain(effectiveOutputGain);
+            proc.oudModel->setPitchMultiplier(pitchMult);
+            proc.oudModel->setActiveCourseMask(courseMask);
+
+            // Set per-course pluck positions
+            for (int i = 0; i < 6; i++) {
+                proc.oudModel->setPluckPosition(i, pluckPositions[i]);
+            }
+
+            // Store runtime string damping for reset() and hasStringDamping()
+            proc.effectiveStringDamping = effectiveStringDamping;
+
+            proc.signalOut = proc.oudModel->tick(pitch * pitchMult, noteProgress,
+                                                   m_currentIsLegato, false, m_currentDynamics);
+        }
+
     } else if (container->getName() == "Piano") {
         if (proc.pianoModel) {
             double effectiveBrightness     = container->getParameter("brightness", 0.0);
@@ -3119,6 +3539,10 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
 
             proc.signalOut = proc.signalMixer->process(signalA, signalB, gainA, gainB);
         }
+    } else if (container->getName() == "VL70-m") {
+        // MIDI output container - no processor state. Its row input ports are
+        // read by the Phase 6 bake via getMidiPortValue() after this sample's
+        // execution (the modifier sources have just run, in execution order).
     }
 }
 
@@ -3127,6 +3551,43 @@ double SounitGraph::getInputValue(Container *container, const QString &portName,
     // For future: traverse connections to get input values
     // For now, just return default
     return container->getParameter(portName, defaultValue);
+}
+
+bool SounitGraph::isMidiPortConnected(const QString &portName) const
+{
+    if (!m_midiContainer) return false;
+    for (const Canvas::Connection &conn : cachedConnections) {
+        if (conn.toContainer == m_midiContainer && conn.toPort == portName)
+            return true;
+    }
+    return false;
+}
+
+double SounitGraph::getMidiPortValue(const QString &portName) const
+{
+    // Mirrors the inline connection-fold pattern used by every
+    // executeContainer branch. Base 0.5: passthrough replaces it (an
+    // Envelope 0-1 maps 0-1, same as the named-curve path); modulate
+    // pivots (source-0.5)*weight*2 around 64 = the row neutral. Inactive
+    // sources contribute nothing (isSourceActive gate, as elsewhere), so
+    // the row rests at 0.5 -> CC 64.
+    // NOTE: use constFind, never the const operator[] - QMap's const
+    // operator[] returns a ProcessorData BY VALUE, and that temporary's
+    // destructor would delete the real processor objects (raw owning
+    // pointers + shallow copy). This crashed the Phase 6 walk.
+    double value = 0.5;
+    if (!m_midiContainer) return value;
+    for (const Canvas::Connection &conn : cachedConnections) {
+        if (conn.toContainer != m_midiContainer || conn.toPort != portName)
+            continue;
+        if (!isSourceActive(conn.fromContainer))
+            continue;
+        auto it = processors.constFind(conn.fromContainer);
+        if (it == processors.constEnd())
+            continue;
+        value = applyConnectionFunction(value, it->controlOut, conn.function, conn.weight);
+    }
+    return value;
 }
 
 double SounitGraph::getOutputValue(const ProcessorData &proc, const QString &portName) const

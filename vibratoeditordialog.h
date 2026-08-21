@@ -43,6 +43,7 @@ private slots:
     void onOnsetChanged(double value);
     void onRegularitySliderChanged(int value);
     void onEnvelopeChanged();
+    void onRateEnvelopeChanged();
     void onLoadEnvelopeClicked();
     void onVibratoPresetChanged(int index);
     void onSaveVibratoPresetClicked();
@@ -70,6 +71,8 @@ private:
     QLabel *labelRegularityValue;
     EnvelopeCurveCanvas *envelopeCanvas;
     QPushButton *btnLoadEnvelope;
+    EnvelopeCurveCanvas *rateEnvelopeCanvas;
+    QLabel *labelRateEnvMax;
     QComboBox *comboVibratoPreset;
     QPushButton *btnSavePreset;
     QPushButton *btnDeletePreset;

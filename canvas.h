@@ -78,6 +78,7 @@ public:
     // keyed by the same name.
     const QStringList& getExpressiveCurveNames() const { return expressiveCurveNames; }
     bool addExpressiveCurveName(const QString &name);   // returns true if added (non-empty, non-duplicate)
+    bool removeExpressiveCurveName(const QString &name); // returns true if removed (non-destructive: note curve data is untouched)
     void setExpressiveCurveNames(const QStringList &names);  // used by loader
 
     // Zoom functionality

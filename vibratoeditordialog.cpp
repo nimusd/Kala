@@ -168,6 +168,29 @@ void VibratoEditorDialog::setupUI()
 
     mainLayout->addWidget(envelopeGroup);
 
+    // Rate Envelope group
+    QGroupBox *rateEnvelopeGroup = new QGroupBox("Rate Envelope");
+    QVBoxLayout *rateEnvLayout = new QVBoxLayout(rateEnvelopeGroup);
+
+    QHBoxLayout *rateEnvHeaderLayout = new QHBoxLayout();
+    labelRateEnvMax = new QLabel(QString("0 Hz \342\200\224 %1 Hz").arg(spinRate->value(), 0, 'f', 1));
+    labelRateEnvMax->setStyleSheet("color: #8ad; font-size: 11px; font-weight: bold;");
+    rateEnvHeaderLayout->addWidget(labelRateEnvMax);
+    QLabel *rateEnvHint = new QLabel("Click to add points, drag to move, right-click to delete. "
+                                     "Shift+drag to snap to grid.");
+    rateEnvHint->setStyleSheet("color: gray; font-size: 10px;");
+    rateEnvHint->setWordWrap(true);
+    rateEnvHeaderLayout->addWidget(rateEnvHint, 1);
+    rateEnvLayout->addLayout(rateEnvHeaderLayout);
+
+    rateEnvelopeCanvas = new EnvelopeCurveCanvas();
+    rateEnvelopeCanvas->setMinimumHeight(150);
+    rateEnvLayout->addWidget(rateEnvelopeCanvas);
+    connect(rateEnvelopeCanvas, &EnvelopeCurveCanvas::curveChanged,
+            this, &VibratoEditorDialog::onRateEnvelopeChanged);
+
+    mainLayout->addWidget(rateEnvelopeGroup);
+
     // Dialog buttons
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -213,6 +236,7 @@ void VibratoEditorDialog::setVibrato(const Vibrato &v)
     updateRegularityLabel();
 
     envelopeCanvas->setPoints(currentVibrato.envelope);
+    rateEnvelopeCanvas->setPoints(currentVibrato.rateEnvelope);
 
     spinRate->blockSignals(false);
     spinPitchDepth->blockSignals(false);
@@ -267,6 +291,7 @@ bool VibratoEditorDialog::getDefaultPreset(Vibrato &out)
 void VibratoEditorDialog::onRateChanged(double value)
 {
     currentVibrato.rate = value;
+    labelRateEnvMax->setText(QString("0 Hz \342\200\224 %1 Hz").arg(value, 0, 'f', 1));
 }
 
 void VibratoEditorDialog::onPitchDepthChanged(double value)
@@ -293,6 +318,11 @@ void VibratoEditorDialog::onRegularitySliderChanged(int value)
 void VibratoEditorDialog::onEnvelopeChanged()
 {
     currentVibrato.envelope = envelopeCanvas->getPoints();
+}
+
+void VibratoEditorDialog::onRateEnvelopeChanged()
+{
+    currentVibrato.rateEnvelope = rateEnvelopeCanvas->getPoints();
 }
 
 void VibratoEditorDialog::updateRegularityLabel()
@@ -444,12 +474,24 @@ bool VibratoEditorDialog::isUserPresetSelected(int *userIndex) const
 
 int VibratoEditorDialog::findMatchingPreset(const Vibrato &v) const
 {
+    auto envelopeMatches = [](const QVector<EnvelopePoint> &a, const QVector<EnvelopePoint> &b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); ++i) {
+            if (!qFuzzyCompare(a[i].time, b[i].time)) return false;
+            if (!qFuzzyCompare(a[i].value, b[i].value)) return false;
+            if (a[i].curveType != b[i].curveType) return false;
+        }
+        return true;
+    };
+
     auto matches = [&](const Vibrato &p) {
         return qFuzzyCompare(v.rate, p.rate) &&
                qFuzzyCompare(v.pitchDepth, p.pitchDepth) &&
                qFuzzyCompare(v.amplitudeDepth, p.amplitudeDepth) &&
                qFuzzyCompare(v.onset, p.onset) &&
-               qFuzzyCompare(v.regularity, p.regularity);
+               qFuzzyCompare(v.regularity, p.regularity) &&
+               envelopeMatches(v.envelope, p.envelope) &&
+               envelopeMatches(v.rateEnvelope, p.rateEnvelope);
     };
 
     // Check user presets first (combo indices 1..userPresets.size())
@@ -490,6 +532,7 @@ void VibratoEditorDialog::loadFactoryPresets()
         p.vibrato.onset = 0.2;
         p.vibrato.regularity = 0.3;
         p.vibrato.envelope = {{0.0, 0.0}, {0.2, 1.0}, {0.8, 1.0}, {1.0, 0.5}};
+        p.vibrato.rateEnvelope = {{0.0, 1.0}, {1.0, 1.0}};
         p.isFactory = true;
         factoryPresets.append(p);
     }
@@ -504,6 +547,7 @@ void VibratoEditorDialog::loadFactoryPresets()
         p.vibrato.onset = 0.1;
         p.vibrato.regularity = 0.4;
         p.vibrato.envelope = {{0.0, 0.0}, {0.15, 1.0}, {1.0, 1.0}};
+        p.vibrato.rateEnvelope = {{0.0, 1.0}, {1.0, 1.0}};
         p.isFactory = true;
         factoryPresets.append(p);
     }
@@ -518,6 +562,7 @@ void VibratoEditorDialog::loadFactoryPresets()
         p.vibrato.onset = 0.3;
         p.vibrato.regularity = 0.2;
         p.vibrato.envelope = {{0.0, 0.0}, {0.3, 0.5}, {0.6, 1.0}, {1.0, 0.8}};
+        p.vibrato.rateEnvelope = {{0.0, 1.0}, {1.0, 1.0}};
         p.isFactory = true;
         factoryPresets.append(p);
     }
@@ -532,6 +577,7 @@ void VibratoEditorDialog::loadFactoryPresets()
         p.vibrato.onset = 0.05;
         p.vibrato.regularity = 0.7;
         p.vibrato.envelope = {{0.0, 0.8}, {0.5, 1.0}, {1.0, 0.6}};
+        p.vibrato.rateEnvelope = {{0.0, 1.0}, {1.0, 1.0}};
         p.isFactory = true;
         factoryPresets.append(p);
     }
@@ -546,6 +592,7 @@ void VibratoEditorDialog::loadFactoryPresets()
         p.vibrato.onset = 0.4;
         p.vibrato.regularity = 0.25;
         p.vibrato.envelope = {{0.0, 0.0}, {0.5, 0.3}, {0.8, 1.0}, {1.0, 1.0}};
+        p.vibrato.rateEnvelope = {{0.0, 1.0}, {1.0, 1.0}};
         p.isFactory = true;
         factoryPresets.append(p);
     }
@@ -560,6 +607,7 @@ void VibratoEditorDialog::loadFactoryPresets()
         p.vibrato.onset = 0.0;
         p.vibrato.regularity = 0.1;
         p.vibrato.envelope = {{0.0, 1.0}, {1.0, 1.0}};
+        p.vibrato.rateEnvelope = {{0.0, 1.0}, {1.0, 1.0}};
         p.isFactory = true;
         factoryPresets.append(p);
     }

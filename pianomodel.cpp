@@ -115,7 +115,9 @@ double PianoModel::tick(double pitch, double noteProgress,
     dspInstance->compute(1, inputs, outputs);
 
     double result = static_cast<double>((output0 + output1) * 0.5f);
-    return result;
+    // Apply dynamics continuously so the curve acts as a volume envelope.
+    // (The Faust "gain" parameter above only affects the hammer strike.)
+    return result * currentDynamics;
 }
 
 // ─────────────────────────────────────────────

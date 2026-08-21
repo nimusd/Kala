@@ -69,7 +69,7 @@
      <x>0</x>
      <y>0</y>
      <width>1215</width>
-     <height>21</height>
+     <height>18</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuEssential">
@@ -88,12 +88,15 @@
     <addaction name="actionSaxophone"/>
     <addaction name="actionPercussion"/>
     <addaction name="actionNote_Tail"/>
+    <addaction name="actionVL70m"/>
    </widget>
    <widget class="QMenu" name="menuWaveguides">
     <property name="title">
      <string>Waveguide</string>
     </property>
     <addaction name="actionFlute"/>
+    <addaction name="actionGuitar"/>
+    <addaction name="actionOud"/>
     <addaction name="actionPiano"/>
     <addaction name="actionBass"/>
     <addaction name="actionTibetanBowl"/>
@@ -367,6 +370,22 @@
     <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
+  <action name="actionGuitar">
+   <property name="text">
+    <string>Plucked 1 Course </string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionOud">
+   <property name="text">
+    <string>Plucked 2 Courses</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
   <action name="actionPiano">
    <property name="text">
     <string>Piano</string>
@@ -394,6 +413,14 @@
   <action name="actionNote_Tail">
    <property name="text">
     <string>Note Tail</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionVL70m">
+   <property name="text">
+    <string>VL70-m Out</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

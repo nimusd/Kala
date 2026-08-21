@@ -720,6 +720,8 @@ private:
     // Background (non-blocking) render
     struct RenderTask {
         int noteIndex;
+        QString noteId;   // stored at task creation so onRenderWatcherFinished
+                          // doesn't read m_notes (which may have changed)
         NoteRender result;
         bool success = false;
     };
@@ -757,7 +759,8 @@ private:
      * @param outRender Output render buffer
      * @return true if render succeeded
      */
-    bool renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender) const;
+    bool renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender,
+                        const QList<Note> &allNotes) const;
 
     /**
      * Build a SounitGraph from serialized JSON data

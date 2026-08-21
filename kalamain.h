@@ -9,6 +9,7 @@
 #include "trackmanager.h"
 #include "containersettings.h"
 #include "keyboardshortcutsdialog.h"
+#include "bandwidthtestdialog.h"
 #include "llmconfig.h"
 #include "kalatools.h"  // for ToolMode
 
@@ -137,8 +138,11 @@ private:
     void populateLowHighPassFilterInspector();
     void populateIRConvolutionInspector();
     void populateNoteTailInspector();
+    void populateVl70mInspector();
     void populateRecorderInspector();
     void populateFluteInspector();
+    void populateGuitarInspector();
+    void populateOudInspector();
     void populatePianoInspector();
     void populateBassInspector();
     void populateTibetanBowlInspector();
@@ -157,6 +161,10 @@ private:
     void addParameterSlider(QFormLayout *layout, const QString &label,
                            const QString &paramName, double minVal, double maxVal,
                            double defaultVal, double step = 0.01, int decimals = 2);
+
+    // String/course selection helper
+    void addStringSelection(QFormLayout *layout, const QString &label,
+                           const QStringList &stringNames, const QString &paramName);
 
     // WAV file export helper
     bool writeWavFile(const QString &filePath, const std::vector<float> &samples,
@@ -250,6 +258,7 @@ private slots:
     void onTempoAddClicked();
     void onTempoMarkerChanged(int markerIndex);
     void updateTempoDisplay();
+    void updateTimelineTempoMarkers();
     double getSelectedTempoMarkerTime() const;  // Returns time in ms for selected marker
 
     // Inspector update slots

@@ -1,0 +1,31 @@
+kala command line compile
+┌───────────────┬─────────────────────────────────────────────────────────────────────────────┐
+│Configuration│Command│
+  ├───────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ Debug         │ mingw32-make -j8 in build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug (unchanged)  │
+  ├───────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ Release       │ /c/Qt/Tools/Ninja/ninja.exe in build/Desktop_Qt_6_10_1_MinGW_64_bit-Release │
+  └───────────────┴───────────────────────────────────────────────────────────────────────────
+
+
+
+  Expression curve → CC11 added
+   
+-New port + curve name expression on the VL70-m container — appears in the score's curve selector likethe  Phase 5 ones.
+  - Bake: expression rides the cheap tier (same 10 ms grid as breath/bend), delta-skipped, emittedbefore
+  note-on. Curve maps 0..1 → CC11 0..127.
+-Empty curve = full (127)—unliketheothercurveswhoseneutralis0.5.Anundrawnexpressioncurve
+  changes nothing, so old notes sound exactly as before.
+  - On stop, Expression is returned to 127 (its resting value), alongside the CC13/14 and filter
+re-centering.
+
+  WhyCC11overCC7:it'sthelayerthebriefsettledonforthisexactjob(Volume=staticper-notelevel,
+  Expression = phrase-level shape), it's what expression pedals use, and the module's own reset behavior       treats 127 as its resting state. If you ever want a static level knob instead, that's a containerparam—
+differentfeature.
+
+  To try it
+
+  1. The expression name registers when the container is added — on an existing canvas, either drop a fresh    VL70-m container or type expression in the Envelope inspector's "+" row for that variation.
+  2. Draw an expression curve on the note, play. You should now hear pure loudness shaping with the breath     curve independently driving the model's excitation/timbre — the exact stack the project was aiming for.      3. One module check: Utility → System → Breath Control Number must stay "BC" (not "Expression") — if the     module is set to use Expression as its breath source, CC11 would feed the physical model instead of scaling  the output.
+
+  The console log line now also prints | expr min-max so you can verify the stream. Test it and tell me what   you hear!

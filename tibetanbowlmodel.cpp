@@ -94,7 +94,9 @@ double TibetanBowlModel::tick(double pitch, double noteProgress,
 
     dspInstance->compute(1, inputs, outputs);
 
-    return static_cast<double>((output0 + output1) * 0.5f);
+    // Apply dynamics continuously so the curve acts as a volume envelope.
+    // (The Faust "gain" parameter above only affects the excitation burst.)
+    return static_cast<double>((output0 + output1) * 0.5f) * currentDynamics;
 }
 
 FAUSTFLOAT TibetanBowlModel::getFaustParam(const QString& name) const

@@ -35,6 +35,7 @@ struct CompositionSettings
 
     // Editing behaviour
     int preRenderDelayMs;   // Background pre-render debounce delay (50-2000 ms)
+    bool autoRender;        // Auto-render on edits (true) or only on play (false)
 
     // Constructors
     CompositionSettings();  // Default values

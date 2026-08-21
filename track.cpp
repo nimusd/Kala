@@ -1408,7 +1408,8 @@ void Track::detectNoteChangesAndInvalidate()
 
 // ========== Note-Based Rendering (New System) ==========
 
-bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender) const
+bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender,
+                            const QList<Note> &allNotes) const
 {
     QString noteId = note.getId();
 
@@ -1443,7 +1444,7 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     // Check if a legato note follows this one (to skip release)
     bool hasLegatoFollowing = false;
     double noteEndTime = note.getStartTime() + note.getDuration();
-    for (const Note &otherNote : m_notes) {
+    for (const Note &otherNote : allNotes) {
         if (otherNote.getId() != noteId && otherNote.isLegato()) {
             double overlapTolerance = std::max(200.0, note.getDuration() * 0.1);
             double timeDiff = noteEndTime - otherNote.getStartTime();
@@ -1475,31 +1476,21 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     }
 
     // --- Phase 1: Render the note's nominal duration ---
+
+    // Vibrato phase accumulator — needed for time-varying rate (rate envelope)
+    double vibratoPhaseAccum = 0.0;
+    double organicPhaseAccum = 0.0;
+
     for (size_t i = 0; i < noteSamples; ++i) {
         double progress = (noteSamples > 1) ? static_cast<double>(i) / static_cast<double>(noteSamples - 1) : 0.5;
 
         double pitch = note.getPitchAt(progress);
         double dynamics = note.getDynamicsAt(progress);
 
-        // Apply vibrato if active
-        const Vibrato &vibrato = note.getVibrato();
-        if (vibrato.active && progress >= vibrato.onset) {
-            double vibratoProgress = (progress - vibrato.onset) / (1.0 - vibrato.onset);
-            double envelopeIntensity = vibrato.envelopeAt(vibratoProgress);
-            double noteTimeSeconds = (note.getDuration() / 1000.0) * progress;
-            double vibratoPhase = noteTimeSeconds * vibrato.rate * 2.0 * M_PI;
-
-            double organicMod = 1.0;
-            if (vibrato.regularity > 0.0) {
-                double slowPhase = noteTimeSeconds * vibrato.rate * 0.23 * 2.0 * M_PI;
-                organicMod = 1.0 + vibrato.regularity * 0.3 * std::sin(slowPhase);
-                vibratoPhase += vibrato.regularity * 0.5 * std::sin(slowPhase * 0.7);
-            }
-
-            double lfoValue = std::sin(vibratoPhase) * organicMod;
-            pitch *= 1.0 + (lfoValue * vibrato.pitchDepth * envelopeIntensity);
-            dynamics *= std::max(0.0, 1.0 + (lfoValue * vibrato.amplitudeDepth * envelopeIntensity));
-        }
+        // Apply vibrato if active (shared helper so the MIDI bake produces
+        // the same continuous vibrato as the audio renderer)
+        applyVibrato(note.getVibrato(), progress, 1.0 / m_sampleRate,
+                     pitch, dynamics, vibratoPhaseAccum, organicPhaseAccum);
 
         // Build per-sample expressive curve values to pass to the graph.
         QVector<double> scoreCurveValues;
@@ -1513,12 +1504,16 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
         double sample = graph->generateSample(pitch, progress, isLegato, false,
                                               dynamics, scoreCurveValues, scoreCurveNames);
 
-        // Simple envelope
+        // Simple envelope with capped durations for long notes (e.g. legato merges)
+        double envAttackMs = std::min(50.0, note.getDuration() * 0.05);
+        double envReleaseMs = std::min(100.0, note.getDuration() * 0.10);
+        double attackThreshold = envAttackMs / note.getDuration();
+        double releaseThreshold = 1.0 - (envReleaseMs / note.getDuration());
         double envelope = 1.0;
-        if (!skipAttack && progress < 0.05) {
-            envelope = progress / 0.05;
-        } else if (!skipRelease && progress > 0.9) {
-            envelope = (1.0 - progress) / 0.1;
+        if (!skipAttack && progress < attackThreshold) {
+            envelope = progress / attackThreshold;
+        } else if (!skipRelease && progress > releaseThreshold) {
+            envelope = (1.0 - progress) / (1.0 - releaseThreshold);
         }
 
         // Post-render IR: apply convolution after dynamics so reverb is independent of dynamics style.
@@ -1610,7 +1605,18 @@ bool Track::prerenderNote(const Note &note)
     int varIndex = note.getVariationIndex();
     SounitGraph* graph = getGraphForVariation(varIndex);
 
-    if (!graph || !graph->isValid()) {
+    if (!graph) {
+        qWarning() << "Track" << m_trackId << "cannot render note - no graph for variation" << varIndex;
+        return false;
+    }
+
+    // MIDI-only graphs produce no audio - nothing to pre-render
+    if (graph->hasMidiOut() && !graph->isValid()) {
+        qDebug() << "Track" << m_trackId << "note" << note.getId() << "is MIDI-only - no audio render";
+        return true;
+    }
+
+    if (!graph->isValid()) {
         qWarning() << "Track" << m_trackId << "cannot render note - no valid graph for variation" << varIndex;
         return false;
     }
@@ -1627,7 +1633,7 @@ bool Track::prerenderNote(const Note &note)
     }
 
     NoteRender tempRender;
-    if (!renderNoteImpl(note, graph, tempRender)) return false;
+    if (!renderNoteImpl(note, graph, tempRender, m_notes)) return false;
 
     // Swap the rendered buffer into m_noteRenders under mutex protection
     {
@@ -1653,10 +1659,11 @@ bool Track::prerenderDirtyNotes(double sampleRate)
 
     m_sampleRate = sampleRate;
 
-    // Ensure we have a valid graph
+    // Ensure we have a valid graph. A MIDI-only graph (VL70-m without an audio
+    // signal chain) is acceptable - it just has nothing to pre-render.
     if (!hasValidGraph()) {
         qDebug() << "Track" << m_trackId << "rebuilding graph before rendering";
-        if (!rebuildGraph(sampleRate)) {
+        if (!rebuildGraph(sampleRate) && !(m_graph && m_graph->hasMidiOut())) {
             qWarning() << "Track" << m_trackId << "cannot render - graph build failed";
             return false;
         }
@@ -1668,27 +1675,57 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         return true;
     }
 
-    // Collect dirty notes into render tasks
-    QVector<RenderTask> tasks;
-    for (int i = 0; i < m_notes.size(); ++i) {
-        const Note &note = m_notes[i];
-        QString noteId = note.getId();
-        uint64_t noteHash = note.computeHash();
-
-        bool needsRender = false;
-
-        if (!m_noteRenders.contains(noteId)) {
-            needsRender = true;
-        } else {
-            const NoteRender &existing = m_noteRenders[noteId];
-            if (!existing.valid || existing.graphHash != m_graphHash ||
-                existing.noteHash != noteHash) {
-                needsRender = true;
-            }
+    // If a background render is already running, wait for it to finish.
+    // This prevents two render passes from racing on the same track data.
+    if (m_rendering.load()) {
+        qDebug() << "Track" << m_trackId << "waiting for in-progress background render to finish";
+        if (m_renderWatcher && m_renderWatcher->isRunning()) {
+            m_renderWatcher->waitForFinished();
         }
+    }
 
-        if (needsRender) {
-            tasks.append({i, NoteRender(), false});
+    // Snapshot notes under mutex so worker threads never touch m_notes.
+    // The snapshot is captured by value in the QtConcurrent lambda (QList is
+    // copy-on-write, so the data is shared read-only across threads).
+    QList<Note> snapshotNotes;
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        snapshotNotes = m_notes;
+    }
+
+    // Collect dirty notes into render tasks.
+    // Hold the mutex while reading m_noteRenders to avoid racing the audio callback.
+    QVector<RenderTask> tasks;
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        for (int i = 0; i < snapshotNotes.size(); ++i) {
+            const Note &note = snapshotNotes[i];
+            QString noteId = note.getId();
+            uint64_t noteHash = note.computeHash();
+
+            bool needsRender = false;
+
+            if (!m_noteRenders.contains(noteId)) {
+                needsRender = true;
+            } else {
+                const NoteRender &existing = m_noteRenders[noteId];
+                if (!existing.valid || existing.graphHash != m_graphHash ||
+                    existing.noteHash != noteHash) {
+                    needsRender = true;
+                }
+            }
+
+            // MIDI-only graphs need no audio render (events are baked at playback)
+            if (needsRender) {
+                SounitGraph *noteGraph = getGraphForVariation(snapshotNotes[i].getVariationIndex());
+                if (noteGraph && noteGraph->hasMidiOut() && !noteGraph->isValid()) {
+                    needsRender = false;
+                }
+            }
+
+            if (needsRender) {
+                tasks.append({i, noteId, NoteRender(), false});
+            }
         }
     }
 
@@ -1708,29 +1745,24 @@ bool Track::prerenderDirtyNotes(double sampleRate)
     // Render in parallel using thread pool — each thread gets its own cloned graph
     std::atomic<int> completedCount{0};
 
-    QFuture<void> future = QtConcurrent::map(tasks, [this, &completedCount](RenderTask &task) {
+    QFuture<void> future = QtConcurrent::map(tasks, [this, &completedCount, &snapshotNotes](RenderTask &task) {
         if (m_cancelRender.load()) return;
 
-        const Note &note = m_notes[task.noteIndex];
+        const Note &note = snapshotNotes[task.noteIndex];
         SounitGraph *srcGraph = getGraphForVariation(note.getVariationIndex());
         if (!srcGraph || !srcGraph->isValid()) return;
 
         SounitGraph *graph = srcGraph->clone();
-        task.success = renderNoteImpl(note, graph, task.result);
+        task.success = renderNoteImpl(note, graph, task.result, snapshotNotes);
         delete graph;
 
         completedCount.fetch_add(1);
     });
 
-    // Wait for completion while keeping UI responsive
-    // Wait for completion while keeping UI responsive
-    while (!future.isFinished()) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-        int done = completedCount.load();
-        int progress = tasks.isEmpty() ? 100
-            : static_cast<int>((double)done / tasks.size() * 100.0);
-        emit renderProgressChanged(progress);
-    }
+    // Block until complete — no processEvents() to avoid re-entrancy
+    // (track destruction during event processing would leave worker threads
+    // with a dangling `this`).
+    future.waitForFinished();
 
     // Handle cancellation
     if (m_cancelRender.load()) {
@@ -1745,7 +1777,7 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         std::lock_guard<std::mutex> lock(m_playbackMutex);
         for (RenderTask &task : tasks) {
             if (task.success) {
-                m_noteRenders[m_notes[task.noteIndex].getId()] = std::move(task.result);
+                m_noteRenders[task.noteId] = std::move(task.result);
                 renderedCount++;
             }
         }
@@ -1802,8 +1834,9 @@ bool Track::startBackgroundRender(double sampleRate)
 
     m_sampleRate = sampleRate;
 
+    // MIDI-only graphs are acceptable here too (they just skip audio rendering)
     if (!hasValidGraph()) {
-        if (!rebuildGraph(sampleRate)) return false;
+        if (!rebuildGraph(sampleRate) && !(m_graph && m_graph->hasMidiOut())) return false;
     }
 
     if (m_notes.isEmpty()) {
@@ -1811,26 +1844,45 @@ bool Track::startBackgroundRender(double sampleRate)
         return false;  // No render started — don't increment caller's counter
     }
 
-    // Collect dirty notes
+    // Snapshot notes under mutex so worker threads never touch m_notes
+    QList<Note> snapshotNotes;
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        snapshotNotes = m_notes;
+    }
+
+    // Collect dirty notes.
+    // Hold the mutex while reading m_noteRenders to avoid racing the audio callback.
     m_backgroundTasks.clear();
-    for (int i = 0; i < m_notes.size(); ++i) {
-        const Note &note = m_notes[i];
-        QString noteId = note.getId();
-        uint64_t noteHash = note.computeHash();
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        for (int i = 0; i < snapshotNotes.size(); ++i) {
+            const Note &note = snapshotNotes[i];
+            QString noteId = note.getId();
+            uint64_t noteHash = note.computeHash();
 
-        bool needsRender = false;
-        if (!m_noteRenders.contains(noteId)) {
-            needsRender = true;
-        } else {
-            const NoteRender &existing = m_noteRenders[noteId];
-            if (!existing.valid || existing.graphHash != m_graphHash ||
-                existing.noteHash != noteHash) {
+            bool needsRender = false;
+            if (!m_noteRenders.contains(noteId)) {
                 needsRender = true;
+            } else {
+                const NoteRender &existing = m_noteRenders[noteId];
+                if (!existing.valid || existing.graphHash != m_graphHash ||
+                    existing.noteHash != noteHash) {
+                    needsRender = true;
+                }
             }
-        }
 
-        if (needsRender) {
-            m_backgroundTasks.append({i, NoteRender(), false});
+            // MIDI-only graphs need no audio render (events are baked at playback)
+            if (needsRender) {
+                SounitGraph *noteGraph = getGraphForVariation(snapshotNotes[i].getVariationIndex());
+                if (noteGraph && noteGraph->hasMidiOut() && !noteGraph->isValid()) {
+                    needsRender = false;
+                }
+            }
+
+            if (needsRender) {
+                m_backgroundTasks.append({i, noteId, NoteRender(), false});
+            }
         }
     }
 
@@ -1842,15 +1894,15 @@ bool Track::startBackgroundRender(double sampleRate)
     m_rendering.store(true);
     emit renderStarted();
 
-    QFuture<void> future = QtConcurrent::map(m_backgroundTasks, [this](RenderTask &task) {
+    QFuture<void> future = QtConcurrent::map(m_backgroundTasks, [this, snapshotNotes](RenderTask &task) {
         if (m_cancelRender.load()) return;
 
-        const Note &note = m_notes[task.noteIndex];
+        const Note &note = snapshotNotes[task.noteIndex];
         SounitGraph *srcGraph = getGraphForVariation(note.getVariationIndex());
         if (!srcGraph || !srcGraph->isValid()) return;
 
         SounitGraph *graph = srcGraph->clone();
-        task.success = renderNoteImpl(note, graph, task.result);
+        task.success = renderNoteImpl(note, graph, task.result, snapshotNotes);
         delete graph;
     });
 
@@ -1873,7 +1925,7 @@ void Track::onRenderWatcherFinished()
         std::lock_guard<std::mutex> lock(m_playbackMutex);
         for (RenderTask &task : m_backgroundTasks) {
             if (task.success) {
-                m_noteRenders[m_notes[task.noteIndex].getId()] = std::move(task.result);
+                m_noteRenders[task.noteId] = std::move(task.result);
                 renderedCount++;
             }
         }
@@ -2008,7 +2060,19 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
             SounitGraph* g = graphForCanonical(varIdx);
             dIt = dampsByVariation.insert(varIdx, g && g->hasStringDamping());
         }
-        if (dIt.value()) {
+
+        // Per-note fretted check via named expressive curve "fretted".
+        // When hasStringDamping() is true, this allows individual notes to
+        // opt out of damping (curve value < 0.5 = open/ringing).
+        // When hasStringDamping() is false, a note can still opt IN
+        // (curve value >= 0.5 = fretted).
+        bool noteIsFretted = dIt.value();  // default: graph-level setting
+        int curveIdx = note.findExpressiveCurveIndexByName("fretted");
+        if (curveIdx >= 1) {
+            const Curve &c = note.getExpressiveCurve(curveIdx);
+            noteIsFretted = c.valueAt(0.0) >= 0.5;
+        }
+        if (noteIsFretted) {
             dampStartsByVariation[varIdx].push_back(note.getStartTime());
         }
     }

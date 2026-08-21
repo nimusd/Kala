@@ -81,6 +81,7 @@ void KeyboardShortcutsDialog::setupUI()
     addShortcut(composition, "Toggle Pan Mode", "Ctrl+Space");
     addShortcut(composition, "Set Loop", "L");
     addShortcut(composition, "Go To Position", "G");
+    addShortcut(composition, "Set Playback Start to Now Marker", "N");
     addShortcut(composition, "Clear Loop", "Delete (with loop selected)");
 
     // Score Canvas Editing
@@ -90,6 +91,14 @@ void KeyboardShortcutsDialog::setupUI()
     addShortcut(scoreCanvas, "Previous Segment", "Left Arrow");
     addShortcut(scoreCanvas, "Next Segment", "Right Arrow");
     addShortcut(scoreCanvas, "Context Menu", "Menu / Shift+F10");
+    addShortcut(scoreCanvas, "Extend Selection to End", "E");
+    addShortcut(scoreCanvas, "Retrograde Selection", "R");
+    addShortcut(scoreCanvas, "Link as Legato", "Shift+L");
+    addShortcut(scoreCanvas, "Toggle Slide Mode", "A");
+    addShortcut(scoreCanvas, "Select Previous Note", "Shift+Left");
+    addShortcut(scoreCanvas, "Select Next Note", "Shift+Right");
+    addShortcut(scoreCanvas, "Transpose Up (scale degree)", "Shift+Up");
+    addShortcut(scoreCanvas, "Transpose Down (scale degree)", "Shift+Down");
 
     // Spectrum Visualizer
     QTreeWidgetItem *spectrumVis = addCategory(tree, "Spectrum Visualizer");

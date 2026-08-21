@@ -108,8 +108,8 @@ double RecorderModel::tick(double pitch, double noteProgress,
 void RecorderModel::setJetRatio(double r)
 {
     jetRatio = clamp(r, 0.05, 0.60);
-    if (currentBoreDelaySamps > 0.0)
-        setJetDelayLen(currentBoreDelaySamps * jetRatio);
+    if (lastPitch > 0.0)
+        setFrequency(lastPitch);  // recalc bore+jet delays to maintain pitch
 }
 
 // ─────────────────────────────────────────────
@@ -118,12 +118,21 @@ void RecorderModel::setJetRatio(double r)
 
 void RecorderModel::setFrequency(double freq)
 {
-    // STK: slight overblowing correction
-    double playFreq = freq * 0.96666;
-    if (playFreq < 10.0) playFreq = 10.0;
+    if (freq < 10.0) freq = 10.0;
 
-    // Bore delay length: compensate for one-pole phase delay and one-sample latency
-    double boreSamps = sampleRate / playFreq - filterPhaseDelay(playFreq) - 1.0;
+    double filterDelay = filterPhaseDelay(freq);
+
+    // The bore delay models one-way travel through a half-wavelength tube.
+    // A full round trip (which sets the fundamental) must traverse the bore twice,
+    // so the total required delay is 2 × sampleRate / freq, not 1 ×.
+    // We incorporate that factor of 2 by targeting freq / 2.
+    double halfFreq = freq * 0.5;
+
+    // Total feedback loop: boreDelay + jetDelay + filterDelay + dcBlocker(~1) + misc(~1)
+    // jetDelay = boreDelay * jetRatio, so total = boreDelay * (1 + jetRatio) + filterDelay + 2
+    // We want total == sampleRate / halfFreq, therefore:
+    //   boreDelay = (sampleRate / halfFreq - filterDelay - 2.0) / (1.0 + jetRatio)
+    double boreSamps = (sampleRate / halfFreq - filterDelay - 2.0) / (1.0 + jetRatio);
     boreSamps = clamp(boreSamps, 1.0, static_cast<double>(MAX_DELAY - 2));
 
     currentBoreDelaySamps = boreSamps;

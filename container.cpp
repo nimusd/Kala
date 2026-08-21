@@ -6,6 +6,7 @@
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTimer>
 
 Container::Container(QWidget *parent, const QString &name, const QColor &color,
                      const QStringList &inputs, const QStringList &outputs)
@@ -79,6 +80,79 @@ Container::Container(QWidget *parent, const QString &name, const QColor &color,
     adjustSize();
 }
 
+void Container::setInputPorts(const QStringList &inputs)
+{
+    // Remove existing input entries: delete their circles, then erase the
+    // PortInfo entries (backwards so indices stay valid). Outputs stay put.
+    for (int i = ports.size() - 1; i >= 0; --i) {
+        if (ports[i].isOutput) continue;
+        delete ports[i].circle;
+        ports.removeAt(i);
+    }
+
+    // The inputs frame layout holds exactly one label per input port.
+    QLayout *inputLayout = ui->frameInputs->layout();
+    QLayoutItem *item;
+    while ((item = inputLayout->takeAt(0)) != nullptr) {
+        delete item->widget();
+        delete item;
+    }
+
+    // Rebuild inputs exactly as the constructor does.
+    for (const QString &input : inputs) {
+        QLabel *label = new QLabel(input, this);
+        inputLayout->addWidget(label);
+
+        // Create circle on the container itself
+        QLabel *circle = new QLabel("●", this);
+        circle->setFixedSize(24, 24);
+        circle->setStyleSheet("color: #666; font-size: 22px; background-color: #e8d0f0;");
+        circle->installEventFilter(this);
+        // The container is typically already visible here, and Qt does not
+        // auto-show a child created under a visible parent (constructor
+        // circles were shown with the container itself). Without this, the
+        // rebuilt circles stay hidden and the ports "disappear".
+        circle->show();
+        ports.append({input, false, circle});
+    }
+
+    // Refresh the layout chain's cached size hints before resizing. On a
+    // visible widget, invalidation propagates upward via updateGeometry();
+    // on a hidden one (the creation-time trim) it does not, and sizeHint()
+    // would return the stale all-rows height.
+    ui->frameInputs->layout()->invalidate();
+    ui->frameBody->layout()->invalidate();
+    ui->verticalLayout->invalidate();
+
+    // Grow/shrink the container to the new port count. resize(sizeHint())
+    // rather than adjustSize(): adjustSize does not shrink a hidden widget.
+    // The resize/activate order differs by visibility (both orders verified
+    // empirically - Qt defers layout work differently in each state):
+    if (isVisible()) {
+        // Visible: invalidation already propagated up via updateGeometry(),
+        // sizeHint() is fresh; resize first so the synchronous resizeEvent
+        // repositions, then force the nested layouts to compute label
+        // geometry now (otherwise deferred to a polish pass and the circles
+        // below would read stale positions and pile at the top).
+        resize(sizeHint());
+        ui->frameBody->layout()->activate();
+        ui->frameInputs->layout()->activate();
+    } else {
+        // Hidden (creation-time trim): updateGeometry() propagation is
+        // deferred, and resize() does not stick while the freshly
+        // invalidated layout chain is unactivated - activate first.
+        ui->frameBody->layout()->activate();
+        ui->frameInputs->layout()->activate();
+        resize(sizeHint());
+    }
+    positionPortCircles();
+    // Deferred safety net: once the event loop's polish pass has fully
+    // settled the layout chain, re-position the circles so they always match
+    // the labels, even if the synchronous activation above ran on stale
+    // frame sizes. Context object `this` keeps it safe after destruction.
+    QTimer::singleShot(0, this, [this]() { positionPortCircles(); });
+}
+
 
 
 Container::~Container()
@@ -91,6 +165,20 @@ void Container::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     positionPortCircles();
+}
+
+bool Container::event(QEvent *event)
+{
+    // A LayoutRequest means the layout chain has (re)activated and the port
+    // labels have fresh geometry - the manually-positioned port circles must
+    // follow. Covers the cases resizeEvent/showEvent miss: the creation-time
+    // port trim on a still-hidden container, and nested-layout activation
+    // after setInputPorts (whose deferred polish would otherwise leave the
+    // circles at stale positions).
+    if (event->type() == QEvent::LayoutRequest) {
+        positionPortCircles();
+    }
+    return QWidget::event(event);
 }
 
 void Container::showEvent(QShowEvent *event)
