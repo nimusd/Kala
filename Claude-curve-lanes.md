@@ -486,9 +486,9 @@ Two items deliberately left to first sight rather than decided on paper: the
 — both are trial values, and the doc should be amended from what the canvas
 actually looks like, not from more argument.
 
-Still open, for Phase F: whether the density tier should persist across sessions
-at all. R8 currently says QSettings; Nimus's note on question 3 reads "Non save",
-which may be an instruction not to persist it. Confirm before implementing R8.
+Persistence (Q3's "Non save", settled for R8): view settings persist to
+QSettings — split point, dim-others, legend visibility — but the density tier
+deliberately does NOT. Every session starts at Off.
 
 Phase A (lane model and geometry) — done, tested 2026-08-26. New
 `curvelanes.h/.cpp` (lane-set resolver: ordering, four R1 states, family
@@ -551,8 +551,9 @@ above and below was added as interim scaffolding for a Phase F widget, and
 turned out to be the thing that resolves the whole vertical-space problem —
 Nimus: "a game changer, specially for those edge cases when super high note. No
 limit now anymore." The auto-balanced default was never the answer on its own;
-the manual override is. Note for Phase F: this is a first-class control, not a
-convenience — do not bury it, and do not remove the keyboard path.
+the manual override is. Phase F promoted it: the toolbar spin + Auto checkbox
+drive the same `setLanesAbove` path as the keyboard, so both stay in sync in
+both directions. The keyboard path was kept intact.
 
 This also closes out the D1 argument properly. The original instinct was
 top-only, with splitting treated as a concession to clipping. Splitting plus a
@@ -644,10 +645,21 @@ is wrong. The dialog preload now skips flat curves by value range (hi - lo <
 neutral 0 is a line glued to the bottom of the editor — does not replace the
 dialog's default preset.
 
-Phase F remains: toolbar tier control, legend panel, dim-others, QSettings
-persistence, and the open question of whether the tier choice should persist at
-all ("Non save" — confirm before implementing R8). Nimus is continuing in a new
-chat for it.
+Phase F (view controls and polish) — done, tested 2026-08-26, all tests passed
+(Nimus: "Beautiful!"). Toolbar tier combo (Off/Overlay/Lanes, no focus-stealing
+focus policy), application-wide Ctrl+L cycle that now works even while a combo
+has focus (the canvas-local keyPressEvent branch was removed), lanes-above spin
++ Auto checkbox mirroring the keyboard nudge in both directions, dim-others
+(alpha 51, works in every tier including Off, dims ribbons too), and a floating
+legend panel (LanesLegend, VariationToolbar-style) listing the selected note's
+lane set in catalog order with family swatches and state hints — hidden when
+nothing is selected, but stays "armed" and reappears on the next selection.
+
+Persistence settled exactly as written above: split, dim-others and legend
+visibility restore from QSettings; the tier resets to Off every session.
+
+Curve lanes are complete. Both trial values survived first sight: the 14 px +
+2 px lane metrics stayed as specified, and the Overlay tier earned its place.
 
 Unreproduced, not curve-lanes-caused, recorded as a lead: on first opening an
 older two-track VL70-m project, "Apply Expressive Curve…" was greyed out; a new
