@@ -7,11 +7,14 @@
 #include <QString>
 #include <QUndoStack>
 #include <QTimer>
+#include <QHash>
 #include "phrase.h"
 #include "note.h"
 #include "scale.h"
 #include "tempotimesignature.h"
 #include "envelopelibraryDialog.h"
+#include "envelopecurvecanvas.h"
+#include "curvelanes.h"
 
 class TrackSelector;
 class Track;
@@ -219,6 +222,27 @@ public:
     void setTransformMode(bool active);
     bool isTransformMode() const { return transformMode; }
 
+    // Curve lanes density tier (D3). Off = today's canvas; Overlay = one
+    // shared band per note carrying every curve at once; Lanes = the full
+    // split ribbon. Phase F: toolbar combo + Ctrl+L application shortcut.
+    enum class DensityTier { Off, Overlay, Lanes };
+    void setDensityTier(DensityTier tier);
+    DensityTier getDensityTier() const { return m_densityTier; }
+    // Split point (D1): how many lanes sit above the hull. -1 = auto/balanced.
+    void setLanesAbove(int count);
+    int  getLanesAbove() const { return m_lanesAboveOverride; }
+    // Drop the cached per-variation lane contexts (row toggles, graph edits,
+    // track switches). Cheap - they rebuild on the next paint.
+    void invalidateLaneCache();
+    // Dim-others (D9): drop every note except the single selected one to low
+    // alpha. Orthogonal to the density tier.
+    void setDimOthers(bool dim);
+    bool getDimOthers() const { return m_dimOthers; }
+    // Lane set / split for one note, for the legend panel and the lanes-above
+    // toolbar spin. Wrappers over the private resolvers below.
+    QVector<CurveLanes::Lane> resolveLanesForNote(int noteIndex) const;
+    int lanesAboveForNote(int noteIndex) const;
+
 signals:
     void zoomChanged(double pixelsPerHz);
     void slideModeChanged(bool active);  // Emitted when slide mode is toggled
@@ -233,6 +257,8 @@ signals:
     void tempoSettingsChanged();  // Emitted when tempo or time signature changes
     void expressiveCurveApplied(const QString &curveName);  // After Apply Expressive Curve dialog; KalaMain refreshes the note-inspector dropdown
     void requestAutoScroll(int dx, int dy);  // Ask ScoreCanvasWindow to scroll during lasso
+    void densityTierChanged(ScoreCanvas::DensityTier tier);  // Phase F: toolbar tier combo mirrors canvas state
+    void lanesAboveChanged(int count);  // Phase F: lanes-above spin/Auto checkbox mirror canvas state (also set by the keyboard nudge)
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -331,6 +357,7 @@ private:
         ResizingLeft,          // Dragging left resize handle
         ResizingRight,         // Dragging right resize handle
         EditingTopCurve,       // Dragging top edge dot to edit dynamics curve
+        EditingLaneCurve,      // Dragging a dot on an opened curve lane's hull
         EditingPitchCurve,     // Dragging bottom edge dot to edit pitch curve
         EditingTopCurveStart,  // Dragging left-top dot to edit dynamics curve start
         EditingTopCurveEnd,    // Dragging right-top dot to edit dynamics curve end
@@ -363,8 +390,22 @@ private:
     bool segmentEditingMode = false;
 
     // Active expressive curve (index kept for inspector sync; name drives per-note drawing)
+    // Since Phase A of curve lanes this doubles as the PRIMARY curve (D2):
+    // the one shaping the note body, and therefore the one excluded from the
+    // lane set when a note carries it.
     int m_activeExpressiveCurveIndex = 0;
     QString m_activeExpressiveCurveName;  // empty / "Dynamics" → dynamics; otherwise find by name
+
+    // Curve lanes state.
+    DensityTier m_densityTier = DensityTier::Off;
+    int  m_lanesAboveOverride = -1;  // -1 = auto (balanced split)
+    bool m_dimOthers = false;        // D9: dim every note but the single selected one
+    int  m_hoverNote = -1;           // note under the cursor's band/lane
+    int  m_hoverLane = -1;           // lane index within it; -1 = whole overlay band
+    int  m_editLaneNote = -1;        // note whose lane hull is open; -1 = none
+    int  m_editLaneIndex = -1;       // which lane of it
+    // Cleared at the start of every paint pass; keyed by variation index.
+    mutable QHash<int, CurveLanes::Context> m_laneContextCache;
 
     // Slide mode: time-only dragging (Y axis locked)
     bool slideMode = false;
@@ -378,6 +419,18 @@ private:
     static constexpr int NORMAL_LINE_WIDTH = 1;
     static constexpr int THICK_LINE_WIDTH = 2;
     static constexpr int PIXELS_PER_OCTAVE = 100;       // Fixed vertical size for each octave
+
+    // Curve lane metrics (R2). Fixed in pixels, like blobHeight - vertical
+    // zoom changes note SPACING, not lane size. Trial values agreed
+    // 2026-08-26, to be judged on sight rather than argued on paper.
+    static constexpr int LANE_HEIGHT = 14;
+    static constexpr int LANE_GAP = 2;   // also the surface gap between adjacent fills
+    // The Overlay tier is one band regardless of curve count, so it can afford
+    // to be a little taller than a lane - overlaid shapes need the room.
+    static constexpr int OVERLAY_HEIGHT = 20;
+    // An opened lane grows so its curve can be worked at a usable size - the
+    // lane hull. 14 px is legible but far too coarse to drag a value in.
+    static constexpr int EDIT_LANE_HEIGHT = 56;
 
     // Full scrollable frequency range (hard limits for vertical zoom/scroll)
     static constexpr double FULL_MIN_HZ = 20.0;
@@ -415,6 +468,84 @@ private:
     int resolveActiveCurveIndex(const Note &note) const;
     QRect getLeftResizeHandle(const Note &note) const;
     QRect getRightResizeHandle(const Note &note) const;
+
+    // Curve lanes (Claude-curve-lanes.md)
+    // The note's own track, or nullptr when it isn't the active one.
+    // Phase A simplification: lanes resolve for the active track only, since
+    // m_currentTrack is the sole real Track* the canvas holds (TrackSelector
+    // keeps its own lightweight strip struct, not Track). Widen in Phase C if
+    // cross-track lanes turn out to be wanted.
+    Track *trackForNote(const Note &note) const;
+    QVector<CurveLanes::Lane> resolveLanesFor(const Note &note) const;
+    // Horizontal extent a lane / overlay band spans: exactly the note's own
+    // time extent, so a curve normalized 0..1 lands on the same pixels the
+    // note body uses. Deliberately NOT getNoteRect(), which pads 5 px each
+    // side for the hull handles - building a band from that stretches the
+    // curve by 10 px and shifts it 5 px left, and it visibly stops matching
+    // the note's shape on short notes.
+    void noteSpanX(const Note &note, int &x, int &width) const;
+    // Split point (D1): how many of laneCount sit above the hull.
+    int lanesAboveCount(int laneCount) const;
+    // Lane index 0 hugs the hull and the order runs OUTWARD in both
+    // directions, so proximity encodes priority and adding a row moves only
+    // the outer edge.
+    // expandedLane: index of a lane rendered at EDIT_LANE_HEIGHT (the opened
+    // lane hull), or -1. Lanes beyond it shift outward to make room.
+    QRect laneRect(const Note &note, int laneIndex, int laneCount,
+                   int expandedLane = -1) const;
+    int   expandedLaneFor(int noteIndex) const;
+
+    // Lane hull (D7): the opened lane gets its OWN hull - top-edge dots only,
+    // no pitch dots, name label beneath.
+    void openLaneEditor(int noteIndex, int laneIndex);
+    void closeLaneEditor();
+    // Shared by the mouse and tablet press paths. True = press consumed.
+    bool handleLanePress(const QPoint &pos);
+    // Clicking an empty lane creates its curve and opens it - the step that
+    // removes the dropdown entirely for live rows (R6).
+    void createCurveOnLane(int noteIndex, int laneIndex);
+    // Context curves for a modal editor: every other curve the note carries,
+    // sampled and coloured by family, for dimmed drawing behind the edit.
+    QVector<EnvelopeCurveCanvas::Ghost> buildGhostCurves(const Note &note,
+                                                         const QString &excludeName) const;
+    // Double-click on a lane: the full curve dialog, pre-pointed at that
+    // lane's curve - single click gives the hull, double click gives the
+    // dialog (Nimus 2026-08-26). Empty lanes get their curve created first,
+    // flat at neutral, exactly like a single click.
+    void editLaneCurveDialog(int noteIndex, int laneIndex);
+    void drawLaneHull(QPainter &painter, const Note &note,
+                      const CurveLanes::Lane &lane, const QRect &r);
+    QVector<QRect> laneDotRects(const Note &note, const Curve &curve, const QRect &r) const;
+    int  findLaneDotAt(const QPoint &pos, const Note &note, const QRect &r) const;
+
+    // Per-variation lane context, memoized for the duration of a paint pass.
+    const CurveLanes::Context &laneContextFor(int variationIndex) const;
+
+    // Overlay tier: one shared band just outside the hull top.
+    QRect overlayBandRect(const Note &note) const;
+    void drawNoteOverlay(QPainter &painter, const Note &note);
+
+    // Lanes tier: the split ribbon.
+    void drawNoteLanes(QPainter &painter, int noteIndex, const Note &note);
+    void drawSingleLane(QPainter &painter, const Note &note,
+                        const CurveLanes::Lane &lane, const QRect &r);
+
+    // R3 degradation: a crowded note drops a tier rather than colliding with
+    // its neighbours. Per note, not global.
+    int  ribbonExtentAbove(int laneCount) const;
+    int  ribbonExtentBelow(int laneCount) const;
+    bool hasRoomForLanes(int noteIndex, const Note &note, int laneCount) const;
+    // Effective tier for one note: selection auto-promotes to Lanes (D3),
+    // crowding demotes.
+    DensityTier effectiveTierForNote(int noteIndex, const Note &note) const;
+
+    // Hover readout naming the curve(s) under the cursor. Not decoration: the
+    // palette validator flags the aqua family as sub-3:1 on white, and visible
+    // labels are the required relief.
+    void updateLaneHover(const QPoint &pos);
+    bool findLaneAtPosition(const QPoint &pos, int &noteIndex, int &laneIndex) const;
+    int  findOverlayBandAtPosition(const QPoint &pos) const;
+    void drawHoverLabel(QPainter &painter);
 
     // Context menu helper
     void showNoteContextMenu(const QPoint &globalPos);

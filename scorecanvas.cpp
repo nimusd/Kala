@@ -374,6 +374,10 @@ void ScoreCanvas::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
+    // Per-variation lane contexts are memoized for this pass only - building
+    // one walks the canvas's child widgets, far too costly per note.
+    m_laneContextCache.clear();
+
     // Draw background
     painter.fillRect(rect(), Qt::white);
 
@@ -388,6 +392,29 @@ void ScoreCanvas::paintEvent(QPaintEvent *event)
     for (int i = 0; i < notes.size(); ++i) {
         bool isSelected = isNoteSelected(i);
         drawNote(painter, notes[i], isSelected);
+    }
+
+    // Curve lanes (Claude-curve-lanes.md). Drawn as its own pass rather than
+    // inside drawNote, which is already carrying segments, legato, variation
+    // badges and pending notes. The tier is decided per note, so a crowded
+    // note degrades on its own while its neighbours keep their lanes.
+    if (m_densityTier != DensityTier::Off) {
+        // Dim-others (D9) applies to the ribbons too; painter opacity matches
+        // the alpha 51 the note bodies get in drawNote. The hover label is
+        // drawn last, outside the dimming.
+        const bool dimming = m_dimOthers && selectedNoteIndices.size() == 1;
+        for (int i = 0; i < notes.size(); ++i) {
+            const bool dimThis = dimming && !isNoteSelected(i);
+            if (dimThis) painter.save();
+            if (dimThis) painter.setOpacity(0.2);
+            switch (effectiveTierForNote(i, notes[i])) {
+            case DensityTier::Lanes:   drawNoteLanes(painter, i, notes[i]); break;
+            case DensityTier::Overlay: drawNoteOverlay(painter, notes[i]); break;
+            case DensityTier::Off:     break;
+            }
+            if (dimThis) painter.restore();
+        }
+        drawHoverLabel(painter);   // last, so it sits above every band
     }
 
     // Draw pending note being drawn
@@ -1322,6 +1349,13 @@ void ScoreCanvas::drawNote(QPainter &painter, const Note &note, bool isSelected)
         noteColor.setAlpha(255);  // Full opacity when note is selected
     }
 
+    // Dim-others (D9): with exactly one note selected, every other note drops
+    // to the low alpha - the same 51 the inactive tracks already use. Works in
+    // every density tier, including Off, since this lives in drawNote.
+    if (m_dimOthers && selectedNoteIndices.size() == 1 && !isSelected) {
+        noteColor.setAlpha(51);
+    }
+
     // Desaturate + lighten color only for explicitly legato-linked notes
     if (note.isLinkedAsLegato() && note.getSegmentCount() > 1) {
         int h, s, v, a;
@@ -1519,6 +1553,17 @@ void ScoreCanvas::mouseDoubleClickEvent(QMouseEvent *event)
             return;
         }
 
+        // Double-click on a lane: the full curve dialog, pre-pointed at that
+        // lane's curve (single click = hull, double = dialog). Checked before
+        // the note body so a lane never falls through to note handling.
+        int laneNote = -1, laneIdx = -1;
+        if (m_densityTier != DensityTier::Off &&
+            findLaneAtPosition(event->pos(), laneNote, laneIdx)) {
+            editLaneCurveDialog(laneNote, laneIdx);
+            event->accept();
+            return;
+        }
+
         int clickedNoteIndex = findNoteAtPosition(event->pos());
 
         if (clickedNoteIndex >= 0) {
@@ -1550,6 +1595,59 @@ void ScoreCanvas::mouseDoubleClickEvent(QMouseEvent *event)
     QWidget::mouseDoubleClickEvent(event);
 }
 
+bool ScoreCanvas::handleLanePress(const QPoint &pos)
+{
+    // Shared by mousePressEvent and tabletEvent - Nimus works with the pen, so
+    // a lane interaction that only existed on the mouse path would be invisible
+    // in practice. Returns true when the press was consumed.
+    if (m_densityTier == DensityTier::Off) return false;
+
+    const QVector<Note> &notes = phrase.getNotes();
+
+    // An open lane hull owns its dots first.
+    if (m_editLaneNote >= 0 && m_editLaneNote < notes.size()) {
+        const Note &editNote = notes[m_editLaneNote];
+        const QVector<CurveLanes::Lane> editLanes = resolveLanesFor(editNote);
+        if (m_editLaneIndex >= 0 && m_editLaneIndex < editLanes.size()) {
+            const QRect r = laneRect(editNote, m_editLaneIndex,
+                                     editLanes.size(), m_editLaneIndex);
+            const int dot = findLaneDotAt(pos, editNote, r);
+            if (dot >= 0) {
+                pendingDragMode = EditingLaneCurve;
+                currentDragMode = NoDrag;
+                dragThresholdExceeded = false;
+                dragStartPos = pos;
+                editingDotIndex = dot;
+                editingDotTimePos = static_cast<double>(dot + 1) /
+                                    (calculateCurveDotCount(editNote) + 1);
+                dragStartCurve = editNote.getExpressiveCurve(
+                    editLanes[m_editLaneIndex].curveIndex);
+                return true;
+            }
+        }
+    }
+
+    // Otherwise a click on any lane opens it - no menu, no dropdown.
+    int hitNote = -1, hitLane = -1;
+    if (findLaneAtPosition(pos, hitNote, hitLane)) {
+        const QVector<CurveLanes::Lane> hitLanes = resolveLanesFor(notes[hitNote]);
+        if (hitLane < hitLanes.size()) {
+            if (hitLanes[hitLane].curveIndex >= 0)
+                openLaneEditor(hitNote, hitLane);           // Curve or Orphan
+            else if (hitLanes[hitLane].state == CurveLanes::State::Empty)
+                createCurveOnLane(hitNote, hitLane);        // create, then open
+            else
+                closeLaneEditor();                          // graph-driven: inert
+        }
+        return true;
+    }
+
+    // Clicking anywhere else closes the hull, but does not consume the press -
+    // normal note handling continues.
+    closeLaneEditor();
+    return false;
+}
+
 void ScoreCanvas::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
@@ -1571,6 +1669,10 @@ void ScoreCanvas::mousePressEvent(QMouseEvent *event)
         // Mode-specific behavior (note handling)
         if (currentInputMode == SelectionMode) {
             const QVector<Note> &notes = phrase.getNotes();
+
+            // Curve lanes (D7) - checked before note handles, since lanes live
+            // entirely outside the note rect and cannot shadow them.
+            if (handleLanePress(event->pos())) return;
 
             // Ctrl+click on the body of an already-selected note toggles it off
             if (event->modifiers() & Qt::ControlModifier) {
@@ -1806,6 +1908,14 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
     double cursorPitch = pixelToFrequency(event->pos().y());
     emit cursorPositionChanged(cursorTime, cursorPitch);
 
+    // Curve lanes: track which lane or overlay band the cursor is over, so it
+    // can be named. Skipped mid-drag so the readout doesn't flicker while
+    // notes or curves are being moved.
+    if (m_densityTier != DensityTier::Off &&
+        currentDragMode == NoDrag && pendingDragMode == NoDrag) {
+        updateLaneHover(event->pos());
+    }
+
     // Check if we have a pending drag and should activate it (threshold exceeded)
     if (pendingDragMode != NoDrag && !dragThresholdExceeded) {
         QPoint delta = event->pos() - dragStartPos;
@@ -1912,27 +2022,30 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
 
             // Get mutable reference to active expressive curve (resolved by name for this note)
             int activeIdx = resolveActiveCurveIndex(note);
-            Curve &activeCurve = note.getExpressiveCurve(activeIdx);
-            activeCurve.clearPoints();
+            // Never coarsen: a 30-point curve drawn in the dialog survives a
+            // drag on a narrow note. See curveAfterDotDrag in curve.cpp.
+            note.getExpressiveCurve(activeIdx) =
+                curveAfterDotDrag(dragStartCurve, calculateCurveDotCount(note),
+                                       editingDotIndex, newValue);
+            break;
+        }
 
-            // Rebuild curve with adaptive number of control points
-            int numDots = calculateCurveDotCount(note);
-            for (int i = 0; i <= numDots + 1; ++i) {
-                double t = i / (numDots + 1.0);
-                double value;
+        case EditingLaneCurve: {
+            const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+            if (m_editLaneIndex < 0 || m_editLaneIndex >= lanes.size()) break;
+            const CurveLanes::Lane &lane = lanes[m_editLaneIndex];
+            if (lane.curveIndex < 0) break;
 
-                if (i == editingDotIndex + 1) {
-                    // This is the dot being edited - use new value
-                    value = newValue;
-                } else {
-                    // Keep original value from dragStartCurve
-                    value = dragStartCurve.valueAt(t);
-                }
+            const QRect r = laneRect(note, m_editLaneIndex, lanes.size(), m_editLaneIndex);
+            // Positional rather than delta-based: an opened lane is tall
+            // enough that 1:1 tracking of the cursor is the natural mapping.
+            const double span = std::max(1, r.height() - 1);
+            const double newValue =
+                qBound(0.0, (r.bottom() - event->pos().y()) / span, 1.0);
 
-                activeCurve.addPoint(t, value);
-            }
-
-            activeCurve.sortPoints();
+            note.getExpressiveCurve(lane.curveIndex) =
+                curveAfterDotDrag(dragStartCurve, calculateCurveDotCount(note),
+                                       editingDotIndex, newValue);
             break;
         }
 
@@ -2217,6 +2330,7 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
                 setCursor(Qt::SizeHorCursor);
                 break;
             case EditingTopCurve:
+            case EditingLaneCurve:
             case EditingPitchCurve:
             case EditingTopCurveStart:
             case EditingTopCurveEnd:
@@ -2356,6 +2470,20 @@ void ScoreCanvas::mouseReleaseEvent(QMouseEvent *event)
                                                              EditCurveCommand::ExpressiveCurveN,
                                                              activeIdx,
                                                              dragStartCurve, newCurve,
+                                                             this));
+                    }
+                    break;
+                }
+
+                case EditingLaneCurve: {
+                    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+                    if (m_editLaneIndex >= 0 && m_editLaneIndex < lanes.size() &&
+                        lanes[m_editLaneIndex].curveIndex >= 0) {
+                        const int ci = lanes[m_editLaneIndex].curveIndex;
+                        undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
+                                                             EditCurveCommand::ExpressiveCurveN,
+                                                             ci, dragStartCurve,
+                                                             note.getExpressiveCurve(ci),
                                                              this));
                     }
                     break;
@@ -3047,6 +3175,698 @@ int ScoreCanvas::calculateCurveDotCount(const Note &note) const
     return dotCount;
 }
 
+// ============================================================================
+// Curve Lanes (see Claude-curve-lanes.md)
+// ============================================================================
+
+Track *ScoreCanvas::trackForNote(const Note &note) const
+{
+    return (note.getTrackIndex() == activeTrackIndex) ? m_currentTrack : nullptr;
+}
+
+const CurveLanes::Context &ScoreCanvas::laneContextFor(int variationIndex) const
+{
+    auto it = m_laneContextCache.find(variationIndex);
+    if (it == m_laneContextCache.end())
+        it = m_laneContextCache.insert(variationIndex,
+                                       CurveLanes::makeContext(m_currentTrack, variationIndex));
+    return it.value();
+}
+
+void ScoreCanvas::invalidateLaneCache()
+{
+    m_laneContextCache.clear();
+}
+
+void ScoreCanvas::setLanesAbove(int count)
+{
+    const int clamped = (count < 0) ? -1 : count;
+    if (m_lanesAboveOverride == clamped) return;
+    m_lanesAboveOverride = clamped;
+    update();
+    emit lanesAboveChanged(m_lanesAboveOverride);
+}
+
+QVector<CurveLanes::Lane> ScoreCanvas::resolveLanesFor(const Note &note) const
+{
+    if (!trackForNote(note)) return {};
+    return CurveLanes::resolve(note, laneContextFor(note.getVariationIndex()));
+}
+
+int ScoreCanvas::lanesAboveCount(int laneCount) const
+{
+    if (laneCount <= 0) return 0;
+    if (m_lanesAboveOverride >= 0)
+        return std::min(m_lanesAboveOverride, laneCount);
+    // Balanced split, odd counts favouring the top.
+    return (laneCount + 1) / 2;
+}
+
+void ScoreCanvas::setDimOthers(bool dim)
+{
+    if (m_dimOthers == dim) return;
+    m_dimOthers = dim;
+    update();
+}
+
+QVector<CurveLanes::Lane> ScoreCanvas::resolveLanesForNote(int noteIndex) const
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (noteIndex < 0 || noteIndex >= notes.size()) return {};
+    return resolveLanesFor(notes[noteIndex]);
+}
+
+int ScoreCanvas::lanesAboveForNote(int noteIndex) const
+{
+    return lanesAboveCount(resolveLanesForNote(noteIndex).size());
+}
+
+void ScoreCanvas::noteSpanX(const Note &note, int &x, int &width) const
+{
+    x = timeToPixel(note.getStartTime());
+    width = std::max(1, timeToPixel(note.getEndTime()) - x);
+}
+
+int ScoreCanvas::expandedLaneFor(int noteIndex) const
+{
+    return (noteIndex >= 0 && noteIndex == m_editLaneNote) ? m_editLaneIndex : -1;
+}
+
+QRect ScoreCanvas::laneRect(const Note &note, int laneIndex, int laneCount,
+                            int expandedLane) const
+{
+    const QRect noteRect = getNoteRect(note);
+    int x = 0, w = 0;
+    noteSpanX(note, x, w);
+    const int above = lanesAboveCount(laneCount);
+
+    // The opened lane is taller, so offsets accumulate rather than stride.
+    auto heightOf = [expandedLane](int idx) {
+        return idx == expandedLane ? EDIT_LANE_HEIGHT : LANE_HEIGHT;
+    };
+
+    if (laneIndex < above) {
+        // slot 0 hugs the hull top; later slots stack upward
+        int offset = LANE_GAP;
+        for (int k = 0; k < laneIndex; ++k) offset += heightOf(k) + LANE_GAP;
+        return QRect(x, noteRect.top() - offset - heightOf(laneIndex),
+                     w, heightOf(laneIndex));
+    }
+
+    // slot 0 hugs the hull bottom; later slots stack downward
+    int offset = LANE_GAP;
+    for (int k = above; k < laneIndex; ++k) offset += heightOf(k) + LANE_GAP;
+    return QRect(x, noteRect.bottom() + offset, w, heightOf(laneIndex));
+}
+
+void ScoreCanvas::openLaneEditor(int noteIndex, int laneIndex)
+{
+    if (m_editLaneNote == noteIndex && m_editLaneIndex == laneIndex) return;
+    m_editLaneNote = noteIndex;
+    m_editLaneIndex = laneIndex;
+    // Selecting the note keeps it promoted to Lanes (D3) and gives the undo
+    // command the single-selection context it expects.
+    selectNote(noteIndex, false);
+    update();
+}
+
+void ScoreCanvas::createCurveOnLane(int noteIndex, int laneIndex)
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (noteIndex < 0 || noteIndex >= notes.size()) return;
+
+    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(notes[noteIndex]);
+    if (laneIndex < 0 || laneIndex >= lanes.size()) return;
+    const CurveLanes::Lane &lane = lanes[laneIndex];
+
+    // The EQ pseudo-lane stands for ten band curves at once - there is no
+    // single curve to create, so it keeps going through the EQ dialog.
+    if (lane.eqCollapsed) return;
+
+    // Start flat at the row's resting value: creating a curve must not change
+    // how the note sounds until it is actually shaped. (It does change what
+    // the bake sends - a curve-carrying row streams, a no-curve row sends
+    // nothing - but streaming a constant neutral is audibly identical.)
+    const double v = qBound(0.0, lane.neutral / 127.0, 1.0);
+    QVector<EnvelopePoint> flat;
+    flat.append(EnvelopePoint(0.0, v));
+    flat.append(EnvelopePoint(1.0, v));
+
+    undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
+        &phrase, QVector<int>{noteIndex}, lane.name, flat, 1.0, false, this));
+
+    openLaneEditor(noteIndex, laneIndex);
+    emit expressiveCurveApplied(lane.name);
+}
+
+QVector<EnvelopeCurveCanvas::Ghost> ScoreCanvas::buildGhostCurves(
+    const Note &note, const QString &excludeName) const
+{
+    QVector<EnvelopeCurveCanvas::Ghost> ghosts;
+    const int kSamples = 48;
+    const int kMaxGhosts = 8;
+
+    // The editor canvas is near-black, so these are the dark-surface steps of
+    // the family palette - the light-canvas ones sit too dark to read there.
+    auto ghostColor = [](CurveLanes::Family f) -> QColor {
+        switch (f) {
+        case CurveLanes::Family::Amplitude: return QColor(0x39, 0x87, 0xe5);
+        case CurveLanes::Family::Element:   return QColor(0xd9, 0x59, 0x26);
+        case CurveLanes::Family::Part:      return QColor(0x19, 0x9e, 0x70);
+        case CurveLanes::Family::Other:     break;
+        }
+        return QColor(0xc3, 0xc2, 0xb7);
+    };
+
+    auto addGhost = [&](const QString &name, const Curve &curve, const QColor &color) {
+        if (ghosts.size() >= kMaxGhosts) return;
+        EnvelopeCurveCanvas::Ghost g;
+        g.name = name;
+        g.color = color;
+        g.samples.reserve(kSamples + 1);
+        for (int i = 0; i <= kSamples; ++i) {
+            const double t = static_cast<double>(i) / kSamples;
+            g.samples.append(QPointF(t, qBound(0.0, curve.valueAt(t), 1.0)));
+        }
+        ghosts.append(g);
+    };
+
+    if (excludeName != QStringLiteral("Dynamics"))
+        addGhost(QStringLiteral("Dynamics"), note.getDynamicsCurve(),
+                 QColor(0xc3, 0xc2, 0xb7));
+
+    for (int i = 1; i < note.getExpressiveCurveCount(); ++i) {
+        const QString name = note.getExpressiveCurveName(i);
+        if (name.isEmpty() || name == excludeName) continue;
+        addGhost(name, note.getExpressiveCurve(i),
+                 ghostColor(CurveLanes::familyFor(name)));
+    }
+
+    return ghosts;
+}
+
+void ScoreCanvas::editLaneCurveDialog(int noteIndex, int laneIndex)
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (noteIndex < 0 || noteIndex >= notes.size()) return;
+
+    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(notes[noteIndex]);
+    if (laneIndex < 0 || laneIndex >= lanes.size()) return;
+    const CurveLanes::Lane &lane = lanes[laneIndex];
+    if (lane.eqCollapsed || lane.state == CurveLanes::State::GraphDriven) return;
+
+    // An empty lane becomes a flat-at-neutral curve first, exactly like a
+    // single click would - the dialog then edits it.
+    if (lane.state == CurveLanes::State::Empty)
+        createCurveOnLane(noteIndex, laneIndex);
+
+    selectNote(noteIndex, false);   // dialog applies to the selection
+
+    const QStringList curveNames = selectionCommonExpressiveCurveNames();
+    if (curveNames.isEmpty()) return;
+
+    const Note &note = phrase.getNotes()[noteIndex];
+    const double duration = note.getDuration();
+    ExpressiveCurveApplyDialog dialog(selectedNoteIndices.size(), duration, curveNames, this);
+    dialog.setSelectedCurveName(lane.name);
+
+    auto curveToEnvelopePoints = [](const Curve &curve) -> QVector<EnvelopePoint> {
+        QVector<EnvelopePoint> pts;
+        for (const Curve::Point &p : curve.getPoints())
+            pts.append(EnvelopePoint(p.time, p.value, 0));
+        if (pts.isEmpty()) {
+            pts.append(EnvelopePoint(0.0, 0.8, 0));
+            pts.append(EnvelopePoint(1.0, 0.8, 0));
+        }
+        return pts;
+    };
+    const int ci = note.findExpressiveCurveIndexByName(lane.name);
+    if (ci >= 0) {
+        const Curve &existing = note.getExpressiveCurve(ci);
+        const QVector<Curve::Point> &pts = existing.getPoints();
+        // A flat curve is unshaped - either the auto-created neutral line (a
+        // click on an empty lane; note the apply command re-samples it to 30
+        // points, so point count cannot be the test) or a deliberately flat
+        // one. Either way there is no SHAPE to preload, and preloading it puts
+        // a line glued to one edge in place of the dialog's normal default
+        // preset, which reads as "my curve is gone". Leave the dialog on its
+        // default instead.
+        double lo = 0.0, hi = 0.0;
+        if (!pts.isEmpty()) {
+            lo = hi = pts[0].value;
+            for (const Curve::Point &p : pts) {
+                lo = std::min(lo, p.value);
+                hi = std::max(hi, p.value);
+            }
+        }
+        if (hi - lo >= 1e-9)
+            dialog.setInitialCurve(curveToEnvelopePoints(existing));
+    }
+    dialog.setGhostCurves(buildGhostCurves(note, QString()));
+
+    if (dialog.exec() == QDialog::Accepted) {
+        const QString targetName = dialog.getSelectedCurveName();
+        undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
+            &phrase, selectedNoteIndices, targetName, dialog.getCurve(),
+            dialog.getWeight(), dialog.getPerNoteMode(), this));
+        // No auto-activation of the note body - the "Show curve" combo is the
+        // only thing that changes which curve shapes the note.
+        emit expressiveCurveApplied(targetName);
+    }
+}
+
+void ScoreCanvas::closeLaneEditor()
+{
+    if (m_editLaneNote < 0 && m_editLaneIndex < 0) return;
+    m_editLaneNote = -1;
+    m_editLaneIndex = -1;
+    update();
+}
+
+QVector<QRect> ScoreCanvas::laneDotRects(const Note &note, const Curve &curve,
+                                         const QRect &r) const
+{
+    QVector<QRect> dots;
+    const int numDots = calculateCurveDotCount(note);
+    const double span = r.height() - 1;
+    const int size = 9;
+    for (int i = 1; i <= numDots; ++i) {
+        const double t = static_cast<double>(i) / (numDots + 1);
+        const double v = qBound(0.0, curve.valueAt(t), 1.0);
+        const int cx = r.left() + static_cast<int>(t * r.width());
+        const int cy = r.bottom() - static_cast<int>(v * span);
+        dots.append(QRect(cx - size / 2, cy - size / 2, size, size));
+    }
+    return dots;
+}
+
+int ScoreCanvas::findLaneDotAt(const QPoint &pos, const Note &note, const QRect &r) const
+{
+    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+    if (m_editLaneIndex < 0 || m_editLaneIndex >= lanes.size()) return -1;
+    const CurveLanes::Lane &lane = lanes[m_editLaneIndex];
+    if (lane.curveIndex < 0) return -1;
+
+    const QVector<QRect> dots =
+        laneDotRects(note, note.getExpressiveCurve(lane.curveIndex), r);
+    const int tol = 5;
+    for (int i = 0; i < dots.size(); ++i)
+        if (dots[i].adjusted(-tol, -tol, tol, tol).contains(pos)) return i;
+    return -1;
+}
+
+void ScoreCanvas::drawLaneHull(QPainter &painter, const Note &note,
+                               const CurveLanes::Lane &lane, const QRect &r)
+{
+    painter.save();
+
+    // Deliberately not the note hull's grey: the two hulls are different
+    // things and must never be mistaken for each other.
+    const QColor accent(0x2a, 0x78, 0xd6);
+    painter.setPen(QPen(accent, 1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(r.adjusted(-2, -2, 1, 1));
+
+    // Top-edge dots only - a lane has no pitch, so no bottom dots (D7).
+    if (lane.curveIndex >= 0) {
+        const QVector<QRect> dots =
+            laneDotRects(note, note.getExpressiveCurve(lane.curveIndex), r);
+        painter.setPen(QPen(accent.darker(130), 1));
+        painter.setBrush(QColor(255, 255, 255));
+        for (const QRect &d : dots) painter.drawEllipse(d);
+    }
+
+    // The parameter name, written under the hull - Nimus's original request.
+    QFont font = painter.font();
+    font.setPointSize(8);
+    painter.setFont(font);
+    painter.setPen(QColor(0x52, 0x51, 0x4e));
+    painter.drawText(QRect(r.left(), r.bottom() + 4, std::max(r.width(), 140), 14),
+                     Qt::AlignLeft | Qt::AlignVCenter, lane.name);
+
+    painter.restore();
+}
+
+// Sample a curve into a polyline across a lane / band rect.
+static QPolygonF curvePolyline(const Curve &curve, const QRect &r)
+{
+    const int n = std::max(6, r.width() / 5);
+    const double span = r.height() - 1;
+    QPolygonF poly;
+    poly.reserve(n + 1);
+    for (int i = 0; i <= n; ++i) {
+        const double t = static_cast<double>(i) / n;
+        const double v = qBound(0.0, curve.valueAt(t), 1.0);
+        poly.append(QPointF(r.left() + t * r.width(), r.bottom() - v * span));
+    }
+    return poly;
+}
+
+void ScoreCanvas::drawSingleLane(QPainter &painter, const Note &note,
+                                 const CurveLanes::Lane &lane, const QRect &r)
+{
+    if (r.width() < 2) return;
+    const QColor family = CurveLanes::familyColor(lane.family);
+    const double span = r.height() - 1;
+
+    switch (lane.state) {
+    case CurveLanes::State::Curve: {
+        // A light fill under the curve so the lane reads as "occupied" at a
+        // glance; the line carries the shape.
+        const QPolygonF line = curvePolyline(note.getExpressiveCurve(lane.curveIndex), r);
+        QPolygonF fill = line;
+        fill.append(QPointF(r.right(), r.bottom()));
+        fill.append(QPointF(r.left(),  r.bottom()));
+
+        QColor fillColor = family;
+        fillColor.setAlpha(38);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(fillColor);
+        painter.drawPolygon(fill);
+
+        painter.setPen(QPen(family, 1.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPolyline(line);
+        break;
+    }
+
+    case CurveLanes::State::Empty: {
+        // Flat line at the row's resting value - where this parameter sits
+        // when nothing is drawn on it.
+        const double v = qBound(0.0, lane.neutral / 127.0, 1.0);
+        const int y = r.bottom() - static_cast<int>(v * span);
+        QColor c = family;
+        c.setAlpha(60);
+        painter.setPen(QPen(c, 1));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(r.left(), y, r.right(), y);
+        break;
+    }
+
+    case CurveLanes::State::Orphan: {
+        // Stored on the note but NOT baked - its row is gone. Deliberately
+        // does not wear the family colour at strength, because wearing it
+        // would imply this is being sent.
+        const QPolygonF line = curvePolyline(note.getExpressiveCurve(lane.curveIndex), r);
+        painter.setPen(QPen(QColor(0x89, 0x87, 0x81, 90), 1, Qt::DotLine));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(r.adjusted(0, 0, -1, -1));
+        painter.setPen(QPen(QColor(0x89, 0x87, 0x81), 1.0, Qt::DashLine));
+        painter.drawPolyline(line);
+        break;
+    }
+
+    case CurveLanes::State::GraphDriven: {
+        // A Modifier connection drives this row, so the bake ignores any drawn
+        // curve here. Must read as not-yours-to-draw rather than merely empty.
+        QColor c = family;
+        c.setAlpha(90);
+        const int y = r.center().y();
+        painter.setPen(QPen(c, 1, Qt::DotLine));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(r.left() + 12, y, r.right(), y);
+
+        // Small link glyph at the left edge: two bars joined by a bridge.
+        painter.setPen(QPen(c, 2));
+        const int gx = r.left() + 3;
+        painter.drawLine(gx,     y - 3, gx + 5, y - 3);
+        painter.drawLine(gx,     y + 3, gx + 5, y + 3);
+        painter.drawLine(gx + 2, y - 3, gx + 2, y + 3);
+        break;
+    }
+    }
+}
+
+void ScoreCanvas::drawNoteLanes(QPainter &painter, int noteIndex, const Note &note)
+{
+    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+    if (lanes.isEmpty()) return;
+    const int expanded = expandedLaneFor(noteIndex);
+
+    painter.save();
+    for (int i = 0; i < lanes.size(); ++i) {
+        const QRect r = laneRect(note, i, lanes.size(), expanded);
+        drawSingleLane(painter, note, lanes[i], r);
+        if (i == expanded)
+            drawLaneHull(painter, note, lanes[i], r);
+    }
+    painter.restore();
+}
+
+int ScoreCanvas::ribbonExtentAbove(int laneCount) const
+{
+    const int above = lanesAboveCount(laneCount);
+    if (above <= 0) return 0;
+    return LANE_GAP + above * LANE_HEIGHT + (above - 1) * LANE_GAP;
+}
+
+int ScoreCanvas::ribbonExtentBelow(int laneCount) const
+{
+    const int below = laneCount - lanesAboveCount(laneCount);
+    if (below <= 0) return 0;
+    return LANE_GAP + below * LANE_HEIGHT + (below - 1) * LANE_GAP;
+}
+
+bool ScoreCanvas::hasRoomForLanes(int noteIndex, const Note &note, int laneCount) const
+{
+    if (laneCount <= 0) return false;
+
+    const QRect myRect = getNoteRect(note);
+    const int needAbove = ribbonExtentAbove(laneCount);
+    const int needBelow = ribbonExtentBelow(laneCount);
+
+    const QVector<Note> &notes = phrase.getNotes();
+    for (int i = 0; i < notes.size(); ++i) {
+        if (i == noteIndex) continue;
+        const Note &other = notes[i];
+        if (!trackForNote(other)) continue;
+
+        // Only notes overlapping in time can collide vertically.
+        if (other.getEndTime() <= note.getStartTime() ||
+            other.getStartTime() >= note.getEndTime()) continue;
+
+        const QRect otherRect = getNoteRect(other);
+        if (otherRect.top() > myRect.bottom()) {
+            if (otherRect.top() - myRect.bottom() < needBelow) return false;
+        } else if (otherRect.bottom() < myRect.top()) {
+            if (myRect.top() - otherRect.bottom() < needAbove) return false;
+        } else {
+            return false;   // hulls already overlap vertically
+        }
+    }
+    return true;
+}
+
+ScoreCanvas::DensityTier ScoreCanvas::effectiveTierForNote(int noteIndex, const Note &note) const
+{
+    if (m_densityTier == DensityTier::Off) return DensityTier::Off;
+
+    // D3: the selected note is always the detailed one, and is never demoted -
+    // that is what makes chords workable without a separate mode.
+    if (isNoteSelected(noteIndex)) return DensityTier::Lanes;
+
+    if (m_densityTier == DensityTier::Overlay) return DensityTier::Overlay;
+
+    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+    if (lanes.isEmpty()) return DensityTier::Off;
+    return hasRoomForLanes(noteIndex, note, lanes.size())
+         ? DensityTier::Lanes : DensityTier::Overlay;
+}
+
+void ScoreCanvas::setDensityTier(DensityTier tier)
+{
+    if (m_densityTier == tier) return;
+    m_densityTier = tier;
+    m_hoverNote = -1;
+    m_hoverLane = -1;
+    update();
+    emit densityTierChanged(tier);
+}
+
+QRect ScoreCanvas::overlayBandRect(const Note &note) const
+{
+    const QRect noteRect = getNoteRect(note);
+    int x = 0, w = 0;
+    noteSpanX(note, x, w);
+    return QRect(x, noteRect.top() - LANE_GAP - OVERLAY_HEIGHT, w, OVERLAY_HEIGHT);
+}
+
+// Lanes that actually have a shape to draw in the Overlay band.
+// D4: Overlay reports what the bake will SEND. Empty rows would be identical
+// flat lines at the same neutral (one line, no information), graph-driven rows
+// have no note curve at all, and an orphan is stored but never sent - drawing
+// it here would report the note as busier than it really is.
+static QVector<const CurveLanes::Lane *> overlayDrawableLanes(
+        const QVector<CurveLanes::Lane> &lanes)
+{
+    QVector<const CurveLanes::Lane *> drawable;
+    for (const CurveLanes::Lane &l : lanes)
+        if (l.state == CurveLanes::State::Curve && l.curveIndex >= 0)
+            drawable.append(&l);
+    return drawable;
+}
+
+void ScoreCanvas::drawNoteOverlay(QPainter &painter, const Note &note)
+{
+    const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+    const QVector<const CurveLanes::Lane *> drawable = overlayDrawableLanes(lanes);
+    if (drawable.isEmpty()) return;
+
+    const QRect band = overlayBandRect(note);
+    if (band.width() < 2) return;
+
+    painter.save();
+
+    // Faint baseline so the band reads as a band even when its curves hug
+    // the bottom.
+    painter.setPen(QPen(QColor(0xe1, 0xe0, 0xd9), 1));
+    painter.drawLine(band.bottomLeft(), band.bottomRight());
+
+    const int numPoints = std::max(10, band.width() / 5);
+    const double span = band.height() - 1;
+
+    for (const CurveLanes::Lane *lane : drawable) {
+        const Curve &curve = note.getExpressiveCurve(lane->curveIndex);
+        QPolygonF poly;
+        poly.reserve(numPoints + 1);
+        for (int i = 0; i <= numPoints; ++i) {
+            const double t = static_cast<double>(i) / numPoints;
+            const double v = qBound(0.0, curve.valueAt(t), 1.0);
+            poly.append(QPointF(band.left() + t * band.width(),
+                                band.bottom() - v * span));
+        }
+        painter.setPen(QPen(CurveLanes::familyColor(lane->family), 1.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPolyline(poly);
+    }
+
+    painter.restore();
+}
+
+int ScoreCanvas::findOverlayBandAtPosition(const QPoint &pos) const
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    // Reverse order so the newest note wins, matching findNoteAtPosition.
+    for (int i = notes.size() - 1; i >= 0; --i) {
+        if (!trackForNote(notes[i])) continue;
+        if (overlayBandRect(notes[i]).contains(pos)) return i;
+    }
+    return -1;
+}
+
+bool ScoreCanvas::findLaneAtPosition(const QPoint &pos, int &noteIndex, int &laneIndex) const
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    // Reverse order so the newest note wins, matching findNoteAtPosition.
+    for (int i = notes.size() - 1; i >= 0; --i) {
+        if (!trackForNote(notes[i])) continue;
+        if (effectiveTierForNote(i, notes[i]) != DensityTier::Lanes) continue;
+        const QVector<CurveLanes::Lane> lanes = resolveLanesFor(notes[i]);
+        const int expanded = expandedLaneFor(i);
+        for (int l = 0; l < lanes.size(); ++l) {
+            if (laneRect(notes[i], l, lanes.size(), expanded).contains(pos)) {
+                noteIndex = i;
+                laneIndex = l;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ScoreCanvas::updateLaneHover(const QPoint &pos)
+{
+    int note = -1, lane = -1;
+    if (!findLaneAtPosition(pos, note, lane)) {
+        note = findOverlayBandAtPosition(pos);
+        lane = -1;
+    }
+    if (note != m_hoverNote || lane != m_hoverLane) {
+        m_hoverNote = note;
+        m_hoverLane = lane;
+        update();
+    }
+}
+
+void ScoreCanvas::drawHoverLabel(QPainter &painter)
+{
+    if (m_hoverNote < 0) return;
+    const QVector<Note> &notes = phrase.getNotes();
+    if (m_hoverNote >= notes.size()) return;
+
+    const Note &note = notes[m_hoverNote];
+    const QVector<CurveLanes::Lane> allLanes = resolveLanesFor(note);
+
+    // Hovering one lane names that lane (with its state, since "why is this
+    // one greyed out" is the question a single lane raises); hovering an
+    // overlay band names everything in it.
+    QVector<const CurveLanes::Lane *> drawable;
+    QRect anchor;
+    if (m_hoverLane >= 0) {
+        if (m_hoverLane >= allLanes.size()) return;
+        drawable.append(&allLanes[m_hoverLane]);
+        anchor = laneRect(note, m_hoverLane, allLanes.size(), expandedLaneFor(m_hoverNote));
+    } else {
+        drawable = overlayDrawableLanes(allLanes);
+        anchor = overlayBandRect(note);
+    }
+    if (drawable.isEmpty()) return;
+
+    painter.save();
+    QFont font = painter.font();
+    font.setPointSize(8);
+    painter.setFont(font);
+    const QFontMetrics fm(font);
+
+    const int swatch = 8, padX = 6, padY = 4, gap = 5;
+    const int lineH = fm.height() + 2;
+
+    // A lane's state is part of its identity - an orphan or a graph-driven row
+    // looks "off" and the label is where that gets explained.
+    auto labelFor = [](const CurveLanes::Lane *l) {
+        switch (l->state) {
+        case CurveLanes::State::Empty:       return l->name + QStringLiteral("  — no curve");
+        case CurveLanes::State::Orphan:      return l->name + QStringLiteral("  — orphan, not sent");
+        case CurveLanes::State::GraphDriven: return l->name + QStringLiteral("  — driven by graph");
+        case CurveLanes::State::Curve:       break;
+        }
+        return l->name;
+    };
+
+    int textW = 0;
+    for (const CurveLanes::Lane *l : drawable)
+        textW = std::max(textW, fm.horizontalAdvance(labelFor(l)));
+
+    const int w = padX * 2 + swatch + gap + textW;
+    const int h = padY * 2 + lineH * drawable.size();
+
+    int x = anchor.left();
+    int y = anchor.top() - h - 4;
+    if (y < 0) y = anchor.bottom() + 4;               // flip below rather than clip
+    if (x + w > width()) x = width() - w - 2;
+    if (x < 0) x = 0;
+
+    const QRect panel(x, y, w, h);
+    painter.setPen(QPen(QColor(11, 11, 11, 26), 1));  // hairline ring
+    painter.setBrush(QColor(0xfc, 0xfc, 0xfb));       // chart surface
+    painter.drawRoundedRect(panel, 3, 3);
+
+    int ty = panel.top() + padY;
+    for (const CurveLanes::Lane *l : drawable) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(CurveLanes::familyColor(l->family));
+        painter.drawRect(QRect(panel.left() + padX,
+                               ty + (lineH - swatch) / 2, swatch, swatch));
+        // Text wears ink, never the series colour.
+        painter.setPen(QColor(0x52, 0x51, 0x4e));
+        painter.drawText(QRect(panel.left() + padX + swatch + gap, ty, textW, lineH),
+                         Qt::AlignVCenter | Qt::AlignLeft, labelFor(l));
+        ty += lineH;
+    }
+
+    painter.restore();
+}
+
 Curve ScoreCanvas::quantizePitchCurveToScale(const Curve &pitchCurve, const Note &note) const
 {
     // Quantize a continuous pitch curve to snap to scale degrees
@@ -3369,6 +4189,19 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                     return;
                 }
 
+                // Double-tap on a lane: same dialog as the mouse path. The
+                // single-shot defers past this press so the pen isn't left
+                // inert inside the modal dialog (see the note path below).
+                int laneNote = -1, laneIdx = -1;
+                if (m_densityTier != DensityTier::Off &&
+                    findLaneAtPosition(currentPos, laneNote, laneIdx)) {
+                    QTimer::singleShot(0, this, [this, laneNote, laneIdx]() {
+                        editLaneCurveDialog(laneNote, laneIdx);
+                    });
+                    event->accept();
+                    return;
+                }
+
                 // Selected note: open curve editor for the active curve.
                 // Defer so the tablet press completes before the modal dialog opens —
                 // otherwise the pen never gets a TabletRelease and is inert inside the dialog.
@@ -3385,6 +4218,12 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
         // Mode-specific behavior (left button / pen tip)
         if (currentInputMode == SelectionMode) {
             const QVector<Note> &notes = phrase.getNotes();
+
+            // Curve lanes (D7) - same handling as the mouse path.
+            if (handleLanePress(pos.toPoint())) {
+                event->accept();
+                return;
+            }
 
             // Ctrl+click on the body of an already-selected note toggles it off
             if (event->modifiers() & Qt::ControlModifier) {
@@ -3696,25 +4535,27 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                 double newValue = qBound(0.0, originalValue + dynamicsChange, 1.0);
 
                 int activeIdx = resolveActiveCurveIndex(note);
-                Curve &activeCurve = note.getExpressiveCurve(activeIdx);
-                activeCurve.clearPoints();
+                // Never coarsen - same rule as the mouse path.
+                note.getExpressiveCurve(activeIdx) =
+                    curveAfterDotDrag(dragStartCurve, calculateCurveDotCount(note),
+                                           editingDotIndex, newValue);
+                break;
+            }
 
-                // Rebuild curve with adaptive number of control points
-                int numDots = calculateCurveDotCount(note);
-                for (int i = 0; i <= numDots + 1; ++i) {
-                    double t = i / (numDots + 1.0);
-                    double value;
+            case EditingLaneCurve: {
+                const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+                if (m_editLaneIndex < 0 || m_editLaneIndex >= lanes.size()) break;
+                const CurveLanes::Lane &lane = lanes[m_editLaneIndex];
+                if (lane.curveIndex < 0) break;
 
-                    if (i == editingDotIndex + 1) {
-                        value = newValue;
-                    } else {
-                        value = dragStartCurve.valueAt(t);
-                    }
+                const QRect r = laneRect(note, m_editLaneIndex, lanes.size(), m_editLaneIndex);
+                const double span = std::max(1, r.height() - 1);
+                const double newLaneValue =
+                    qBound(0.0, (r.bottom() - pos.toPoint().y()) / span, 1.0);
 
-                    activeCurve.addPoint(t, value);
-                }
-
-                activeCurve.sortPoints();
+                note.getExpressiveCurve(lane.curveIndex) =
+                    curveAfterDotDrag(dragStartCurve, calculateCurveDotCount(note),
+                                           editingDotIndex, newLaneValue);
                 break;
             }
 
@@ -4079,6 +4920,20 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
                         break;
                     }
 
+                    case EditingLaneCurve: {
+                        const QVector<CurveLanes::Lane> lanes = resolveLanesFor(note);
+                        if (m_editLaneIndex >= 0 && m_editLaneIndex < lanes.size() &&
+                            lanes[m_editLaneIndex].curveIndex >= 0) {
+                            const int ci = lanes[m_editLaneIndex].curveIndex;
+                            undoStack->push(new EditCurveCommand(&phrase, selectedIndex,
+                                                                 EditCurveCommand::ExpressiveCurveN,
+                                                                 ci, dragStartCurve,
+                                                                 note.getExpressiveCurve(ci),
+                                                                 this));
+                        }
+                        break;
+                    }
+
                     case EditingPitchCurve: {
                         // Push curve edit command for pitch curve
                         Curve newCurve = note.getPitchCurve();
@@ -4403,6 +5258,13 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
         }
     }
 
+    // Escape closes an open curve-lane hull first
+    if (event->key() == Qt::Key_Escape && m_editLaneNote >= 0) {
+        closeLaneEditor();
+        event->accept();
+        return;
+    }
+
     // Escape exits transform mode (when active and not in segment mode)
     if (event->key() == Qt::Key_Escape && transformMode) {
         setTransformMode(false);
@@ -4413,6 +5275,35 @@ void ScoreCanvas::keyPressEvent(QKeyEvent *event)
     // T: toggle transform mode (only meaningful with a single note selected)
     if (event->key() == Qt::Key_T && event->modifiers() == Qt::NoModifier) {
         toggleTransformMode();
+        event->accept();
+        return;
+    }
+
+    // Ctrl+L lives in ScoreCanvasWindow now (Phase F): an application-wide
+    // QAction shortcut, so the tier cycles even while a toolbar combo holds
+    // focus. Handled there, never here.
+
+    // Ctrl+Shift+Up / Down: move the split point one lane. Phase F backs this
+    // with the toolbar spin + Auto checkbox, but the keyboard path stays -
+    // Nimus called it "a game changer". Ctrl+Shift+Home restores auto.
+    if ((event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) &&
+        event->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier)) {
+        int current = m_lanesAboveOverride;
+        if (current < 0) {
+            // Materialize the auto split for the note under the cursor before
+            // nudging, so the first press moves by one rather than jumping.
+            int count = 0;
+            if (m_hoverNote >= 0 && m_hoverNote < phrase.getNotes().size())
+                count = resolveLanesFor(phrase.getNotes()[m_hoverNote]).size();
+            current = lanesAboveCount(count);
+        }
+        setLanesAbove(std::max(0, current + (event->key() == Qt::Key_Up ? 1 : -1)));
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Home &&
+        event->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier)) {
+        setLanesAbove(-1);
         event->accept();
         return;
     }
@@ -5239,6 +6130,12 @@ void ScoreCanvas::showExpressiveCurveApplyDialog()
     double timeSpanMs = endTime - startTime;
 
     ExpressiveCurveApplyDialog dialog(selectedNoteIndices.size(), timeSpanMs, curveNames, this);
+    // Ghost context (R6): shape a curve AGAINST the note's other curves.
+    if (!selectedNoteIndices.isEmpty() &&
+        selectedNoteIndices.first() < phrase.getNotes().size()) {
+        dialog.setGhostCurves(buildGhostCurves(phrase.getNotes()[selectedNoteIndices.first()],
+                                               QString()));
+    }
 
     if (dialog.exec() == QDialog::Accepted) {
         QString targetName = dialog.getSelectedCurveName();
@@ -5249,16 +6146,11 @@ void ScoreCanvas::showExpressiveCurveApplyDialog()
         undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
             &phrase, selectedNoteIndices, targetName, curve, weight, perNote, this));
 
-        // Activate the applied curve so the score canvas immediately draws the new shape,
-        // and notify KalaMain so the note-inspector dropdown picks it up without needing
-        // a reselect.
-        const QVector<Note> &updated = phrase.getNotes();
-        if (!selectedNoteIndices.isEmpty() && selectedNoteIndices.first() < updated.size()) {
-            int idx = updated[selectedNoteIndices.first()].findExpressiveCurveIndexByName(targetName);
-            if (idx >= 1) {
-                setActiveExpressiveCurveIndex(idx, targetName);
-            }
-        }
+        // Deliberately NOT activating the applied curve on the note body
+        // (reverted 2026-08-26): the "Show curve" combo is the only thing that
+        // decides the body shape. Auto-switching made the dialog feel like it
+        // stole the note's silhouette. The signal below still lets KalaMain
+        // refresh the note-inspector dropdown.
         emit expressiveCurveApplied(targetName);
 
         qDebug() << "ScoreCanvas: Applied expressive curve '" << targetName
@@ -5426,6 +6318,7 @@ void ScoreCanvas::editNoteCurve(int noteIndex)
         else
             initialPoints = curveToEnvelopePoints(note.getDynamicsCurve());
         dialog.setInitialCurve(initialPoints);
+        dialog.setGhostCurves(buildGhostCurves(note, QStringLiteral("Dynamics")));
 
         if (dialog.exec() == QDialog::Accepted) {
             QVector<EnvelopePoint> curve = dialog.getCurve();
@@ -5460,6 +6353,7 @@ void ScoreCanvas::editNoteCurve(int noteIndex)
         else
             initialPoints = curveToEnvelopePoints(note.getExpressiveCurve(activeCurveIndex));
         dialog.setInitialCurve(initialPoints);
+        dialog.setGhostCurves(buildGhostCurves(note, QString()));
 
         if (dialog.exec() == QDialog::Accepted) {
             QString targetName = dialog.getSelectedCurveName();
@@ -5470,14 +6364,7 @@ void ScoreCanvas::editNoteCurve(int noteIndex)
             undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
                 &phrase, selectedNoteIndices, targetName, curve, weight, perNote, this));
 
-            // Activate the applied curve
-            const QVector<Note> &updated = phrase.getNotes();
-            if (!selectedNoteIndices.isEmpty() && selectedNoteIndices.first() < updated.size()) {
-                int idx = updated[selectedNoteIndices.first()].findExpressiveCurveIndexByName(targetName);
-                if (idx >= 1) {
-                    setActiveExpressiveCurveIndex(idx, targetName);
-                }
-            }
+            // No auto-activation - see showExpressiveCurveApplyDialog.
             emit expressiveCurveApplied(targetName);
 
             qDebug() << "ScoreCanvas: Edited expressive curve '" << targetName

@@ -1,6 +1,7 @@
 #include "track.h"
 #include "audioengine.h"
 #include "vibrato.h"
+#include "dr_wav.h"
 #include <QDebug>
 #include <cmath>
 
@@ -1181,6 +1182,20 @@ QJsonObject Track::toJson() const
     // Graph hash (needed for render cache validation on load)
     json["graphHash"] = static_cast<qint64>(m_graphHash);
 
+    // Recording clip (Phase 9 bake) - metadata only, the WAV lives on disk
+    if (m_hasClip) {
+        QJsonObject clipJson;
+        clipJson["filePath"] = m_clip.filePath;
+        clipJson["offsetMs"] = m_clip.offsetMs;
+        clipJson["onsetMs"] = m_clip.onsetMs;
+        clipJson["manualNudgeMs"] = m_clip.manualNudgeMs;
+        clipJson["durationMs"] = m_clip.durationMs;
+        clipJson["gain"] = static_cast<double>(m_clip.gain);
+        clipJson["enabled"] = m_clip.enabled;
+        clipJson["liveMidi"] = m_clip.liveMidi;
+        json["clip"] = clipJson;
+    }
+
     return json;
 }
 
@@ -1222,6 +1237,24 @@ bool Track::fromJson(const QJsonObject &json)
     setVolume(static_cast<float>(json["volume"].toDouble(1.0)));
     setGain(static_cast<float>(json["gain"].toDouble(1.0)));
     setPan(static_cast<float>(json["pan"].toDouble(0.0)));
+
+    // Read recording clip (Phase 9 bake). The PCM itself is loaded lazily
+    // via prepareClipForPlayback(); only the metadata lives in the project.
+    m_hasClip = false;
+    m_clipLoaded = false;
+    m_clipPcm.clear();
+    QJsonObject clipJson = json["clip"].toObject();
+    if (!clipJson.isEmpty() && !clipJson["filePath"].toString().isEmpty()) {
+        m_hasClip = true;
+        m_clip.filePath = clipJson["filePath"].toString();
+        m_clip.offsetMs = clipJson["offsetMs"].toDouble(0.0);
+        m_clip.onsetMs = clipJson["onsetMs"].toDouble(0.0);
+        m_clip.manualNudgeMs = clipJson["manualNudgeMs"].toDouble(0.0);
+        m_clip.durationMs = clipJson["durationMs"].toDouble(0.0);
+        m_clip.gain = static_cast<float>(clipJson["gain"].toDouble(1.0));
+        m_clip.enabled = clipJson["enabled"].toBool(true);
+        m_clip.liveMidi = clipJson["liveMidi"].toBool(false);
+    }
 
     // Read notes
     m_notes.clear();
@@ -2156,6 +2189,27 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
         }
     }
 
+    // Mix the baked recording clip (Phase 9). The clip rides the track's
+    // gain/volume applied below and mutes with the track via the early
+    // return at the top. The PCM cache is prepared on the UI thread
+    // (prepareClipForPlayback) - the audio callback only indexes into it.
+    if (m_hasClip && m_clip.enabled && !m_clip.liveMidi && m_clipLoaded && !m_clipPcm.empty()) {
+        const double clipStart = clipOffsetMs();
+        const size_t clipFrames = m_clipPcm.size() / 2;
+        const double clipEnd = clipStart + (static_cast<double>(clipFrames) / m_sampleRate) * 1000.0;
+        if (startTimeMs < clipEnd && endTimeMs > clipStart) {
+            for (size_t i = 0; i < numSamples; ++i) {
+                const double timeMs = startTimeMs + (static_cast<double>(i) / m_sampleRate) * 1000.0;
+                const double clipMs = timeMs - clipStart;
+                if (clipMs < 0.0) continue;
+                const size_t idx = static_cast<size_t>((clipMs / 1000.0) * m_sampleRate);
+                if (idx >= clipFrames) break;
+                buffer[i * 2]     += m_clipPcm[idx * 2]     * m_clip.gain;
+                buffer[i * 2 + 1] += m_clipPcm[idx * 2 + 1] * m_clip.gain;
+            }
+        }
+    }
+
     // Apply track gain and volume, then clamp
     float totalGain = m_gain * m_volume;
     for (float &s : buffer) {
@@ -2190,5 +2244,144 @@ double Track::getRenderedEndTimeMs() const
         }
     }
 
+    // Recording clip extends the track's audible length (Phase 9)
+    if (m_hasClip && m_clip.enabled && !m_clip.liveMidi) {
+        const double clipEnd = getClipEndTimeMs();
+        if (clipEnd > endMs) endMs = clipEnd;
+    }
+
     return endMs;
+}
+
+// ========== Recording Clip (Phase 9: bake to audio) ==========
+
+void Track::setClip(const TrackClip &clip)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        m_clip = clip;
+        m_hasClip = true;
+        m_clipLoaded = false;
+        m_clipPcmRate = 0;
+        m_clipPcm.clear();
+    }
+    markNotesDirty();  // clip is composition data - prompts for save
+    emit clipChanged();
+}
+
+void Track::clearClip()
+{
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        if (!m_hasClip) return;
+        m_hasClip = false;
+        m_clipLoaded = false;
+        m_clipPcmRate = 0;
+        m_clipPcm.clear();
+        m_clip = TrackClip();
+    }
+    markNotesDirty();
+    emit clipChanged();
+}
+
+void Track::setClipLiveMidi(bool live)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        if (!m_hasClip || m_clip.liveMidi == live) return;
+        m_clip.liveMidi = live;
+    }
+    markNotesDirty();
+    emit clipChanged();
+}
+
+void Track::setClipNudgeMs(double ms)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_playbackMutex);
+        if (!m_hasClip || m_clip.manualNudgeMs == ms) return;
+        m_clip.manualNudgeMs = ms;
+    }
+    markNotesDirty();
+}
+
+double Track::getClipEndTimeMs() const
+{
+    if (!m_hasClip || !m_clip.enabled || m_clip.liveMidi) return 0.0;
+    return clipOffsetMs() + m_clip.durationMs;
+}
+
+bool Track::prepareClipForPlayback()
+{
+    if (!m_hasClip || m_clip.filePath.isEmpty()) return true;  // nothing to prepare
+    // The cache must match the rate it will be consumed at: live playback
+    // and export can run the track at different rates (e.g. 44.1 kHz device
+    // vs 48 kHz export), and mixing a cache at the wrong rate time-compresses
+    // the clip (the "19 s shorter" export bug).
+    if (m_clipLoaded && m_clipPcmRate == m_sampleRate) return true;
+
+    // UI-thread only (play/export setup, never the audio callback), but the
+    // cache below is read by the callback - take the playback mutex.
+    std::lock_guard<std::mutex> lock(m_playbackMutex);
+    if (m_clipLoaded && m_clipPcmRate == m_sampleRate) return true;
+
+    m_clipPcm.clear();
+    m_clipLoaded = false;
+
+    drwav wav;
+    if (!drwav_init_file(&wav, m_clip.filePath.toLocal8Bit().constData(), nullptr)) {
+        qWarning() << "Track" << m_name << ": cannot open clip" << m_clip.filePath;
+        return false;
+    }
+    const drwav_uint64 fileFrames = wav.totalPCMFrameCount;
+    const unsigned int fileChannels = wav.channels;
+    const double fileRate = wav.sampleRate > 0 ? static_cast<double>(wav.sampleRate) : 48000.0;
+    if (fileFrames == 0 || fileChannels < 1 || fileChannels > 2) {
+        qWarning() << "Track" << m_name << ": clip unreadable or unsupported channels";
+        drwav_uninit(&wav);
+        return false;
+    }
+    std::vector<float> raw(static_cast<size_t>(fileFrames) * fileChannels);
+    const drwav_uint64 readFrames = drwav_read_pcm_frames_f32(&wav, fileFrames, raw.data());
+    drwav_uninit(&wav);
+    if (readFrames == 0) {
+        qWarning() << "Track" << m_name << ": clip read failed";
+        return false;
+    }
+
+    // Drop the pre-roll ahead of the measured onset (Phase 9 bake): the
+    // recording starts before the transport and may contain a stream-open
+    // click. Trimmed away, the clip's offsetMs points straight at the
+    // first note. onsetMs == 0 (old clips, or no onset found) trims nothing.
+    const drwav_uint64 startFrame = static_cast<drwav_uint64>(
+        (std::max(0.0, m_clip.onsetMs) / 1000.0) * fileRate);
+    if (startFrame >= readFrames) {
+        qWarning() << "Track" << m_name << ": clip onset trim beyond recording - clip is silent";
+        m_clipPcm.clear();
+        m_clipLoaded = true;
+        m_clipPcmRate = m_sampleRate;
+        return true;
+    }
+    const float *base = raw.data() + static_cast<size_t>(startFrame) * fileChannels;
+    const size_t usedFrames = static_cast<size_t>(readFrames - startFrame);
+
+    // Upmix mono to stereo and linear-resample to this track's rate in one pass.
+    const double ratio = m_sampleRate / fileRate;
+    const size_t outFrames = static_cast<size_t>(static_cast<double>(usedFrames) * ratio) + 1;
+    m_clipPcm.assign(outFrames * 2, 0.0f);
+    for (size_t i = 0; i < outFrames; ++i) {
+        const double srcPos = static_cast<double>(i) / ratio;
+        const size_t s0 = static_cast<size_t>(srcPos);
+        const size_t s1 = std::min(s0 + 1, usedFrames - 1);
+        const double frac = srcPos - static_cast<double>(s0);
+        for (int ch = 0; ch < 2; ++ch) {
+            const size_t sch = (fileChannels == 2) ? ch : 0;
+            const float a = base[s0 * fileChannels + sch];
+            const float b = base[s1 * fileChannels + sch];
+            m_clipPcm[i * 2 + ch] = a + static_cast<float>(frac) * (b - a);
+        }
+    }
+    m_clipLoaded = true;
+    m_clipPcmRate = m_sampleRate;
+    return true;
 }

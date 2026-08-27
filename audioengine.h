@@ -74,8 +74,11 @@ public:
      *
      * @param tracks List of tracks to play from (must have been pre-rendered)
      * @param startTimeMs Start time in milliseconds
+     * @param forceMidiTrack Track whose MIDI plays even though it has a clip
+     *        (the bake pass re-records this track, so the module must sound)
      */
-    void playFromTracks(const QList<Track*> &tracks, double startTimeMs = 0.0);
+    void playFromTracks(const QList<Track*> &tracks, double startTimeMs = 0.0,
+                        Track *forceMidiTrack = nullptr);
 
     /**
      * Stop track-based playback
@@ -193,8 +196,10 @@ private:
     // play-start neutrals open the bake and end-of-note neutrals close each
     // curve. The patch owns the CC assignments - no SysEx writes here.
     // Fills outEndMs with the last event time.
+    // Tracks with a baked clip are frozen (their MIDI is skipped) except
+    // forceMidiTrack, which is being re-recorded by the bake pass.
     void bakeMidiEvents(const QList<Track*> &tracks, double startTimeMs,
-                        double &outEndMs);
+                        double &outEndMs, Track *forceMidiTrack = nullptr);
 
     // The stop reset (per-row neutrals + per-channel All Notes Off CC123),
     // built once per playback and handed to the stream session's stop().

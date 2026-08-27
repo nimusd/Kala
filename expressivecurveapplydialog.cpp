@@ -416,3 +416,23 @@ void ExpressiveCurveApplyDialog::onLoadClicked()
             .arg(name)
             .arg(loadedPoints.size()));
 }
+
+void ExpressiveCurveApplyDialog::setGhostCurves(const QVector<EnvelopeCurveCanvas::Ghost> &ghosts)
+{
+    m_allGhosts = ghosts;
+    if (curveNameCombo) {
+        connect(curveNameCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int) { applyGhostFilter(); }, Qt::UniqueConnection);
+    }
+    applyGhostFilter();
+}
+
+void ExpressiveCurveApplyDialog::applyGhostFilter()
+{
+    if (!curveCanvas) return;
+    const QString target = getSelectedCurveName();
+    QVector<EnvelopeCurveCanvas::Ghost> shown;
+    for (const EnvelopeCurveCanvas::Ghost &g : m_allGhosts)
+        if (g.name != target) shown.append(g);
+    curveCanvas->setGhostCurves(shown);
+}

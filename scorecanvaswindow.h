@@ -15,10 +15,13 @@ class TrackManager;
 class Track;
 class KalaMain;
 class Canvas;
+class AudioCapture;
+class LanesLegend;
 #include <QLabel>
 #include <QActionGroup>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QStackedWidget>
 #include <QProgressBar>
@@ -76,6 +79,12 @@ private slots:
 
     // Auto-scroll request from ScoreCanvas during lasso selection
     void onScoreAutoScroll(int dx, int dy);
+
+    // Curve lanes view controls (Phase F)
+    void setupLanesControls();
+    void onCycleTier();
+    void refreshTierWidget();
+    void refreshLanesAboveControls();
 
 private:
     // Helper to connect a track's render progress signals
@@ -143,6 +152,15 @@ private:
     Track *m_curveNamesTrack = nullptr;
     QList<QMetaObject::Connection> m_curveNamesConnections;
 
+    // Curve lanes view controls (Phase F)
+    QAction    *tierCycleAction = nullptr;   // hidden Ctrl+L, application-wide
+    QComboBox  *tierCombo = nullptr;         // Off / Overlay / Lanes
+    QSpinBox   *lanesAboveSpin = nullptr;    // split point (D1)
+    QCheckBox  *lanesAboveAutoCheck = nullptr;  // checked = auto/balanced split
+    QPushButton *dimOthersBtn = nullptr;     // D9 toggle
+    QPushButton *legendBtn = nullptr;        // legend panel toggle
+    LanesLegend *lanesLegend = nullptr;
+
     // Composition state
     enum TimeMode {
         AbsoluteTime,   // Min:Sec:Ms
@@ -169,6 +187,12 @@ private:
     double playbackStartTime;      // Current playback position
     double playbackStartPosition;  // Where playback should always start from (set by double-click)
     bool isPlaying;
+
+    // Bake capture (Phase 9) - active while a bake pass records the
+    // VL70-m's audio input during playback.
+    AudioCapture *m_capture = nullptr;
+    int m_captureTrackIndex = -1;   // track the clip attaches to
+    QString m_capturePath;          // WAV being recorded
 
     // Zoom state
     bool zoomModeActive;
@@ -212,12 +236,16 @@ private:
     void onTransformModeChanged(bool active);
     void onRenderModeToggled();
     void onMidiTestClicked();
+    void onBakeClicked();
+    void finishBakeCapture();
     void onTimeSignatureModeChanged(int index);
     void onTimeSettingsChanged();
     void onNowMarkerChanged(double timeMs);  // Sync spinboxes with timeline position
 
     // Audio playback (Phase 3)
-    void startPlayback();
+    // forceMidiTrack: track whose MIDI plays even though it has a clip -
+    // the bake pass re-records it, so the module must sound (Phase 9).
+    void startPlayback(Track *forceMidiTrack = nullptr);
     void onPlaybackTick();
 
 public:

@@ -593,7 +593,7 @@
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>120</height>
+            <height>330</height>
            </size>
           </property>
           <property name="title">
@@ -627,7 +627,7 @@
               <enum>QFrame::Shape::NoFrame</enum>
              </property>
              <property name="verticalScrollBarPolicy">
-              <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+              <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
              </property>
              <property name="horizontalScrollBarPolicy">
               <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>

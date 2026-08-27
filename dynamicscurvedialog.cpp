@@ -431,3 +431,8 @@ void DynamicsCurveDialog::onLoadClicked()
             .arg(name)
             .arg(loadedPoints.size()));
 }
+
+void DynamicsCurveDialog::setGhostCurves(const QVector<EnvelopeCurveCanvas::Ghost> &ghosts)
+{
+    if (curveCanvas) curveCanvas->setGhostCurves(ghosts);
+}

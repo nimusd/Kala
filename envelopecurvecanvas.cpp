@@ -49,10 +49,58 @@ void EnvelopeCurveCanvas::paintEvent(QPaintEvent *event)
     // Fill background
     painter.fillRect(rect(), QColor(30, 30, 30));
 
-    // Draw grid and curve
+    // Draw grid, context curves, then the editable curve on top
     drawGrid(painter);
+    drawGhosts(painter);
     drawCurve(painter);
     drawPoints(painter);
+}
+
+void EnvelopeCurveCanvas::setGhostCurves(const QVector<Ghost> &ghosts)
+{
+    ghostCurves = ghosts;
+    update();
+}
+
+void EnvelopeCurveCanvas::drawGhosts(QPainter &painter)
+{
+    if (ghostCurves.isEmpty()) return;
+
+    painter.save();
+
+    for (const Ghost &g : ghostCurves) {
+        if (g.samples.size() < 2) continue;
+        QPolygonF poly;
+        poly.reserve(g.samples.size());
+        for (const QPointF &s : g.samples)
+            poly.append(curveToScreen(s.x(), s.y()));
+
+        QColor c = g.color;
+        c.setAlpha(110);           // present, but never competing with the edit
+        painter.setPen(QPen(c, 1));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPolyline(poly);
+    }
+
+    // Compact legend, so a ghost can be identified rather than just noticed.
+    QFont font = painter.font();
+    font.setPointSize(7);
+    painter.setFont(font);
+    const QFontMetrics fm(font);
+    int y = 4;
+    for (const Ghost &g : ghostCurves) {
+        QColor c = g.color;
+        c.setAlpha(150);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(c);
+        painter.drawRect(QRect(6, y + (fm.height() - 6) / 2, 6, 6));
+        painter.setPen(QColor(160, 160, 160));
+        painter.drawText(QRect(16, y, 160, fm.height()),
+                         Qt::AlignVCenter | Qt::AlignLeft, g.name);
+        y += fm.height();
+    }
+
+    painter.restore();
 }
 
 void EnvelopeCurveCanvas::drawGrid(QPainter &painter)

@@ -47,6 +47,7 @@
 #include <QComboBox>
 #include <QSlider>
 #include <QDial>
+#include <QToolButton>
 #include <QSpinBox>
 #include <QDoubleSpinBox>
 #include <QCheckBox>
@@ -151,7 +152,10 @@ KalaMain::KalaMain(QWidget *parent)
     scoreCanvasWindow->setMainWindow(this);
 
     // Connect TrackManager signals for mixer updates
-    connect(trackManager, &TrackManager::trackAdded, this, [this](Track*, int) {
+    connect(trackManager, &TrackManager::trackAdded, this, [this](Track *t, int) {
+        // Clip changes (bake attached, cleared, or live/clip toggled)
+        // rebuild the mixer so the toggle button stays current.
+        connect(t, &Track::clipChanged, this, &KalaMain::rebuildMixer, Qt::UniqueConnection);
         rebuildMixer();
     });
     connect(trackManager, &TrackManager::trackRemoved, this, [this](int) {
@@ -5146,6 +5150,9 @@ void KalaMain::onExportAudio()
         Track *track = trackManager->getTrack(i);
         if (track) {
             track->prerenderDirtyNotes(sampleRate);
+            // Load baked clip PCM so getMixedBuffer includes it in the
+            // export mix (Phase 9).
+            track->prepareClipForPlayback();
         }
     }
 
@@ -6927,10 +6934,14 @@ void KalaMain::rebuildMixer()
         Track *track = trackManager->getTrack(i);
         if (!track) continue;
 
+        // Keep the mixer current with clip changes (covers tracks loaded
+        // from a project, which may not have gone through trackAdded).
+        connect(track, &Track::clipChanged, this, &KalaMain::rebuildMixer, Qt::UniqueConnection);
+
         // Create container widget for this track's mixer column with colored background
         QWidget *columnWidget = new QWidget();
-        columnWidget->setMinimumWidth(70);
-        columnWidget->setMaximumWidth(80);
+        columnWidget->setMinimumWidth(80);
+        columnWidget->setMaximumWidth(90);
 
         // Set background color to track color (slightly transparent)
         QColor bgColor = track->getColor();
@@ -6995,6 +7006,84 @@ void KalaMain::rebuildMixer()
         panLabel->setAlignment(Qt::AlignCenter);
         panLabel->setStyleSheet("background: transparent; font-size: 8px;");
         columnLayout->addWidget(panLabel);
+
+        // Baked tracks: clip/live toggle. By default a baked track plays its
+        // recording (frozen); checking this drives the VL70-m live again.
+        if (track->hasClip()) {
+            QToolButton *clipToggle = new QToolButton();
+            clipToggle->setCheckable(true);
+            clipToggle->setChecked(track->getClip().liveMidi);
+            clipToggle->setText(track->getClip().liveMidi ? "VL" : "Bake");
+            clipToggle->setToolTip(track->getClip().liveMidi
+                                       ? "Playing the VL70-m live - click to play the baked recording"
+                                       : "Playing the baked recording - click to play the VL70-m live");
+            clipToggle->setStyleSheet("background: transparent; font-size: 8px; padding: 1px;");
+            clipToggle->setFixedHeight(20);
+            columnLayout->addWidget(clipToggle, 0, Qt::AlignCenter);
+
+            const int clipTrackIndex = i;
+            connect(clipToggle, &QToolButton::toggled, this,
+                    [this, clipTrackIndex, clipToggle](bool checked) {
+                        Track *t = trackManager->getTrack(clipTrackIndex);
+                        if (!t) return;
+                        t->setClipLiveMidi(checked);
+                        clipToggle->setText(checked ? "VL" : "Bake");
+                        clipToggle->setToolTip(checked
+                                                   ? "Playing the VL70-m live - click to play the baked recording"
+                                                   : "Playing the baked recording - click to play the VL70-m live");
+                    });
+
+            // Fine position trim for the bake (positive = later). Two
+            // explicit buttons instead of a spinbox: the spinbox's arrow
+            // subcontrols were barely clickable in the narrow column (the
+            // up-arrow hit area didn't line up with the drawn arrow).
+            QHBoxLayout *nudgeRow = new QHBoxLayout();
+            nudgeRow->setContentsMargins(0, 0, 0, 0);
+            nudgeRow->setSpacing(2);
+
+            QToolButton *nudgeEarlier = new QToolButton();
+            nudgeEarlier->setText(QStringLiteral("◀"));
+            nudgeEarlier->setFixedSize(26, 24);
+            nudgeEarlier->setAutoRepeat(true);
+            nudgeEarlier->setAutoRepeatDelay(400);
+            nudgeEarlier->setAutoRepeatInterval(100);
+            nudgeEarlier->setToolTip("Earlier by 10 ms (hold to repeat)");
+            nudgeEarlier->setStyleSheet("font-size: 12px; padding: 0px;");
+
+            QLabel *nudgeLabel = new QLabel();
+            nudgeLabel->setAlignment(Qt::AlignCenter);
+            nudgeLabel->setMinimumWidth(30);
+            nudgeLabel->setStyleSheet("background: transparent; font-size: 8px;");
+            nudgeLabel->setToolTip("Bake position trim: positive = later, negative = earlier");
+
+            QToolButton *nudgeLater = new QToolButton();
+            nudgeLater->setText(QStringLiteral("▶"));
+            nudgeLater->setFixedSize(26, 24);
+            nudgeLater->setAutoRepeat(true);
+            nudgeLater->setAutoRepeatDelay(400);
+            nudgeLater->setAutoRepeatInterval(100);
+            nudgeLater->setToolTip("Later by 10 ms (hold to repeat)");
+            nudgeLater->setStyleSheet("font-size: 12px; padding: 0px;");
+
+            nudgeRow->addWidget(nudgeEarlier);
+            nudgeRow->addWidget(nudgeLabel, 1);
+            nudgeRow->addWidget(nudgeLater);
+            columnLayout->addLayout(nudgeRow);
+
+            auto updateNudgeLabel = [nudgeLabel](double ms) {
+                nudgeLabel->setText(QString("%1%2 ms").arg(ms > 0.0 ? "+" : "").arg(ms, 0, 'f', 0));
+            };
+            updateNudgeLabel(track->getClip().manualNudgeMs);
+            auto nudgeBy = [this, clipTrackIndex, updateNudgeLabel](double delta) {
+                Track *t = trackManager->getTrack(clipTrackIndex);
+                if (!t) return;
+                const double v = t->getClip().manualNudgeMs + delta;
+                t->setClipNudgeMs(v);
+                updateNudgeLabel(v);
+            };
+            connect(nudgeEarlier, &QToolButton::clicked, this, [nudgeBy] { nudgeBy(-10.0); });
+            connect(nudgeLater, &QToolButton::clicked, this, [nudgeBy] { nudgeBy(10.0); });
+        }
 
         // Add stretch at bottom to push everything up
         columnLayout->addStretch();

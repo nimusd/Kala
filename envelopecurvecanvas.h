@@ -24,7 +24,17 @@ public:
     // Set/get curve data
     void setPoints(const QVector<EnvelopePoint> &points);
     QVector<EnvelopePoint> getPoints() const { return points; }
-    
+
+    // Context curves drawn dimmed behind the editable one, so a curve can be
+    // shaped AGAINST the note's other curves instead of from memory. Purely
+    // visual - never hit-tested, never edited.
+    struct Ghost {
+        QString name;
+        QColor  color;
+        QVector<QPointF> samples;   // normalized (time 0..1, value 0..1)
+    };
+    void setGhostCurves(const QVector<Ghost> &ghosts);
+
     // Reset to default
     void reset();
 
@@ -39,6 +49,7 @@ protected:
 
 private:
     QVector<EnvelopePoint> points;
+    QVector<Ghost> ghostCurves;
     int selectedPointIndex;
     int hoveredPointIndex;
     bool isDragging;
@@ -58,6 +69,7 @@ private:
     
     // Drawing helpers
     void drawGrid(QPainter &painter);
+    void drawGhosts(QPainter &painter);
     void drawCurve(QPainter &painter);
     void drawPoints(QPainter &painter);
     

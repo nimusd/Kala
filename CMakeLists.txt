@@ -41,6 +41,8 @@ qt_add_executable(Kala
     scorecanvaswindow.h scorecanvaswindow.cpp
     trackselect.h trackselect.cpp
     scorecanvas.h scorecanvas.cpp
+    curvelanes.h curvelanes.cpp
+    laneslegend.h laneslegend.cpp
     scorecanvascommands.h scorecanvascommands.cpp
     variationtoolbar.h variationtoolbar.cpp
     sounitbuildercommands.h sounitbuildercommands.cpp
@@ -131,6 +133,8 @@ qt_add_executable(Kala
     midistream.h midistream.cpp
     vl70mrows.h
     bandwidthtestdialog.h bandwidthtestdialog.cpp
+    audiocapture.h audiocapture.cpp
+    bakedialog.h bakedialog.cpp
     third_party/rtmidi/RtMidi.cpp
 )
 

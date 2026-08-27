@@ -22,6 +22,23 @@
 #include "sounitvariation.h"
 
 /**
+ * Recording clip attached to a track (Phase 9: bake to audio).
+ * The VL70-m only exists in real time, so a bake pass records the interface
+ * input while the transport plays; the recording then joins the rest of the
+ * pre-rendered audio as this clip.
+ */
+struct TrackClip {
+    QString filePath;            // WAV file
+    double offsetMs = 0.0;       // timeline position of clip sample 0 (auto-aligned)
+    double onsetMs = 0.0;        // leading pre-roll in the recording, trimmed at load (measured at bake time)
+    double manualNudgeMs = 0.0;  // fine trim added to offsetMs
+    double durationMs = 0.0;     // clip length (measured at bake time)
+    float gain = 1.0f;           // clip gain on top of track gain/volume
+    bool enabled = true;
+    bool liveMidi = false;       // play the VL70-m live instead of the recording (freeze override)
+};
+
+/**
  * Track - Self-contained audio track with sounit and notes
  *
  * Core design principle: Each Track is completely independent, owning all its data:
@@ -531,6 +548,58 @@ public:
     float getPan() const { return m_pan; }
     void setPan(float pan);
 
+    // ========== Recording Clip (Phase 9: bake to audio) ==========
+
+    /**
+     * Check if this track has a baked recording clip attached
+     */
+    bool hasClip() const { return m_hasClip; }
+
+    /**
+     * Get the clip (valid only when hasClip() is true)
+     */
+    const TrackClip& getClip() const { return m_clip; }
+
+    /**
+     * Timeline position of the clip's sample 0 (auto-aligned offset + manual nudge)
+     */
+    double clipOffsetMs() const { return m_clip.offsetMs + m_clip.manualNudgeMs; }
+
+    /**
+     * Attach a recording clip (invalidates the cached PCM)
+     */
+    void setClip(const TrackClip &clip);
+
+    /**
+     * Phase 9 freeze override: when true, the track drives the VL70-m live
+     * again and the baked recording is not mixed. No-op without a clip.
+     */
+    void setClipLiveMidi(bool live);
+
+    /**
+     * Fine trim added to the clip position (positive = later). Saved with
+     * the project; no-op without a clip. Does not emit clipChanged (the
+     * mixer's nudge spinbox edits this continuously).
+     */
+    void setClipNudgeMs(double ms);
+
+    /**
+     * Remove the attached clip
+     */
+    void clearClip();
+
+    /**
+     * Load the clip PCM into memory, resampled to this track's rate.
+     * Call from the UI thread before playback/export - never from the audio
+     * callback (file I/O). Returns true if the clip is ready to mix.
+     */
+    bool prepareClipForPlayback();
+
+    /**
+     * Timeline end of the clip (offset + duration), or 0 if no clip
+     */
+    double getClipEndTimeMs() const;
+
     // ========== Serialization ==========
 
     QJsonObject toJson() const;
@@ -543,6 +612,12 @@ signals:
      * Emitted when track name changes
      */
     void nameChanged(const QString &name);
+
+    /**
+     * Emitted when a recording clip is attached, cleared or toggled
+     * (mixer and bake UIs listen for this).
+     */
+    void clipChanged();
 
     /**
      * Emitted when track color changes
@@ -709,6 +784,15 @@ private:
     float m_volume;  // 0.0 to 1.0
     float m_gain;    // 0.0 to 8.0 (unity = 1.0, max = +18dB)
     float m_pan;     // -1.0 (left) to 1.0 (right), 0.0 = center
+
+    // Recording clip (Phase 9). PCM cache is loaded on the UI thread
+    // (prepareClipForPlayback) and read by getMixedBuffer under the
+    // playback mutex.
+    TrackClip m_clip;
+    bool m_hasClip = false;
+    std::vector<float> m_clipPcm;  // stereo interleaved, resampled to m_sampleRate
+    unsigned int m_clipPcmRate = 0;  // sample rate m_clipPcm was built at (rebuild on change)
+    bool m_clipLoaded = false;
 
     // Thread safety
     mutable std::mutex m_playbackMutex;  // Protects m_notes and m_noteRenders during playback

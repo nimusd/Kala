@@ -1217,7 +1217,8 @@ void AudioEngine::playRenderedBuffer(double startTimeMs)
 
 // ========== Track-Based Playback (NEW - Note-Based Rendering) ==========
 
-void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs)
+void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs,
+                                 Track *forceMidiTrack)
 {
     std::cout << "AudioEngine: playFromTracks called with " << tracks.size()
               << " track(s), start time: " << startTimeMs << "ms" << std::endl;
@@ -1257,7 +1258,7 @@ void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs
         // Includes the MIDI tail in the playback length: a MIDI-only track has no
         // audio renders, so getRenderedEndTimeMs() alone would be 0.
         double midiEndMs = 0.0;
-        bakeMidiEvents(tracks, startTimeMs, midiEndMs);
+        bakeMidiEvents(tracks, startTimeMs, midiEndMs, forceMidiTrack);
         if (midiEndMs > endTimeMs) {
             endTimeMs = midiEndMs;
         }
@@ -1310,7 +1311,7 @@ void AudioEngine::playFromTracks(const QList<Track*> &tracks, double startTimeMs
 }
 
 void AudioEngine::bakeMidiEvents(const QList<Track*> &tracks, double startTimeMs,
-                                 double &outEndMs)
+                                 double &outEndMs, Track *forceMidiTrack)
 {
     m_midiEvents.clear();
     outEndMs = 0.0;
@@ -1330,6 +1331,17 @@ void AudioEngine::bakeMidiEvents(const QList<Track*> &tracks, double startTimeMs
 
     for (Track *track : tracks) {
         if (!track || track->isMuted()) continue;
+
+        // Phase 9 freeze: a track with a baked clip plays its recording
+        // instead of live MIDI - the module is freed for the next track's
+        // bake (overdub stacking, the mono module becomes polyphonic).
+        // The bake pass exempts its own target track, which must still
+        // sound to be re-recorded. liveMidi is the freeze override: the
+        // user has toggled the track back to live VL70-m playing.
+        if (track->hasClip() && track->getClip().enabled && !track->getClip().liveMidi
+            && track != forceMidiTrack) {
+            continue;
+        }
 
         double prevNoteEnd = -1.0;
         int prevChannel = -1;

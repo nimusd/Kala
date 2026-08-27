@@ -160,3 +160,41 @@ Curve Curve::fromJson(const QJsonObject &json)
 
     return curve;
 }
+
+Curve curveAfterDotDrag(const Curve &start, int numDots, int dotIndex, double newValue)
+{
+    const int minPoints = numDots + 2;
+    QVector<Curve::Point> pts = start.getPoints();
+
+    // Refine only when the curve carries fewer points than the dots on screen.
+    if (pts.size() < minPoints) {
+        QVector<Curve::Point> refined;
+        refined.reserve(minPoints);
+        for (int i = 0; i < minPoints; ++i) {
+            const double t = static_cast<double>(i) / (minPoints - 1);
+            refined.append(Curve::Point(t, start.valueAt(t), start.pressureAt(t)));
+        }
+        pts = refined;
+    }
+
+    // The dragged dot's influence spans its two neighbours and no further.
+    const double td    = static_cast<double>(dotIndex + 1) / (numDots + 1);
+    const double tPrev = static_cast<double>(dotIndex)     / (numDots + 1);
+    const double tNext = static_cast<double>(dotIndex + 2) / (numDots + 1);
+    const double delta = newValue - start.valueAt(td);
+
+    for (Curve::Point &p : pts) {
+        double w = 0.0;
+        if (p.time > tPrev && p.time <= td)
+            w = (td > tPrev) ? (p.time - tPrev) / (td - tPrev) : 1.0;
+        else if (p.time > td && p.time < tNext)
+            w = (tNext > td) ? (tNext - p.time) / (tNext - td) : 0.0;
+        p.value = qBound(0.0, p.value + delta * w, 1.0);
+    }
+
+    Curve out;
+    for (const Curve::Point &p : pts)
+        out.addPoint(p.time, p.value, p.pressure);
+    out.sortPoints();
+    return out;
+}

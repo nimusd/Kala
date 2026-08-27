@@ -55,11 +55,13 @@ Phase 5 — The actual target: independent curves, stacked. The phase the whole 
 6. **Modifier hookup** — Envelope, Physics, and the rest of the Modifiers menu driving these ports through the existing connection combinators, instead of hand-drawn curves only.
 Phase 6 — Hook up the Modifiers. Let Envelope, Physics/drift, and the rest of the Modifiers menu drive these ports through the same connection combinators you already use elsewhere, instead of hand-drawn curves only. Test: a physics or drift modifier driving something like damping or absorption in a way that feels organic rather than manually drawn. Celebrate: the MIDI container is now a first-class citizen of the sound-engine graph, not a special case bolted to the side.
 
-7. **Tab, canvas, inspector** — the dedicated MIDI authoring UI, built last, once the underlying graph behaves correctly headless.
-Phase 7 — The tab, canvas, and inspector. Only now build the dedicated MIDI authoring surface, deliberately last — it's much easier to debug a UI against a graph you already know behaves correctly than to debug plumbing and interface at once. Test: build a VL70-m instrument entirely through the new UI, no hardcoded fallback underneath, and it behaves identically to what came before. Celebrate: authoring this now feels like authoring anything else in Kala.
+7. ~~**Tab, canvas, inspector** — the dedicated MIDI authoring UI, built last, once the underlying graph behaves correctly headless.~~ **DROPPED 2026-08-21.** Nimus has all the UI needed to work with the VL70-m — the container, rows inspector, and canvas ports already live inside Kala's existing authoring surface (Phases 2–6). Its test (authoring a VL70-m instrument feels like authoring anything else in Kala) is already true.
 
 8. **Beyond the VL70-m** — CC/NRPN map and polyphony ceiling become data the container reads, not hardcoded facts, so other synths can be defined the same way.
 Phase 8 — Beyond the VL70-m. Turn the CC/NRPN map, port names, and the monophonic ceiling into data the container reads, rather than facts baked into code. Test: define a second, simpler synth's map and get a note out to different hardware without touching the container's core logic. Celebrate: "opens the door to other synths" — what you said in your very first message — actually delivered.
+
+9. **Bake to audio** — the second half of the bake-then-dispatch decision: level-2 playback, "playback with simultaneous recording or baking". The module only exists in real time, so the bake pass plays a track once and records the audio interface input carrying the VL70-m; the recording attaches to the track and joins the rest of the pre-rendered audio for playback/save/load — exactly as the decision says it should.
+Phase 9 — Bake to audio. A bake pass plays the transport once while recording the interface input the module feeds (UR22) into a WAV via a RtAudio duplex stream (same clock as the output callback — no new dependency; dr_wav already in-tree for writing). The recording attaches to the track as a clip: file path + start offset + gain/pan, mixed by the audio callback at the track's timeline position and included in the offline export. Alignment: the recorded onset auto-aligns to the first note-on in the baked span (the dispatcher already knows its exact time), with a manual nudge (ms) for the constant interface round-trip. Test: bake a track, then play the composition with the module disconnected or muted — the baked clip plays in sync with the internal tracks; export the composition to WAV and the VL70-m is in the file. Celebrate: the composition is self-contained — it plays anywhere, hardware or no hardware.
 
 
 
@@ -76,7 +78,7 @@ window toolbar plus a "MIDI Setup" category in the Settings tab (Ctrl+3) with ou
 device selection, saved to QSettings. Hello note = breath CC2 + Note On A4 (500 ms)
 through the configured port. First real test was via a Steinberg UR22mkII USB
 interface into the VL70-m; note heard from the module's own output. (Returning the
-VL70-m's audio into Kala's audio path is a separate item, not in this phase plan.)
+VL70-m's audio into Kala's audio path is now Phase 9, bake to audio.)
 
 Phase 2 (static container) — done, tested 2026-08-18. "VL70-m Out" container in the
 Essential menu (blue): ports pitch/breath in, midiOut out (declarative); inspector
@@ -276,3 +278,174 @@ output is a ~1.0 detuning multiplier, so a Drift→row connection saturates
 at CC 127 under passthrough or heavy modulate weight — use small modulate
 weights (~0.05-0.15) or an Envelope/LFO/Physics source for full-range row
 motion.
+
+Phase 7 (dedicated MIDI authoring UI) — dropped 2026-08-21; Nimus has all
+the UI needed, the container already lives in Kala's existing surface.
+
+Phase 9 (bake to audio) — built 2026-08-21, hardware test pending. New:
+AudioCapture (own RtAudio input-only stream, ring buffer + writer thread,
+f32 WAV via dr_wav, input device list, onset/last-signal analysis);
+TrackClip on Track (filePath + auto-aligned offsetMs + manualNudgeMs +
+durationMs + gain, saved in the project JSON; PCM cached per playback/
+export pass by prepareClipForPlayback, mixed inside Track::getMixedBuffer
+so the live callback and offline export both include it automatically;
+getRenderedEndTimeMs extends with the clip end); "Bake" button in the
+score window toolbar → BakeDialog (target track, input device, stereo/
+input1/input2, WAV path) → capture starts, then the normal playback path;
+stopPlayback finalizes the capture, aligns the recording's first sound to
+the first VL70-m note-on at/after the transport start, trims to last
+signal + 500 ms tail pad, attaches the clip.
+
+Alignment reworked 2026-08-23 after Nimus's hybrid-piece test (first
+bake on a real two-voice piece was ~11 s off). Three fixes: (1) the
+"first note" was the first MIDI-out note in LIST order - notes are
+stored in drawing order, not time order, so it now takes the earliest
+note at/after the transport start; (2) the onset threshold was 20% of
+the file's peak, which fires well into soft attacks (the tenor patch
+crossed 20% ~300 ms after the attack began) - the threshold is now a
+fixed ~-40 dBFS with a 50 ms scan skip (the WinMM stream-open click
+region) and a persistence rule (50 ms window, 60% above) so a click is
+never counted as signal, with the old 20%-of-peak single crossing kept
+as a fallback; (3) the recording's pre-roll is now TRIMMED at clip load
+(clip.onsetMs, new field) instead of being left in with a compensating
+offset - the clip's offsetMs points straight at the first note, the
+pre-roll and the stream-open click are gone, and the clip no longer
+needs negative offsets. Verified against the actual Kala no 19 bake
+files (envelope analysis) before the code change.
+
+Second alignment round, same day, after Nimus's re-bake test (the
+exported baked track was ~19 s short and the clip played ahead). Two
+more fixes: (1) the clip PCM cache is now RATE-AWARE (Track::
+m_clipPcmRate) - live playback builds it at the device rate (44.1 kHz
+on the UR22) and the export at the composition rate (48 kHz); before,
+the export reused the 44.1 kHz cache through the 48 kHz mix, so the
+clip played 8.8% fast and ran out ~18 s early. Verified against the
+actual files: the export's final note (197-199 s) matched the
+recording's real tail (214-217 s) through the 1.0884 mapping. (2) Onset
+detection now runs on a short-block RMS envelope with a threshold
+derived from the quiet head's noise floor - the fixed -40 dBFS +
+persistence detector fired 344 ms late on the sax's soft first note
+(the attack spends its first hundreds of ms below -40 dBFS) and shifted
+the whole piece early; the RMS detector lands within ~10 ms of the true
+attack (179.6 ms vs 186 ms measured on the real bake). Re-bake needed
+once for the clip made under the old detector.
+
+Bug fixed same day before the hardware test: first run hit
+"RtApi::getDeviceInfo: deviceId argument not found" - the dialog passed a
+device list INDEX from one RtAudio instance into a second instance's
+getDeviceInfo. RtAudio WASAPI assigns arbitrary per-instance IDs and can
+transiently drop devices whose probe fails (probeDevices wipes the whole
+list on its exit error path), so indices are not stable across instances.
+Devices are now selected by NAME (stable) and resolved on the instance
+that opens the stream, with one retry on a fresh instance and one retry
+in listInputDevices for the probe wipe.
+
+Second failure same day: the bake-time probe still wiped - "no audio input
+devices found" even though Audacity records the UR22 fine (Nimus verified).
+RtAudio's WASAPI probeDevices clears its whole device list when a device
+fails to probe, and on this machine that happens persistently at bake time
+(the engine's own instance survives because it probed once at startup and
+caches forever). RtAudio was dropped for capture; AudioCapture now uses
+**WinMM waveIn** directly - the same driver stack as the MIDI path, the
+same enumeration Audacity's MME mode uses, waveInGetNumDevs cannot wipe.
+Trade: 16-bit PCM WAVs instead of 32-bit float (fine for a mix element).
+WinMM state lives behind an impl pointer (moc'd header stays Windows-free);
+3 x 16 KB buffers, callback pushes s16 pairs to a queue drained by the
+writer thread into dr_wav; rate ladder composition rate -> 48k -> 44.1k,
+2ch -> 1ch (mono upmixed).
+
+Freeze (same day, Nimus's request after the bake+export hardware test
+passed): a track with a clip no longer sends MIDI during playback - the
+clip replaces it, freeing the module for the NEXT track's bake (overdub
+stacking, so the mono module becomes polyphonic across baked tracks).
+bakeMidiEvents skips frozen tracks (no notes, no reset rows, no overlap
+warnings); the bake pass exempts its target track via forceMidiTrack
+(playFromTracks third param, threaded from ScoreCanvasWindow::startPlayback),
+otherwise re-baking would record silence. BakeDialog shows the selected
+track's clip state and has a "Clear clip" button to return a track to
+live MIDI.
+
+Freeze override (2026-08-23, Nimus's request after the hybrid-piece
+test): a baked track has a small checkable button in its mixer column
+("Bake" = play the recording, "VL" = play the VL70-m live again) so the
+user can A/B the module against the bake without clearing the clip.
+TrackClip.liveMidi is saved in the project JSON (default false = frozen,
+unchanged behaviour). When live, the clip is not mixed, it does not
+extend the track's rendered end, and bakeMidiEvents bakes the track's
+MIDI again (the mono-module overlap warning applies if other live MIDI
+plays at the same time). Track::setClipLiveMidi emits clipChanged so the
+mixer rebuilds; re-baking, clearing or toggling all refresh the button.
+
+Mixer polish (same day): baked tracks also get a nudge control under the
+toggle (TrackClip.manualNudgeMs, 10 ms steps, positive = later, saved in
+the project - the fine trim for taste; the field existed since Phase 9
+but had no UI). First attempt was a spinbox, replaced with two explicit
+auto-repeat buttons (earlier/later) around a value label - the spinbox's
+arrow subcontrols were too small to click in the narrow column and the
+up-arrow's hit area didn't line up with the drawn arrow. And the bake
+result message now reports the recording's peak in dBFS with a hint
+below -20 dB / above -1 dB, so the interface input gain can be dialed in
+without round-tripping through Audacity (Nimus's gain trial-and-error).
+
+Bake filenames (same day, Nimus's request): the default is now
+"<project>-bake-<N>.wav" with the next free number in the Music folder,
+so each bake keeps its own file and save/reload finds every clip; a
+re-bake never overwrites an earlier take. Illegal filename characters in
+the project name are replaced with '-'.
+
+Bake target default (2026-08-24, tested same day): the dialog's "Attach
+to track" combo now defaults to the score's ACTIVE track when that track
+is a VL70-m track, falling back to the first VL70-m track as before.
+Nimus hit the trap with two VL70-m tracks: the combo still pointed at
+track 1 (already baked, frozen, showing "Bake" in its mixer column), so
+the bake exempted IT via forceMidiTrack while track 2 - unbaked, so not
+frozen - also played live. Both parts sounded at once and the recording
+would have replaced track 1's clip. Nothing was broken in the freeze
+logic; the target simply wasn't the selected track. Two guards:
+the active-track default (scorecanvaswindow.cpp onBakeClicked) and an
+amber bold clip-status line in BakeDialog when the target already has a
+take ("this pass REPLACES that recording") instead of the old grey note.
+Also made tracksList index-aligned with trackManager (it skipped nulls
+while firstMidiTrack used the manager's index, and the combo index feeds
+straight back into trackManager->getTrack() as the capture target).
+
+Phase 9 (bake to audio) — DONE, hardware-tested 2026-08-21. Nimus:
+"Tears of joy! I now have as many vl70m as I want!!!!!"
+
+The whole arc, as one story. The very first settled decision in this
+brief said it: level-2 playback — record the module while the transport
+plays, then add the recording "to the rest of the pre-rendered audio for
+playback/save/load". That is exactly what happened, in four moves:
+
+1. **Bake** — the pass records the interface input carrying the module
+   into a WAV (WinMM waveIn; the two RtAudio failures above are why) and
+   attaches it to the track as a clip, auto-aligned to the first VL70-m
+   note-on of the span. The clip mixes through Track::getMixedBuffer —
+   the one mix point — so live playback and offline export both include
+   it with no special cases.
+2. **Freeze** — a baked track stops sending MIDI; its clip replaces it.
+   The module is now free.
+3. **Overdub stacking** — bake the next VL70-m track while the frozen
+   ones play from their clips; the bake pass exempts its own target
+   (forceMidiTrack) so the module still sounds for the take. Repeat.
+4. **The mono module, polyphonic** — play the stacked clips together:
+   as many VL70-m parts as there are tracks, in sync, self-contained.
+
+Test results (Nimus, same day): bake + export verified first, then the
+overdub test — multiple baked VL70-m tracks stacked and played together —
+passed on all counts: sync held across takes (per-take onset alignment +
+numbered files), the export contains the full stack. Celebrate: the
+composition is now self-contained — it plays anywhere, hardware or no
+hardware — and the instrument Kala was built around has become an
+ensemble.
+
+Known behaviors: baked audio is a snapshot (re-bake after edits); each
+take keeps its own "<project>-bake-<N>.wav" (nothing is overwritten);
+the project stores absolute WAV paths (moving the files breaks the
+clips); "Clear clip" in the Bake dialog returns a track to live MIDI.
+The 16-bit capture is the one compromise of the waveIn backend.
+
+TODO (not yet scheduled): the help documentation still predates all of
+Phase 9 — bake, freeze, stacking and the clip concept belong in it
+(Nimus: "one of these days we will also have to document all that in
+the help").

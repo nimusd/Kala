@@ -42,7 +42,23 @@
       "Bash(sed -i 's/#include <QFrame>/#include <QFrame>\\\\n#include <QLayout>/' probe2.cpp)",
       "Bash(/c/Qt/Tools/mingw1310_64/bin/c++.exe -g -std=c++17 -fPIC -I/c/c++code/Kala -I/c/Qt/6.10.1/mingw_64/include -I/c/Qt/6.10.1/mingw_64/include/QtCore -I/c/Qt/6.10.1/mingw_64/include/QtGui -I/c/Qt/6.10.1/mingw_64/include/QtWidgets -c probe2.cpp -o probe2.obj)",
       "Bash(/c/Qt/Tools/mingw1310_64/bin/c++.exe -g probe2.obj -Wl,--whole-archive minimal_objects_fixed.a -Wl,--no-whole-archive -o probe2.exe -L/c/Qt/6.10.1/mingw_64/lib -lQt6Widgets -lQt6Gui -lQt6Core)",
-      "Bash(PATH=/c/Qt/6.10.1/mingw_64/bin:__TRACKED_VAR__ QT_PLUGIN_PATH=/c/Qt/6.10.1/mingw_64/plugins QT_FORCE_STDERR_LOGGING=1 ./probe2.exe)"
+      "Bash(PATH=/c/Qt/6.10.1/mingw_64/bin:__TRACKED_VAR__ QT_PLUGIN_PATH=/c/Qt/6.10.1/mingw_64/plugins QT_FORCE_STDERR_LOGGING=1 ./probe2.exe)",
+      "Bash(ctest -N)",
+      "Bash(node scripts/validate_palette.js \"#2a78d6,#eb6834,#1baf7a\" --mode light --surface \"#ffffff\" --pairs all)",
+      "Bash(node scripts/validate_palette.js \"#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4,#008300,#4a3aa7,#e34948\" --mode light --surface \"#ffffff\")",
+      "Bash(grep -E \"error|warning: unused|Error|Building CXX object CMakeFiles/Kala|Linking|Built target Kala$\")",
+      "Bash(grep -E \"error|Error|Linking|Built target Kala$\")",
+      "Read(//c/Qt//**)",
+      "Read(//c/Qt/**)",
+      "Bash(grep -v \"^.*//\")",
+      "Bash(sed -n '/void ExpressiveCurveApplyDialog::setInitialCurve/,/^}/p' expressivecurveapplydialog.cpp)",
+      "Bash(sed -n '/void ExpressiveCurveApplyDialog::loadPreset/,/^}/p' expressivecurveapplydialog.cpp)",
+      "Bash(sed -n '/void ExpressiveCurveApplyDialog::setSelectedCurveName/,/^}/p' expressivecurveapplydialog.cpp)",
+      "Bash(sed -n '/EnvelopeCurveCanvas::EnvelopeCurveCanvas/,/^}/p' envelopecurvecanvas.cpp)",
+      "Bash(sed -n '/void ScoreCanvas::editLaneCurveDialog/,/^}/p' scorecanvas.cpp)",
+      "Bash(sed -n '/void EnvelopeCurveCanvas::setPoints/,/^}/p' envelopecurvecanvas.cpp)",
+      "Bash(sed -n '/QPointF EnvelopeCurveCanvas::curveToScreen/,/^}/p' envelopecurvecanvas.cpp)",
+      "Bash(sed -n '/void EnvelopeCurveCanvas::drawCurve/,/^}/p' envelopecurvecanvas.cpp)"
     ]
   }
 }

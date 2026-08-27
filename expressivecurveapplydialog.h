@@ -5,12 +5,12 @@
 #include <QVector>
 #include <QStringList>
 #include "envelopelibraryDialog.h"
+#include "envelopecurvecanvas.h"
 
 class QComboBox;
 class QLabel;
 class QPushButton;
 class QSlider;
-class EnvelopeCurveCanvas;
 
 /**
  * ExpressiveCurveApplyDialog - Choose an expressive curve name from the sounit
@@ -44,6 +44,12 @@ public:
     // Pre-select a curve name in the target dropdown
     void setSelectedCurveName(const QString &name);
 
+    // Draw the note's other curves dimmed behind the editable one. Pass ALL
+    // of the note's curves including the target: the dialog filters out
+    // whichever one the dropdown currently points at, so switching target
+    // re-filters instead of leaving a curve ghosting itself.
+    void setGhostCurves(const QVector<EnvelopeCurveCanvas::Ghost> &ghosts);
+
 private slots:
     void onPresetChanged(int index);
     void onSaveClicked();
@@ -51,6 +57,9 @@ private slots:
     void onWeightChanged(int value);
 
 private:
+    void applyGhostFilter();
+    QVector<EnvelopeCurveCanvas::Ghost> m_allGhosts;
+
     void setupUi(const QStringList &curveNames);
     void setupPresets();
     void loadPreset(int index);

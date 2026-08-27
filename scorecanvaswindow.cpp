@@ -23,9 +23,15 @@
 #include <QElapsedTimer>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <cmath>
 #include <QCoreApplication>
+#include <QStandardPaths>
+#include <QDir>
 #include "midioutput.h"
+#include "audiocapture.h"
+#include "bakedialog.h"
+#include "laneslegend.h"
 
 ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *parent)
     : QMainWindow{parent}
@@ -162,6 +168,7 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
     setupTrackSelector();
     setupScoreCanvas();
     setupZoom();
+    setupLanesControls();
 
     // Initialize composition settings with defaults and apply them
     compositionSettings = CompositionSettings::defaults();
@@ -184,7 +191,7 @@ ScoreCanvasWindow::ScoreCanvasWindow(AudioEngine *sharedAudioEngine, QWidget *pa
             this, &ScoreCanvasWindow::scheduleBackgroundRender);
 
     // Connect transport controls
-    connect(ui->actionPlay, &QAction::triggered, this, &ScoreCanvasWindow::startPlayback);
+    connect(ui->actionPlay, &QAction::triggered, this, [this]() { startPlayback(); });
     connect(ui->actionstop, &QAction::triggered, this, [this]() { stopPlayback(); });
 
     // Connect track selection to trigger pre-rendering
@@ -414,6 +421,26 @@ void ScoreCanvasWindow::setupCompositionSettings()
     ui->toolBar->addWidget(midiTestBtn);
     connect(midiTestBtn, &QPushButton::clicked, this, &ScoreCanvasWindow::onMidiTestClicked);
 
+    // Bake button — records the VL70-m's audio input during playback and
+    // attaches the recording to a track as a clip (Phase 9).
+    QPushButton *bakeBtn = new QPushButton("Bake", this);
+    bakeBtn->setMinimumWidth(70);
+    bakeBtn->setFocusPolicy(Qt::NoFocus);
+    bakeBtn->setToolTip("Record the VL70-m's audio while the composition plays, then attach it to a track");
+    bakeBtn->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #FFB74D;"  // Amber
+        "    padding: 5px 10px;"
+        "    border: 1px solid #FF9800;"
+        "    border-radius: 3px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #FFCC80;"
+        "}"
+    );
+    ui->toolBar->addWidget(bakeBtn);
+    connect(bakeBtn, &QPushButton::clicked, this, &ScoreCanvasWindow::onBakeClicked);
+
     ui->toolBar->addSeparator();
 
     // Spacer to push time signature UI to the right
@@ -542,6 +569,174 @@ void ScoreCanvasWindow::setupCurveSelector()
             this, &ScoreCanvasWindow::onCurveSelectorChanged);
 }
 
+void ScoreCanvasWindow::setupLanesControls()
+{
+    // Curve lanes Phase F: toolbar tier control, split-point spin + Auto,
+    // dim-others, legend panel, and the real Ctrl+L shortcut. The density
+    // tier itself is NEVER persisted (Nimus 2026-08-26: "Non save") - it
+    // resets to Off each session. Split, dim-others and legend visibility
+    // are restored below and saved in closeEvent.
+
+    // Ctrl+L cycles Off -> Overlay -> Lanes. Application-wide so it works
+    // while any toolbar combo holds focus; the canvas keyPressEvent no
+    // longer handles it. Hidden action - the tier combo is the display.
+    tierCycleAction = new QAction(this);
+    tierCycleAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    tierCycleAction->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(tierCycleAction);
+    connect(tierCycleAction, &QAction::triggered, this, &ScoreCanvasWindow::onCycleTier);
+
+    // Density tier combo. Qt::NoFocus deliberately: the two StrongFocus
+    // combos can swallow Ctrl+L, and this one must never.
+    tierCombo = new QComboBox(this);
+    tierCombo->addItem(QStringLiteral("Off"), int(ScoreCanvas::DensityTier::Off));
+    tierCombo->addItem(QStringLiteral("Overlay"), int(ScoreCanvas::DensityTier::Overlay));
+    tierCombo->addItem(QStringLiteral("Lanes"), int(ScoreCanvas::DensityTier::Lanes));
+    tierCombo->setFocusPolicy(Qt::NoFocus);
+    tierCombo->setToolTip("Curve lanes density tier (Ctrl+L cycles)");
+    ui->toolBar->addWidget(tierCombo);
+    connect(tierCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int index) {
+                if (!scoreCanvas || index < 0) return;
+                scoreCanvas->setDensityTier(static_cast<ScoreCanvas::DensityTier>(index));
+            });
+    connect(scoreCanvas, &ScoreCanvas::densityTierChanged, this,
+            &ScoreCanvasWindow::refreshTierWidget);
+
+    // Split point (D1): how many lanes sit above the hull. Auto = balanced.
+    // The Ctrl+Shift+Up/Down keyboard nudge (canvas) also drives this via
+    // lanesAboveChanged - first-class control, not a convenience.
+    ui->toolBar->addWidget(new QLabel(" Above: ", this));
+    lanesAboveSpin = new QSpinBox(this);
+    lanesAboveSpin->setRange(0, 22);  // max VL70-m rows (curvelanes.h)
+    lanesAboveSpin->setMaximumWidth(60);
+    lanesAboveSpin->setFocusPolicy(Qt::NoFocus);
+    lanesAboveSpin->setToolTip("Lanes above the note hull (Ctrl+Shift+Up/Down nudges this)");
+    ui->toolBar->addWidget(lanesAboveSpin);
+    lanesAboveAutoCheck = new QCheckBox("Auto", this);
+    lanesAboveAutoCheck->setFocusPolicy(Qt::NoFocus);
+    lanesAboveAutoCheck->setToolTip("Auto: balanced split (Ctrl+Shift+Home restores this)");
+    ui->toolBar->addWidget(lanesAboveAutoCheck);
+    connect(lanesAboveSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [this](int value) {
+                if (scoreCanvas) scoreCanvas->setLanesAbove(value);
+            });
+    connect(lanesAboveAutoCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked && scoreCanvas) scoreCanvas->setLanesAbove(-1);
+    });
+    connect(scoreCanvas, &ScoreCanvas::lanesAboveChanged, this,
+            &ScoreCanvasWindow::refreshLanesAboveControls);
+
+    // Dim-others (D9): every note except the single selected one drops to
+    // low alpha. Orthogonal to the density tier.
+    dimOthersBtn = new QPushButton("Dim others", this);
+    dimOthersBtn->setCheckable(true);
+    dimOthersBtn->setMinimumWidth(70);
+    dimOthersBtn->setFocusPolicy(Qt::NoFocus);
+    dimOthersBtn->setToolTip("Dim every note except the single selected one");
+    dimOthersBtn->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #B0BEC5;"
+        "    padding: 5px 10px;"
+        "    border: 1px solid #78909C;"
+        "    border-radius: 3px;"
+        "}"
+        "QPushButton:checked {"
+        "    background-color: #66BB6A;"
+        "}"
+    );
+    ui->toolBar->addWidget(dimOthersBtn);
+    connect(dimOthersBtn, &QPushButton::toggled, this, [this](bool checked) {
+        if (scoreCanvas) scoreCanvas->setDimOthers(checked);
+    });
+
+    // Legend panel (D6): the selected note's lane set, in order, with family
+    // swatches. Toggled here - ScoreCanvasWindow has no View menu of its own.
+    legendBtn = new QPushButton("Legend", this);
+    legendBtn->setCheckable(true);
+    legendBtn->setMinimumWidth(60);
+    legendBtn->setFocusPolicy(Qt::NoFocus);
+    legendBtn->setToolTip("Show the selected note's curve-lane legend");
+    ui->toolBar->addWidget(legendBtn);
+    lanesLegend = new LanesLegend(this);
+    lanesLegend->setScoreCanvas(scoreCanvas);
+    connect(legendBtn, &QPushButton::toggled, this, [this](bool checked) {
+        if (lanesLegend) lanesLegend->setVisible(checked);
+    });
+    connect(lanesLegend, &LanesLegend::visibilityChanged, this, [this](bool visible) {
+        if (legendBtn) legendBtn->setChecked(visible);
+    });
+
+    // Restore persisted view settings. The tier stays Off - never saved.
+    {
+        QSettings settings;
+        scoreCanvas->setLanesAbove(settings.value("scoreCanvas/lanesAbove", -1).toInt());
+        scoreCanvas->setDimOthers(settings.value("scoreCanvas/dimOthers", false).toBool());
+        dimOthersBtn->setChecked(scoreCanvas->getDimOthers());
+        refreshTierWidget();
+        refreshLanesAboveControls();
+        lanesLegend->setVisible(settings.value("scoreCanvas/legendVisible", false).toBool());
+    }
+
+    // Legend content follows selection, curve applications and undo. Note
+    // selection also refreshes the Auto spin's displayed split.
+    connect(scoreCanvas, &ScoreCanvas::noteSelectionChanged, this, [this]() {
+        if (lanesLegend) lanesLegend->refresh();
+        refreshLanesAboveControls();
+    });
+    connect(scoreCanvas, &ScoreCanvas::expressiveCurveApplied, this, [this](const QString &) {
+        if (lanesLegend) lanesLegend->refresh();
+    });
+}
+
+void ScoreCanvasWindow::onCycleTier()
+{
+    if (!scoreCanvas) return;
+    switch (scoreCanvas->getDensityTier()) {
+    case ScoreCanvas::DensityTier::Off:     scoreCanvas->setDensityTier(ScoreCanvas::DensityTier::Overlay); break;
+    case ScoreCanvas::DensityTier::Overlay: scoreCanvas->setDensityTier(ScoreCanvas::DensityTier::Lanes);   break;
+    case ScoreCanvas::DensityTier::Lanes:   scoreCanvas->setDensityTier(ScoreCanvas::DensityTier::Off);     break;
+    }
+}
+
+void ScoreCanvasWindow::refreshTierWidget()
+{
+    if (!tierCombo || !scoreCanvas) return;
+    {
+        QSignalBlocker blocker(tierCombo);
+        tierCombo->setCurrentIndex(static_cast<int>(scoreCanvas->getDensityTier()));
+    }
+    // The split control only means something in the Lanes tier. The spin's
+    // enabled state is tier AND auto - recompute both together so cycling the
+    // tier can't re-enable a spin that Auto mode disables.
+    refreshLanesAboveControls();
+}
+
+void ScoreCanvasWindow::refreshLanesAboveControls()
+{
+    if (!scoreCanvas || !lanesAboveSpin || !lanesAboveAutoCheck) return;
+    const bool tierLanes = scoreCanvas->getDensityTier() == ScoreCanvas::DensityTier::Lanes;
+    {
+        QSignalBlocker spinBlock(lanesAboveSpin);
+        QSignalBlocker checkBlock(lanesAboveAutoCheck);
+        if (scoreCanvas->getLanesAbove() < 0) {
+            lanesAboveAutoCheck->setChecked(true);
+            lanesAboveAutoCheck->setEnabled(tierLanes);
+            lanesAboveSpin->setEnabled(false);  // auto owns the split
+            // Show the effective balanced split for the selected note -
+            // real information, not a fake value.
+            const QVector<int> &sel = scoreCanvas->getSelectedNoteIndices();
+            const int noteIndex = sel.isEmpty() ? -1 : sel.first();
+            lanesAboveSpin->setValue(scoreCanvas->lanesAboveForNote(noteIndex));
+        } else {
+            lanesAboveAutoCheck->setChecked(false);
+            lanesAboveAutoCheck->setEnabled(tierLanes);
+            lanesAboveSpin->setEnabled(tierLanes);
+            lanesAboveSpin->setValue(scoreCanvas->getLanesAbove());
+        }
+    }
+}
+
 void ScoreCanvasWindow::refreshCurveSelector()
 {
     if (!curveSelectorCombo) return;
@@ -617,21 +812,30 @@ void ScoreCanvasWindow::bindCurveNamesFromTrack(Track *track)
     m_curveNamesTrack = track;
     if (m_curveNamesTrack) {
         Track *track = m_curveNamesTrack;
+        // A live-name change (VL70-m row toggled, name edited) reflows the
+        // ribbon and the legend: repaint the canvas so lane states update and
+        // refresh the legend so its rows follow.
+        auto onNamesChanged = [this]() {
+            refreshCurveSelector();
+            if (scoreCanvas) scoreCanvas->update();
+            if (lanesLegend) lanesLegend->refresh();
+            refreshLanesAboveControls();
+        };
         // Base canvas still emits when user edits names in the Envelope inspector
         if (Canvas *base = track->getCanvas()) {
             m_curveNamesConnections.append(
                 connect(base, &Canvas::expressiveCurveNamesChanged,
-                        this, &ScoreCanvasWindow::refreshCurveSelector));
+                        onNamesChanged));
         }
         // Variation canvases emit when VL70-m rows toggle (Phase 6), so the
         // union refreshes live. ("Variations are immutable" no longer holds
         // for the curve-name list.) Hook existing variations now and each
         // new one as it is created.
-        auto connectVariation = [this, track](int index) {
-            if (Canvas *varCanvas = track->getCanvasForVariation(index)) {
+        auto connectVariation = [this, onNamesChanged](int index) {
+            if (Canvas *varCanvas = m_curveNamesTrack->getCanvasForVariation(index)) {
                 m_curveNamesConnections.append(
                     connect(varCanvas, &Canvas::expressiveCurveNamesChanged,
-                            this, &ScoreCanvasWindow::refreshCurveSelector));
+                            onNamesChanged));
             }
         };
         for (int i = 1; i <= track->getVariationCount(); ++i)
@@ -895,19 +1099,21 @@ void ScoreCanvasWindow::setupScoreCanvas()
     // Keep toolbar spinboxes and status labels in sync when tempo/time sig changes externally
     connect(scoreCanvas, &ScoreCanvas::tempoSettingsChanged, this, &ScoreCanvasWindow::refreshToolbar);
 
-    // When a curve is applied via the right-click dialog, sync the toolbar "Show curve"
-    // dropdown so it reflects the newly applied curve, not whatever was last selected.
+    // When a curve is applied, the toolbar "Show curve" dropdown may need new
+    // ITEMS (a freshly applied name the union list didn't know yet) - but it
+    // never moves its selection. The combo is the manual picker for the note
+    // body's silhouette (D2); auto-switching it to "the last curve edited"
+    // both hijacks the dropdown and, through onCurveSelectorChanged, hijacks
+    // the note body too. Reverted 2026-08-26 per Nimus.
     connect(scoreCanvas, &ScoreCanvas::expressiveCurveApplied, this,
             [this](const QString &curveName) {
-        if (!curveSelectorCombo) return;
-        int idx = curveSelectorCombo->findData(curveName);
-        if (idx < 0) {
-            refreshCurveSelector();
-            idx = curveSelectorCombo->findData(curveName);
-        }
-        if (idx >= 0 && idx != curveSelectorCombo->currentIndex()) {
-            curveSelectorCombo->setCurrentIndex(idx);
-        }
+        if (!curveSelectorCombo || curveName.isEmpty()) return;
+        if (curveSelectorCombo->findData(curveName) < 0)
+            refreshCurveSelector();   // adds missing names, preserves the selection by name
+        // Applying a curve can change lane states and the lane set - keep
+        // the legend and the Auto split readout true.
+        if (lanesLegend) lanesLegend->refresh();
+        refreshLanesAboveControls();
     });
 
     // Connect track selector to score canvas for active track changes
@@ -942,6 +1148,10 @@ void ScoreCanvasWindow::setupScoreCanvas()
     // Only when auto-render is enabled; in manual mode, rendering happens on play
     connect(scoreCanvas->getUndoStack(), &QUndoStack::indexChanged, this, [this](int) {
         if (m_autoRender && m_renderDebounceTimer) m_renderDebounceTimer->start();
+        // A lane edit undone/redone changes lane states - keep the legend and
+        // the Auto split readout true.
+        if (lanesLegend) lanesLegend->refresh();
+        refreshLanesAboveControls();
     });
 }
 
@@ -1633,7 +1843,7 @@ bool ScoreCanvasWindow::eventFilter(QObject *obj, QEvent *event)
     return QMainWindow::eventFilter(obj, event);
 }
 
-void ScoreCanvasWindow::startPlayback()
+void ScoreCanvasWindow::startPlayback(Track *forceMidiTrack)
 {
     if (!audioEngine) return;
 
@@ -1718,6 +1928,10 @@ void ScoreCanvasWindow::startPlayback()
             // Sync notes to track (thread-safe to prevent race with audio callback)
             track->syncNotes(trackNotes);
 
+            // Load any baked clip PCM on the UI thread before playback -
+            // the audio callback must never touch the disk (Phase 9).
+            track->prepareClipForPlayback();
+
             // Debug output for synced notes
             for (const Note &note : trackNotes) {
                 qDebug() << "ScoreCanvas: Synced note" << note.getId()
@@ -1755,7 +1969,7 @@ void ScoreCanvasWindow::startPlayback()
             qDebug() << "ScoreCanvas: Starting playback with" << tracksToPlay.size() << "track(s)";
 
             // Use track-based playback
-            audioEngine->playFromTracks(tracksToPlay, playbackStartPosition);
+            audioEngine->playFromTracks(tracksToPlay, playbackStartPosition, forceMidiTrack);
             useTrackPlayback = true;
         } else {
             qWarning() << "ScoreCanvas: No tracks to play (all muted or empty)";
@@ -1856,6 +2070,12 @@ void ScoreCanvasWindow::stopPlayback(bool stopAudioEngine)
         playbackTimer->stop();
     }
 
+    // A bake pass ends with the playback - finalize the recording and
+    // attach it to the target track (Phase 9).
+    if (m_capture) {
+        finishBakeCapture();
+    }
+
     // Reset playback state BEFORE stopping note (prevents race condition)
     isPlaying = false;
     currentNoteIndex = 0;
@@ -1899,6 +2119,218 @@ void ScoreCanvasWindow::onMidiTestClicked()
     const QString error = MidiOutput::sendTestNote();
     if (!error.isEmpty())
         QMessageBox::warning(this, "MIDI test", error);
+}
+
+void ScoreCanvasWindow::onBakeClicked()
+{
+    // Phase 9: record the VL70-m's audio input while the composition plays,
+    // then attach the recording to a track as a clip.
+    if (m_capture) {
+        QMessageBox::information(this, "Bake", "A bake is already in progress.");
+        return;
+    }
+    if (isPlaying) {
+        stopPlayback(true);
+    }
+
+    // A track is a VL70-m track when its base graph or any variation graph
+    // carries a MIDI-out container.
+    auto hasMidiGraph = [](Track *t) {
+        if (!t) return false;
+        if (t->getGraph() && t->getGraph()->hasMidiOut()) return true;
+        for (int v = 1; v <= t->getVariationCount(); ++v) {
+            SounitGraph *g = t->getGraphForVariation(v);
+            if (g && g->hasMidiOut()) return true;
+        }
+        return false;
+    };
+
+    // The combo index becomes m_captureTrackIndex, which indexes trackManager
+    // again (and picks forceMidiTrack) - so the list must stay index-aligned
+    // with trackManager, nulls included.
+    QList<Track *> tracksList;
+    int firstMidiTrack = -1;
+    for (int i = 0; i < trackManager->getTrackCount(); ++i) {
+        Track *t = trackManager->getTrack(i);
+        tracksList << t;
+        if (firstMidiTrack < 0 && hasMidiGraph(t)) firstMidiTrack = i;
+    }
+    if (tracksList.isEmpty()) {
+        QMessageBox::warning(this, "Bake", "No tracks to bake into.");
+        return;
+    }
+
+    // Target track default: the score's active track when it is a VL70-m
+    // track — what the user has selected is what they mean to bake. Picking
+    // the wrong target is expensive and quiet: the target is exempt from the
+    // freeze (forceMidiTrack), so an already-baked track would play its MIDI
+    // live alongside the intended one and then have its clip overwritten.
+    // Falls back to the first VL70-m track.
+    const int activeTrack = scoreCanvas ? scoreCanvas->getActiveTrack() : -1;
+    int defaultTrack = 0;
+    if (activeTrack >= 0 && activeTrack < tracksList.size()
+        && hasMidiGraph(tracksList[activeTrack])) {
+        defaultTrack = activeTrack;
+    } else if (firstMidiTrack >= 0) {
+        defaultTrack = firstMidiTrack;
+    }
+
+    const QList<AudioCapture::CaptureDevice> devices = AudioCapture::listInputDevices();
+    if (devices.isEmpty()) {
+        QMessageBox::warning(this, "Bake",
+                             "No audio input devices found.\n"
+                             "Check that the interface is connected and an input is enabled.");
+        return;
+    }
+
+    // Default WAV name: "<project>-bake-<N>.wav" with the next free number,
+    // so successive bakes never overwrite each other - every clip keeps its
+    // own file and a re-bake leaves the earlier take intact (Phase 9).
+    QString projectName = compositionName.trimmed();
+    if (projectName.isEmpty()) projectName = "Kala";
+    QString safeName = projectName;
+    for (QChar &c : safeName) {
+        if (QString("\\/:*?\"<>|").contains(c)) c = QLatin1Char('-');
+    }
+    const QString musicDir = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+    const QString bakeBase = safeName + "-bake-";
+    int nextNum = 1;
+    const QStringList existing = QDir(musicDir).entryList({bakeBase + "*.wav"}, QDir::Files);
+    for (const QString &entry : existing) {
+        const QString middle = entry.mid(bakeBase.size(), entry.size() - bakeBase.size() - 4);
+        bool ok = false;
+        const int n = middle.toInt(&ok);
+        if (ok && n >= nextNum) nextNum = n + 1;
+    }
+    QString defaultPath = musicDir + "/" + bakeBase + QString::number(nextNum) + ".wav";
+    BakeDialog dialog(tracksList, defaultTrack, devices, defaultPath, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    m_capture = new AudioCapture(this);
+    QString error;
+    if (!m_capture->beginCapture(dialog.filePath(), dialog.selectedDeviceName(),
+                                 audioEngine->getSampleRate(), dialog.channelMode(), error)) {
+        QMessageBox::warning(this, "Bake", "Could not start recording: " + error);
+        delete m_capture;
+        m_capture = nullptr;
+        return;
+    }
+
+    m_captureTrackIndex = dialog.selectedTrack();
+    m_capturePath = dialog.filePath();
+
+    // Transport starts at playbackStartPosition (the play anchor); startPlayback
+    // leaves the member as-is, so finishBakeCapture can read it for alignment.
+    // The target track's MIDI must play even though it has a clip - the
+    // module needs to sound to be re-recorded (other baked tracks stay frozen).
+    startPlayback(trackManager->getTrack(m_captureTrackIndex));
+}
+
+void ScoreCanvasWindow::finishBakeCapture()
+{
+    if (!m_capture) return;
+
+    AudioCapture *cap = m_capture;
+    m_capture = nullptr;
+    const QString path = m_capturePath;
+    const int trackIdx = m_captureTrackIndex;
+    const double transportStart = playbackStartPosition;
+    m_capturePath.clear();
+    m_captureTrackIndex = -1;
+
+    QString error;
+    const unsigned long long frames = cap->endCapture(error);
+    const unsigned int captureRate = cap->getSampleRate();
+    cap->deleteLater();
+
+    Track *target = trackManager ? trackManager->getTrack(trackIdx) : nullptr;
+    if (!target) {
+        QMessageBox::warning(this, "Bake", "The target track no longer exists.");
+        return;
+    }
+    if (frames == 0) {
+        QMessageBox::warning(this, "Bake",
+                             "No audio was captured." + (error.isEmpty() ? QString() : " (" + error + ")"));
+        return;
+    }
+
+    // Onset analysis on the finished recording. The interface round-trip
+    // (MIDI out + module + audio in) and the capture pre-roll are absorbed
+    // here: the recording's first sound is aligned to the first VL70-m
+    // note-on of the baked span.
+    double onsetMs = 0.0, lastSignalMs = 0.0;
+    bool foundOnset = false;
+    float peakFs = 0.0f;
+    AudioCapture::analyzeClipBounds(path, onsetMs, lastSignalMs, foundOnset, peakFs);
+
+    // First VL70-m note-on of the span = the EARLIEST note at/after the
+    // transport start with a MIDI-out graph. Notes are stored in drawing
+    // order, not time order, so take the minimum rather than the first in
+    // the list.
+    double firstNoteMs = -1.0;
+    for (const Note &note : target->getNotes()) {
+        if (note.getStartTime() < transportStart) continue;
+        SounitGraph *g = target->getGraphForVariation(note.getVariationIndex());
+        if (!g || !g->hasMidiOut()) continue;
+        if (firstNoteMs < 0.0 || note.getStartTime() < firstNoteMs) {
+            firstNoteMs = note.getStartTime();
+        }
+    }
+
+    const double rate = captureRate > 0 ? static_cast<double>(captureRate)
+                                        : static_cast<double>(audioEngine->getSampleRate());
+    TrackClip clip;
+    clip.filePath = path;
+    clip.manualNudgeMs = 0.0;
+    clip.gain = 1.0f;
+    clip.enabled = true;
+    if (foundOnset && firstNoteMs >= 0.0) {
+        // The recording's pre-roll (and any stream-open click) is trimmed
+        // away at load time (clip.onsetMs), so the clip sits right at the
+        // first note. Keep 500 ms of pad for the module's reverb tail.
+        clip.onsetMs = onsetMs;
+        clip.offsetMs = firstNoteMs;
+        clip.durationMs = (lastSignalMs > onsetMs)
+                              ? (lastSignalMs - onsetMs) + 500.0
+                              : (static_cast<double>(frames) / rate) * 1000.0;
+    } else {
+        // No signal found (or no MIDI-out note): keep the whole recording
+        // at time 0, the pre-fix behaviour.
+        clip.onsetMs = 0.0;
+        clip.offsetMs = 0.0;
+        clip.durationMs = (static_cast<double>(frames) / rate) * 1000.0;
+    }
+    target->setClip(clip);
+    target->prepareClipForPlayback();
+
+    // Recording level feedback so the UR22 input gain can be dialed in
+    // without exporting to Audacity each time (Nimus's gain trial-and-error).
+    QString peakLine;
+    if (peakFs > 0.0f) {
+        const double peakDb = 20.0 * std::log10(peakFs);
+        peakLine = QString("\nRecording peak: %1 dBFS%2")
+                       .arg(peakDb, 0, 'f', 1)
+                       .arg(peakDb < -20.0 ? " - quiet, raise the input gain"
+                            : peakDb > -1.0 ? " - close to clipping, lower the input gain"
+                                            : QString());
+    }
+
+    QMessageBox::information(this, "Bake",
+        foundOnset && firstNoteMs >= 0.0
+            ? QString("Recording attached to track \"%1\".\n"
+                      "Onset detected at %2 ms; clip placed at the first VL70-m note (%3 ms).%4\n\n"
+                      "This track now plays its recording instead of MIDI - "
+                      "the module is free for the next track's bake.")
+                  .arg(target->getName())
+                  .arg(onsetMs, 0, 'f', 1)
+                  .arg(firstNoteMs, 0, 'f', 1)
+                  .arg(peakLine)
+            : QString("Recording attached to track \"%1\" without onset alignment "
+                      "(no signal found in the recording).%2\n\n"
+                      "This track now plays its recording instead of MIDI - "
+                      "the module is free for the next track's bake.")
+                  .arg(target->getName())
+                  .arg(peakLine));
 }
 
 void ScoreCanvasWindow::onTimeModeToggled()
@@ -2625,5 +3057,12 @@ void ScoreCanvasWindow::closeEvent(QCloseEvent *event)
 {
     QSettings settings;
     settings.setValue("windows/scoreCanvas/geometry", saveGeometry());
+    // Curve lanes view settings (Phase F). The density tier is deliberately
+    // NOT here - it resets to Off each session ("Non save", Nimus 2026-08-26).
+    if (scoreCanvas) {
+        settings.setValue("scoreCanvas/lanesAbove", scoreCanvas->getLanesAbove());
+        settings.setValue("scoreCanvas/dimOthers", scoreCanvas->getDimOthers());
+    }
+    settings.setValue("scoreCanvas/legendVisible", lanesLegend && lanesLegend->isVisible());
     QMainWindow::closeEvent(event);
 }
