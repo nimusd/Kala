@@ -1,6 +1,10 @@
 .claude/
 /build/
 build/
+.qtc_clangd/
+dist/
+debug/
+release/
 CLAUDE.md
 /docs/
 Claude-companion.md
