@@ -1936,10 +1936,12 @@ void ScoreCanvas::mouseMoveEvent(QMouseEvent *event)
         if (slideMode && currentDragMode == DraggingNote)
             delta.setY(0);
 
-        if (selectedNoteIndices.size() == 1) {
-            // Single selection - full editing capabilities
-            int selectedIndex = selectedNoteIndices.first();
-            if (selectedIndex >= notes.size()) return;
+        // A lane-curve drag targets the note whose hull is open, which may be
+        // one of several selected notes - never the selection's first.
+        const bool laneDrag = (currentDragMode == EditingLaneCurve);
+        if (selectedNoteIndices.size() == 1 || laneDrag) {
+            int selectedIndex = laneDrag ? m_editLaneNote : selectedNoteIndices.first();
+            if (selectedIndex < 0 || selectedIndex >= notes.size()) return;
 
             Note &note = notes[selectedIndex];
 
@@ -2416,9 +2418,11 @@ void ScoreCanvas::mouseReleaseEvent(QMouseEvent *event)
 
     // End drag/resize operation
     if (event->button() == Qt::LeftButton && currentDragMode != NoDrag) {
-        if (selectedNoteIndices.size() == 1) {
-            // Single selection - full editing capabilities
-            int selectedIndex = selectedNoteIndices.first();
+        // A lane-curve drag targets the note whose hull is open, which may be
+        // one of several selected notes - never the selection's first.
+        const bool laneDrag = (currentDragMode == EditingLaneCurve);
+        if (selectedNoteIndices.size() == 1 || laneDrag) {
+            int selectedIndex = laneDrag ? m_editLaneNote : selectedNoteIndices.first();
             if (selectedIndex >= 0 && selectedIndex < phrase.getNotes().size()) {
                 const Note &note = phrase.getNotes()[selectedIndex];
 
@@ -3284,9 +3288,14 @@ void ScoreCanvas::openLaneEditor(int noteIndex, int laneIndex)
     if (m_editLaneNote == noteIndex && m_editLaneIndex == laneIndex) return;
     m_editLaneNote = noteIndex;
     m_editLaneIndex = laneIndex;
-    // Selecting the note keeps it promoted to Lanes (D3) and gives the undo
-    // command the single-selection context it expects.
-    selectNote(noteIndex, false);
+    // Selecting the note keeps it promoted to Lanes (D3). A note that is
+    // already part of a selection keeps that selection intact - D3 promotes
+    // every selected note, and the lane drags target m_editLaneNote directly -
+    // so opening a hull on one of several selected notes must not collapse
+    // the selection (that collapse is also what stole the selection before
+    // the double-click dialog could apply to it).
+    if (!selectedNoteIndices.contains(noteIndex))
+        selectNote(noteIndex, false);
     update();
 }
 
@@ -3380,10 +3389,21 @@ void ScoreCanvas::editLaneCurveDialog(int noteIndex, int laneIndex)
     if (lane.state == CurveLanes::State::Empty)
         createCurveOnLane(noteIndex, laneIndex);
 
-    selectNote(noteIndex, false);   // dialog applies to the selection
+    // The dialog applies to the selection. Double-clicking a lane on an
+    // already-selected note keeps the whole selection so the curve lands on
+    // every selected note (same as the note-body double-click); only replace
+    // the selection when the clicked note is outside it.
+    if (!selectedNoteIndices.contains(noteIndex))
+        selectNote(noteIndex, false);
 
     const QStringList curveNames = selectionCommonExpressiveCurveNames();
-    if (curveNames.isEmpty()) return;
+    if (curveNames.isEmpty()) {
+        QMessageBox::information(this, "Apply Expressive Curve",
+            "No expressive curve is shared by every selected note's sounit.\n"
+            "Add curve names in the Envelope container inspector of each "
+            "variation (or narrow the selection).");
+        return;
+    }
 
     const Note &note = phrase.getNotes()[noteIndex];
     const double duration = note.getDuration();
@@ -3401,7 +3421,10 @@ void ScoreCanvas::editLaneCurveDialog(int noteIndex, int laneIndex)
         return pts;
     };
     const int ci = note.findExpressiveCurveIndexByName(lane.name);
-    if (ci >= 0) {
+    // Only preload when the combo actually landed on the lane's curve - a
+    // mixed-variation selection may not share the name, in which case the
+    // preloaded shape would not match the curve the dialog is editing.
+    if (ci >= 0 && dialog.getSelectedCurveName() == lane.name) {
         const Curve &existing = note.getExpressiveCurve(ci);
         const QVector<Curve::Point> &pts = existing.getPoints();
         // A flat curve is unshaped - either the auto-created neutral line (a
@@ -3426,12 +3449,21 @@ void ScoreCanvas::editLaneCurveDialog(int noteIndex, int laneIndex)
 
     if (dialog.exec() == QDialog::Accepted) {
         const QString targetName = dialog.getSelectedCurveName();
-        undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
-            &phrase, selectedNoteIndices, targetName, dialog.getCurve(),
-            dialog.getWeight(), dialog.getPerNoteMode(), this));
-        // No auto-activation of the note body - the "Show curve" combo is the
-        // only thing that changes which curve shapes the note.
-        emit expressiveCurveApplied(targetName);
+        if (dialog.isDeleteRequested()) {
+            // Delete the curve outright - no neutral, no default - from every
+            // selected note (undoable).
+            removeExpressiveCurveByName(targetName);
+            if (targetName == lane.name)
+                closeLaneEditor();   // the hull's curve is gone - no dots left
+            emit expressiveCurveApplied(targetName);
+        } else {
+            undoStack->push(new ApplyExpressiveCurveToSelectionCommand(
+                &phrase, selectedNoteIndices, targetName, dialog.getCurve(),
+                dialog.getWeight(), dialog.getPerNoteMode(), this));
+            // No auto-activation of the note body - the "Show curve" combo is the
+            // only thing that changes which curve shapes the note.
+            emit expressiveCurveApplied(targetName);
+        }
     }
 }
 
@@ -4451,10 +4483,12 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
             if (slideMode && currentDragMode == DraggingNote)
                 delta.setY(0);
 
-            if (selectedNoteIndices.size() == 1) {
-                // Single selection - full editing capabilities
-                int selectedIndex = selectedNoteIndices.first();
-                if (selectedIndex >= notes.size()) {
+            // A lane-curve drag targets the note whose hull is open, which may
+            // be one of several selected notes - never the selection's first.
+            const bool laneDrag = (currentDragMode == EditingLaneCurve);
+            if (selectedNoteIndices.size() == 1 || laneDrag) {
+                int selectedIndex = laneDrag ? m_editLaneNote : selectedNoteIndices.first();
+                if (selectedIndex < 0 || selectedIndex >= notes.size()) {
                     event->accept();
                     return;
                 }
@@ -4861,9 +4895,11 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
 
         // End drag/resize operation
         if (currentDragMode != NoDrag) {
-            if (selectedNoteIndices.size() == 1) {
-                // Single selection - full editing capabilities
-                int selectedIndex = selectedNoteIndices.first();
+            // A lane-curve drag targets the note whose hull is open, which may
+            // be one of several selected notes - never the selection's first.
+            const bool laneDrag = (currentDragMode == EditingLaneCurve);
+            if (selectedNoteIndices.size() == 1 || laneDrag) {
+                int selectedIndex = laneDrag ? m_editLaneNote : selectedNoteIndices.first();
                 if (selectedIndex >= 0 && selectedIndex < phrase.getNotes().size()) {
                     const Note &note = phrase.getNotes()[selectedIndex];
 
@@ -6139,6 +6175,17 @@ void ScoreCanvas::showExpressiveCurveApplyDialog()
 
     if (dialog.exec() == QDialog::Accepted) {
         QString targetName = dialog.getSelectedCurveName();
+
+        if (dialog.isDeleteRequested()) {
+            // Delete the curve outright - no neutral, no default - from every
+            // selected note (undoable).
+            removeExpressiveCurveByName(targetName);
+            emit expressiveCurveApplied(targetName);
+            qDebug() << "ScoreCanvas: Deleted expressive curve '" << targetName
+                     << "' from" << selectedNoteIndices.size() << "notes";
+            return;
+        }
+
         QVector<EnvelopePoint> curve = dialog.getCurve();
         double weight = dialog.getWeight();
         bool perNote = dialog.getPerNoteMode();
@@ -6357,6 +6404,17 @@ void ScoreCanvas::editNoteCurve(int noteIndex)
 
         if (dialog.exec() == QDialog::Accepted) {
             QString targetName = dialog.getSelectedCurveName();
+
+            if (dialog.isDeleteRequested()) {
+                // Delete the curve outright - no neutral, no default - from
+                // every selected note (undoable).
+                removeExpressiveCurveByName(targetName);
+                emit expressiveCurveApplied(targetName);
+                qDebug() << "ScoreCanvas: Deleted expressive curve '" << targetName
+                         << "' from" << selectedNoteIndices.size() << "notes (double-click)";
+                return;
+            }
+
             QVector<EnvelopePoint> curve = dialog.getCurve();
             double weight = dialog.getWeight();
             bool perNote = dialog.getPerNoteMode();

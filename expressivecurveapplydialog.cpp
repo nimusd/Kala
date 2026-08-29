@@ -21,6 +21,7 @@ ExpressiveCurveApplyDialog::ExpressiveCurveApplyDialog(int noteCount, double tim
     : QDialog(parent)
     , m_noteCount(noteCount)
     , m_timeSpanMs(timeSpanMs)
+    , m_deleteRequested(false)
 {
     setWindowTitle("Apply Expressive Curve");
     setMinimumSize(450, 420);
@@ -173,14 +174,36 @@ void ExpressiveCurveApplyDialog::setupUi(const QStringList &curveNames)
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     buttonLayout->addStretch();
 
+    // Delete removes the selected curve outright from the selection (no
+    // neutral, no default) - the caller pushes an undoable remove command
+    // instead of an apply.
+    deleteButton = new QPushButton("Delete Curve", this);
+    deleteButton->setToolTip(
+        "Remove the selected curve from every selected note entirely.\n"
+        "Notes without this curve are left untouched. Undoable.");
+    deleteButton->setStyleSheet(
+        "QPushButton {"
+        "  padding: 4px 12px;"
+        "  border: 1px solid #c0392b;"
+        "  border-radius: 4px;"
+        "  background-color: #e74c3c;"
+        "  color: white;"
+        "}"
+        "QPushButton:hover { background-color: #c0392b; }");
+
     cancelButton = new QPushButton("Cancel", this);
     applyButton  = new QPushButton("Apply", this);
     applyButton->setDefault(true);
 
+    buttonLayout->addWidget(deleteButton);
     buttonLayout->addWidget(cancelButton);
     buttonLayout->addWidget(applyButton);
     mainLayout->addLayout(buttonLayout);
 
+    connect(deleteButton, &QPushButton::clicked, this, [this]() {
+        m_deleteRequested = true;
+        accept();
+    });
     connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
     connect(applyButton,  &QPushButton::clicked, this, &QDialog::accept);
 }
@@ -282,6 +305,11 @@ void ExpressiveCurveApplyDialog::setSelectedCurveName(const QString &name)
     int idx = curveNameCombo->findText(name);
     if (idx >= 0)
         curveNameCombo->setCurrentIndex(idx);
+}
+
+bool ExpressiveCurveApplyDialog::isDeleteRequested() const
+{
+    return m_deleteRequested;
 }
 
 void ExpressiveCurveApplyDialog::onWeightChanged(int value)

@@ -35,6 +35,9 @@ public:
     // Per-note mode toggle state
     bool getPerNoteMode() const;
 
+    // True when the dialog closed via the Delete button (no apply was made)
+    bool isDeleteRequested() const;
+
     // Which named expressive curve to apply to
     QString getSelectedCurveName() const;
 
@@ -73,11 +76,13 @@ private:
     QPushButton *perNoteToggle;
     QPushButton *saveButton;
     QPushButton *loadButton;
+    QPushButton *deleteButton;
     QPushButton *applyButton;
     QPushButton *cancelButton;
 
     int m_noteCount;
     double m_timeSpanMs;
+    bool m_deleteRequested;
 
     struct Preset {
         QString name;

@@ -2348,10 +2348,13 @@ void RemoveNamedExpressiveCurveCommand::undo()
 {
     QVector<Note> &notes = m_phrase->getNotes();
     for (const SavedState &s : m_saved) {
-        if (s.noteIdx >= 0 && s.noteIdx < notes.size())
+        if (s.noteIdx >= 0 && s.noteIdx < notes.size()) {
             notes[s.noteIdx].addExpressiveCurve(m_curveName, s.curve);
+            notes[s.noteIdx].setRenderDirty(true);
+        }
     }
     m_canvas->update();
+    emit m_canvas->notesChanged();
     qDebug() << "Undo: Restored curve '" << m_curveName << "' to" << m_saved.size() << "notes";
 }
 
@@ -2364,11 +2367,13 @@ void RemoveNamedExpressiveCurveCommand::redo()
         for (int j = 1; j < note.getExpressiveCurveCount(); ++j) {
             if (note.getExpressiveCurveName(j) == m_curveName) {
                 note.removeExpressiveCurve(j);
+                note.setRenderDirty(true);
                 break;
             }
         }
     }
     m_canvas->update();
+    emit m_canvas->notesChanged();
     qDebug() << "Redo: Removed curve '" << m_curveName << "' from" << m_saved.size() << "notes";
 }
 
@@ -2614,7 +2619,23 @@ void ApplyExpressiveCurveToSelectionCommand::redo()
         if (idx < 0 || idx >= notes.size()) continue;
         Note &note = notes[idx];
 
-        if (ps.hadCurve) {
+        // A flat prior curve has no shape to preserve - treat it like "no
+        // curve" so it receives the selection slice instead of being scaled.
+        // Scaling a flat neutral multiplies it toward a constant: the
+        // auto-created neutral line of a freshly opened lane stays ~0 and the
+        // note reads as excluded from the selection's curve.
+        const QVector<Curve::Point> &pts = ps.oldCurve.getPoints();
+        bool flatPrior = true;
+        if (!pts.isEmpty()) {
+            double lo = pts[0].value, hi = pts[0].value;
+            for (const Curve::Point &pt : pts) {
+                lo = qMin(lo, pt.value);
+                hi = qMax(hi, pt.value);
+            }
+            flatPrior = (hi - lo < 1e-9);
+        }
+
+        if (ps.hadCurve && !flatPrior) {
             // Scale the pre-existing per-note shape by the envelope at the
             // note's centre in the selection — preserves internal shape.
             double noteCenter    = note.getStartTime() + note.getDuration() / 2.0;
@@ -2622,17 +2643,10 @@ void ApplyExpressiveCurveToSelectionCommand::redo()
             double curveValue    = evalEnvelope(normalizedPos);
             double scale         = 1.0 + m_weight * (curveValue - 1.0);
 
-            const QVector<Curve::Point> &pts = ps.oldCurve.getPoints();
             Curve newCurve;
-            if (pts.isEmpty()) {
-                double v = qBound(0.0, 0.7 * scale, 1.0);
-                newCurve.addPoint(0.0, v, 1.0);
-                newCurve.addPoint(1.0, v, 1.0);
-            } else {
-                for (const Curve::Point &pt : pts) {
-                    newCurve.addPoint(pt.time, qBound(0.0, pt.value * scale, 1.0),
-                                      pt.pressure);
-                }
+            for (const Curve::Point &pt : pts) {
+                newCurve.addPoint(pt.time, qBound(0.0, pt.value * scale, 1.0),
+                                  pt.pressure);
             }
             note.upsertExpressiveCurve(m_curveName, newCurve);
             // Preserve prior control points — the per-note shape is what was
