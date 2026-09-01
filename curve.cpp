@@ -53,13 +53,28 @@ double Curve::valueAt(double time) const
     // Clamp time to [0.0, 1.0]
     time = qBound(0.0, time, 1.0);
 
-    // Find the two points to interpolate between
-    int i = 0;
-    for (; i < points.size() - 1; ++i) {
-        if (time <= points[i + 1].time) {
-            break;
+    // Find the two points to interpolate between.
+    // Start from the previous call's segment — render loops evaluate time
+    // forward sample by sample, so this is O(1) amortized instead of O(points).
+    const int n = points.size();
+    int i = valueAtHint;
+    if (i < 0 || i > n - 2) {
+        i = 0;
+    }
+    while (i < n - 2 && time > points[i + 1].time) ++i;
+    while (i > 0 && time < points[i].time) --i;
+    // Validate the bracket; fall back to a from-zero scan when the hint didn't
+    // land on a segment containing time (unsorted points, stale hint, etc.).
+    // This guarantees results identical to the old always-from-zero scan.
+    if (time < points[i].time || time > points[i + 1].time) {
+        i = 0;
+        for (; i < n - 1; ++i) {
+            if (time <= points[i + 1].time) {
+                break;
+            }
         }
     }
+    valueAtHint = i;
 
     // If we're at or before the first point
     if (i == 0 && time <= points[0].time) {
@@ -67,7 +82,7 @@ double Curve::valueAt(double time) const
     }
 
     // If we're at or after the last point
-    if (i >= points.size() - 1) {
+    if (i >= n - 1) {
         return points.last().value;
     }
 

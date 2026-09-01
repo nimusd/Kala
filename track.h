@@ -808,6 +808,7 @@ private:
                           // doesn't read m_notes (which may have changed)
         NoteRender result;
         bool success = false;
+        qint64 renderMs = 0;  // per-note render wall time (diagnostics)
     };
     QVector<RenderTask> m_backgroundTasks;
     QFutureWatcher<void> *m_renderWatcher = nullptr;

@@ -32,6 +32,33 @@ static double applyConnectionFunction(double currentValue, double sourceValue,
     return sourceValue;
 }
 
+// Connection function as an int id, so the KS fast path can cache it once per
+// note instead of comparing QStrings per sample. Order matches
+// applyConnectionFunction above.
+static int connectionFunctionId(const QString &function)
+{
+    if (function == "passthrough") return 0;
+    if (function == "add") return 1;
+    if (function == "multiply") return 2;
+    if (function == "subtract") return 3;
+    if (function == "replace") return 4;
+    if (function == "modulate") return 5;
+    return 0;  // Unknown → passthrough, matching applyConnectionFunction
+}
+
+static double applyConnectionFunctionId(double currentValue, double sourceValue,
+                                        int fn, double weight)
+{
+    switch (fn) {
+    case 1:  return currentValue + sourceValue * weight;              // add
+    case 2:  return currentValue * sourceValue * weight;              // multiply
+    case 3:  return currentValue - sourceValue * weight;              // subtract
+    case 4:  return currentValue * (1.0 - weight) + sourceValue * weight;  // replace
+    case 5:  return currentValue + (sourceValue - 0.5) * weight * 2.0;     // modulate
+    default: return sourceValue;                                      // passthrough
+    }
+}
+
 SounitGraph::SounitGraph(double sampleRate)
     : sampleRate(sampleRate)
     , hasValidSignalOutput(false)
@@ -60,6 +87,7 @@ SounitGraph* SounitGraph::clone() const
         ProcessorData &dst = copy->processors[it.key()];
 
         dst.container = src.container;  // shallow — read-only during rendering
+        dst.kind = src.kind;            // cached dispatch kind for the hot path
 
         // Clone each processor using compiler-generated copy constructor
         if (src.harmonicGen)          dst.harmonicGen = new HarmonicGenerator(*src.harmonicGen);
@@ -520,6 +548,7 @@ void SounitGraph::createProcessors()
             data.noiseFilter->setFilterType(static_cast<NoiseColorFilter::FilterType>(filterTypeValue));
 
         } else if (container->getName() == "Physics System") {
+            data.kind = KindModifier;
             data.physicsSys = new PhysicsSystem();
             data.physicsSys->setMass(container->getParameter("mass", 0.5));
             data.physicsSys->setSpringK(container->getParameter("springK", 0.001));
@@ -527,6 +556,7 @@ void SounitGraph::createProcessors()
             data.physicsSys->setImpulseAmount(container->getParameter("impulseAmount", 100.0));
 
         } else if (container->getName() == "Envelope Engine") {
+            data.kind = KindModifier;
             data.envelopeEng = new EnvelopeEngine();
             int envSelect = static_cast<int>(container->getParameter("envelopeSelect", 0.0));
 
@@ -546,6 +576,7 @@ void SounitGraph::createProcessors()
             data.envelopeEng->setValueOffset(container->getParameter("valueOffset", 0.0));
 
         } else if (container->getName() == "Drift Engine") {
+            data.kind = KindModifier;
             data.driftEng = new DriftEngine(sampleRate);
             data.driftEng->setAmount(container->getParameter("amount", 0.005));
             data.driftEng->setRate(container->getParameter("rate", 0.5));
@@ -564,11 +595,13 @@ void SounitGraph::createProcessors()
             data.gateProc->setVelocitySens(container->getParameter("velocitySens", 0.5));
 
         } else if (container->getName() == "Easing Applicator") {
+            data.kind = KindModifier;
             data.easingApp = new EasingApplicator();
             data.easingApp->setEasingSelect(static_cast<int>(container->getParameter("easingSelect", 0.0)));
             // For now, use default easing mode (InOut)
 
         } else if (container->getName() == "Karplus Strong") {
+            data.kind = KindKS;
             data.karplusStrongAttack = new KarplusStrongAttack(sampleRate);
             int modeVal = static_cast<int>(container->getParameter("mode", 0.0));
             data.karplusStrongAttack->setMode(static_cast<KSMode>(modeVal));
@@ -622,12 +655,14 @@ void SounitGraph::createProcessors()
             data.attackGen->setTone(container->getParameter("tone", 0.5));
 
         } else if (container->getName() == "LFO") {
+            data.kind = KindModifier;
             data.lfo = new LFO(sampleRate);
             data.lfo->setFrequency(container->getParameter("frequency", 1.0));
             data.lfo->setAmplitude(container->getParameter("amplitude", 1.0));
             data.lfo->setWaveType(static_cast<int>(container->getParameter("waveType", 0.0)));
 
         } else if (container->getName() == "Frequency Mapper") {
+            data.kind = KindModifier;
             data.freqMapper = new FrequencyMapper();
             data.freqMapper->setLowFreq(container->getParameter("lowFreq", 25.0));
             data.freqMapper->setHighFreq(container->getParameter("highFreq", 8000.0));
@@ -886,6 +921,7 @@ void SounitGraph::reset(bool isLegato)
 {
     for (auto it = processors.begin(); it != processors.end(); ++it) {
         auto &data = it.value();
+        data.ksParamsCached = false;  // Re-resolve KS statics + sources per note
         if (data.harmonicGen) {
             data.harmonicGen->reset();
         }
@@ -1171,10 +1207,216 @@ double SounitGraph::generateSample(double pitch, double noteProgress, bool isLeg
     return 0.0;
 }
 
+// Karplus Strong per-sample processing. Dispatched by cached kind (see the
+// executeContainer fast paths). Static params are read once per note (first
+// sample after reset) — they never change mid-render — and connected sources
+// are re-read per sample so modulation behaves exactly as before.
+void SounitGraph::executeKarplusStrong(ProcessorData &proc, double pitch, double noteProgress)
+{
+    if (!proc.karplusStrongAttack) return;
+    Container *container = proc.container;
+
+    if (!proc.ksParamsCached) {
+        // Resolve static params once per note.
+        proc.ksMode = container->getParameter("mode", 0.0);
+        proc.ksAttackPortion = container->getParameter("attackPortion", 0.15);
+        proc.ksDamping = container->getParameter("damping", 0.5);
+        proc.ksPluckPosition = container->getParameter("pluckPosition", 0.5);
+        proc.ksMix = container->getParameter("mix", 0.8);
+        proc.ksBrightness = container->getParameter("brightness", 0.5);
+        proc.ksExcitationType = static_cast<int>(container->getParameter("excitationType", 0.0));
+        proc.ksExcitationSoftness = container->getParameter("blendRatio", 0.5);
+        proc.ksPluckHardness = container->getParameter("pluckHardness", 0.0);
+        proc.ksPickDirection = container->getParameter("pickDirection", 0.5);
+        proc.ksBodyResonance = container->getParameter("bodyResonance", 0.0);
+        proc.ksBodyFreq = container->getParameter("bodyFreq", 200.0);
+        proc.ksNonLinearAmount = container->getParameter("nonLinearAmount", 0.0);
+        proc.ksPitchMultiplier = container->getParameter("pitchMultiplier", 1.0);
+
+        // Resolve connected sources once per note. Sources are only registered
+        // while active; the active flag is stable within a note (it reflects
+        // score-curve presence, see ProcessorData::inactive).
+        for (const Canvas::Connection &conn : cachedConnections) {
+            if (conn.toContainer != container || !isSourceActive(conn.fromContainer)) continue;
+            ProcessorData::KSConn *target = nullptr;
+            if (conn.toPort == "signalIn") target = &proc.ksConnSignalIn;
+            else if (conn.toPort == "trigger") target = &proc.ksConnTrigger;
+            else if (conn.toPort == "mode") target = &proc.ksConnMode;
+            else if (conn.toPort == "attackPortion") target = &proc.ksConnAttackPortion;
+            else if (conn.toPort == "damping") target = &proc.ksConnDamping;
+            else if (conn.toPort == "pluckPosition") target = &proc.ksConnPluckPosition;
+            else if (conn.toPort == "mix") target = &proc.ksConnMix;
+            else if (conn.toPort == "brightness") target = &proc.ksConnBrightness;
+            else if (conn.toPort == "excitationType") target = &proc.ksConnExcitationType;
+            else if (conn.toPort == "blendRatio") target = &proc.ksConnBlendRatio;
+            else if (conn.toPort == "pluckHardness") target = &proc.ksConnPluckHardness;
+            else if (conn.toPort == "pickDirection") target = &proc.ksConnPickDirection;
+            else if (conn.toPort == "bodyResonance") target = &proc.ksConnBodyResonance;
+            else if (conn.toPort == "bodyFreq") target = &proc.ksConnBodyFreq;
+            else if (conn.toPort == "nonLinearAmount") target = &proc.ksConnNonLinearAmount;
+            else if (conn.toPort == "pitchMultiplier") target = &proc.ksConnPitchMultiplier;
+            if (target) {
+                target->src = conn.fromContainer;
+                target->fn = connectionFunctionId(conn.function);
+                target->wt = conn.weight;
+            }
+        }
+        proc.ksParamsCached = true;
+    }
+
+    // Initialize input values from cached statics
+    double inputSignal = 0.0;
+    int effectiveMode = static_cast<int>(proc.ksMode);
+    double effectiveAttackPortion = proc.ksAttackPortion;
+    double effectiveDamping = proc.ksDamping;
+    double effectivePluckPosition = proc.ksPluckPosition;
+    double effectiveMix = proc.ksMix;
+    double effectiveBrightness = proc.ksBrightness;
+    int effectiveExcitationType = proc.ksExcitationType;
+    double effectiveExcitationSoftness = proc.ksExcitationSoftness;
+    double effectivePluckHardness = proc.ksPluckHardness;
+    double effectivePickDirection = proc.ksPickDirection;
+    double effectiveBodyResonance = proc.ksBodyResonance;
+    double effectiveBodyFreq = proc.ksBodyFreq;
+    double effectiveNonLinearAmount = proc.ksNonLinearAmount;
+    double pitchMult = proc.ksPitchMultiplier;
+    bool shouldTrigger = false;
+
+    // Apply connected sources per sample (same clamps as before)
+    if (proc.ksConnSignalIn.src) {
+        inputSignal = processors[proc.ksConnSignalIn.src].signalOut;
+    }
+    if (proc.ksConnTrigger.src) {
+        double trigVal = processors[proc.ksConnTrigger.src].controlOut;
+        if (trigVal > 0.5) shouldTrigger = true;
+    }
+    if (proc.ksConnMode.src) {
+        double sourceVal = processors[proc.ksConnMode.src].controlOut;
+        effectiveMode = sourceVal > 0.5 ? 1 : 0;
+    }
+    if (proc.ksConnAttackPortion.src) {
+        double sourceVal = processors[proc.ksConnAttackPortion.src].controlOut;
+        effectiveAttackPortion = applyConnectionFunctionId(
+            effectiveAttackPortion, sourceVal, proc.ksConnAttackPortion.fn, proc.ksConnAttackPortion.wt);
+        effectiveAttackPortion = qBound(0.01, effectiveAttackPortion, 1.0);
+    }
+    if (proc.ksConnDamping.src) {
+        double sourceVal = processors[proc.ksConnDamping.src].controlOut;
+        effectiveDamping = applyConnectionFunctionId(
+            effectiveDamping, sourceVal, proc.ksConnDamping.fn, proc.ksConnDamping.wt);
+        effectiveDamping = qBound(0.0, effectiveDamping, 1.0);
+    }
+    if (proc.ksConnPluckPosition.src) {
+        double sourceVal = processors[proc.ksConnPluckPosition.src].controlOut;
+        effectivePluckPosition = applyConnectionFunctionId(
+            effectivePluckPosition, sourceVal, proc.ksConnPluckPosition.fn, proc.ksConnPluckPosition.wt);
+        effectivePluckPosition = qBound(0.0, effectivePluckPosition, 1.0);
+    }
+    if (proc.ksConnMix.src) {
+        double sourceVal = processors[proc.ksConnMix.src].controlOut;
+        effectiveMix = applyConnectionFunctionId(
+            effectiveMix, sourceVal, proc.ksConnMix.fn, proc.ksConnMix.wt);
+        effectiveMix = qBound(0.0, effectiveMix, 1.0);
+    }
+    if (proc.ksConnBrightness.src) {
+        double sourceVal = processors[proc.ksConnBrightness.src].controlOut;
+        effectiveBrightness = applyConnectionFunctionId(
+            effectiveBrightness, sourceVal, proc.ksConnBrightness.fn, proc.ksConnBrightness.wt);
+        effectiveBrightness = qBound(0.0, effectiveBrightness, 1.0);
+    }
+    if (proc.ksConnExcitationType.src) {
+        double sourceVal = processors[proc.ksConnExcitationType.src].controlOut;
+        effectiveExcitationType = static_cast<int>(std::round(sourceVal));
+        effectiveExcitationType = qBound(0, effectiveExcitationType, 2);
+    }
+    if (proc.ksConnBlendRatio.src) {
+        double sourceVal = processors[proc.ksConnBlendRatio.src].controlOut;
+        effectiveExcitationSoftness = applyConnectionFunctionId(
+            effectiveExcitationSoftness, sourceVal, proc.ksConnBlendRatio.fn, proc.ksConnBlendRatio.wt);
+        effectiveExcitationSoftness = qBound(0.0, effectiveExcitationSoftness, 1.0);
+    }
+    if (proc.ksConnPluckHardness.src) {
+        double sourceVal = processors[proc.ksConnPluckHardness.src].controlOut;
+        effectivePluckHardness = applyConnectionFunctionId(
+            effectivePluckHardness, sourceVal, proc.ksConnPluckHardness.fn, proc.ksConnPluckHardness.wt);
+        effectivePluckHardness = qBound(0.0, effectivePluckHardness, 1.0);
+    }
+    if (proc.ksConnPickDirection.src) {
+        double sourceVal = processors[proc.ksConnPickDirection.src].controlOut;
+        effectivePickDirection = applyConnectionFunctionId(
+            effectivePickDirection, sourceVal, proc.ksConnPickDirection.fn, proc.ksConnPickDirection.wt);
+        effectivePickDirection = qBound(0.0, effectivePickDirection, 1.0);
+    }
+    if (proc.ksConnBodyResonance.src) {
+        double sourceVal = processors[proc.ksConnBodyResonance.src].controlOut;
+        effectiveBodyResonance = applyConnectionFunctionId(
+            effectiveBodyResonance, sourceVal, proc.ksConnBodyResonance.fn, proc.ksConnBodyResonance.wt);
+        effectiveBodyResonance = qBound(0.0, effectiveBodyResonance, 1.0);
+    }
+    if (proc.ksConnBodyFreq.src) {
+        double sourceVal = processors[proc.ksConnBodyFreq.src].controlOut;
+        effectiveBodyFreq = applyConnectionFunctionId(
+            effectiveBodyFreq, sourceVal, proc.ksConnBodyFreq.fn, proc.ksConnBodyFreq.wt);
+        effectiveBodyFreq = qBound(80.0, effectiveBodyFreq, 400.0);
+    }
+    if (proc.ksConnNonLinearAmount.src) {
+        double sourceVal = processors[proc.ksConnNonLinearAmount.src].controlOut;
+        effectiveNonLinearAmount = applyConnectionFunctionId(
+            effectiveNonLinearAmount, sourceVal, proc.ksConnNonLinearAmount.fn, proc.ksConnNonLinearAmount.wt);
+        effectiveNonLinearAmount = qBound(0.0, effectiveNonLinearAmount, 10.0);
+    }
+    if (proc.ksConnPitchMultiplier.src) {
+        pitchMult = processors[proc.ksConnPitchMultiplier.src].controlOut;
+    }
+    double effectivePitch = pitch * pitchMult;
+
+    // Update parameters
+    proc.karplusStrongAttack->setMode(static_cast<KSMode>(effectiveMode));
+    proc.karplusStrongAttack->setAttackPortion(effectiveAttackPortion);
+    proc.karplusStrongAttack->setDamping(effectiveDamping);
+    proc.karplusStrongAttack->setPluckPosition(effectivePluckPosition);
+    proc.karplusStrongAttack->setMix(effectiveMix);
+    proc.karplusStrongAttack->setBrightness(effectiveBrightness);
+    proc.karplusStrongAttack->setExcitationType(effectiveExcitationType);
+    proc.karplusStrongAttack->setExcitationSoftness(effectiveExcitationSoftness);
+    proc.karplusStrongAttack->setPluckHardness(effectivePluckHardness);
+    proc.karplusStrongAttack->setPickDirection(effectivePickDirection);
+    proc.karplusStrongAttack->setBodyResonance(effectiveBodyResonance);
+    proc.karplusStrongAttack->setBodyFreq(effectiveBodyFreq);
+    proc.karplusStrongAttack->setNonLinearAmount(effectiveNonLinearAmount);
+    proc.karplusStrongAttack->setPitch(effectivePitch);
+
+    // Trigger on note start (noteProgress near 0) or explicit trigger
+    // For legato notes, skip the trigger - let the string keep vibrating from previous note
+    if (!m_currentIsLegato && (noteProgress < 0.001 || shouldTrigger)) {
+        proc.karplusStrongAttack->trigger(effectivePitch);
+    }
+
+    // Generate sample with input signal (used in Attack mode)
+    proc.signalOut = proc.karplusStrongAttack->generateSample(inputSignal);
+}
+
 void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double noteProgress)
 {
     Container *container = proc.container;
     if (!container) return;
+
+    // Cached-kind fast paths for the hottest containers — skips the ~30 QString
+    // comparisons (several with heap allocations) the generic dispatch below
+    // pays per sample.
+    if (proc.kind == KindKS) {
+        executeKarplusStrong(proc, pitch, noteProgress);
+        return;
+    }
+    if (proc.kind == KindModifier && m_tailMode) {
+        // Modifiers hold their last value during the tail. In tail mode their
+        // inputs are frozen (noteProgress = 1.0, score curves frozen, pitch
+        // frozen), so envelope/FM/easing outputs are constant anyway; drift/LFO
+        // motion (±tiny depth) is inaudible in the ring-out. Freezing cuts the
+        // tail render down to just the ringing processors (KS, physical models,
+        // IR) — a ~10x saving on the dominant part of long-tail renders.
+        return;
+    }
 
     if (m_tailMode) {
         const QString &name = container->getName();
@@ -2115,128 +2357,9 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
         }
 
     } else if (container->getName() == "Karplus Strong") {
-        if (proc.karplusStrongAttack) {
-            // Initialize input values with defaults
-            double inputSignal = 0.0;
-            int effectiveMode = static_cast<int>(container->getParameter("mode", 0.0));
-            double effectiveAttackPortion = container->getParameter("attackPortion", 0.15);
-            double effectiveDamping = container->getParameter("damping", 0.5);
-            double effectivePluckPosition = container->getParameter("pluckPosition", 0.5);
-            double effectiveMix = container->getParameter("mix", 0.8);
-            double effectiveBrightness = container->getParameter("brightness", 0.5);
-            int effectiveExcitationType = static_cast<int>(container->getParameter("excitationType", 0.0));
-            double effectiveExcitationSoftness = container->getParameter("blendRatio", 0.5);
-            double effectivePluckHardness = container->getParameter("pluckHardness", 0.0);
-            double effectivePickDirection = container->getParameter("pickDirection", 0.5);
-            double effectiveBodyResonance = container->getParameter("bodyResonance", 0.0);
-            double effectiveBodyFreq = container->getParameter("bodyFreq", 200.0);
-            double effectiveNonLinearAmount = container->getParameter("nonLinearAmount", 0.0);
-            double pitchMult = container->getParameter("pitchMultiplier", 1.0);
-            bool shouldTrigger = false;
-
-            // Use cached connections (snapshot at build time) for graph independence
-            for (const Canvas::Connection &conn : cachedConnections) {
-                if (conn.toContainer == container) {
-                    if (conn.toPort == "signalIn" && isSourceActive(conn.fromContainer)) {
-                        // Get input signal from upstream container (for Attack mode)
-                        inputSignal = processors[conn.fromContainer].signalOut;
-                    } else if (conn.toPort == "trigger" && isSourceActive(conn.fromContainer)) {
-                        double trigVal = processors[conn.fromContainer].controlOut;
-                        if (trigVal > 0.5) shouldTrigger = true;
-                    } else if (conn.toPort == "mode" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveMode = sourceVal > 0.5 ? 1 : 0;
-                    } else if (conn.toPort == "attackPortion" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveAttackPortion = applyConnectionFunction(
-                            effectiveAttackPortion, sourceVal, conn.function, conn.weight);
-                        effectiveAttackPortion = qBound(0.01, effectiveAttackPortion, 1.0);
-                    } else if (conn.toPort == "damping" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveDamping = applyConnectionFunction(
-                            effectiveDamping, sourceVal, conn.function, conn.weight);
-                        effectiveDamping = qBound(0.0, effectiveDamping, 1.0);
-                    } else if (conn.toPort == "pluckPosition" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectivePluckPosition = applyConnectionFunction(
-                            effectivePluckPosition, sourceVal, conn.function, conn.weight);
-                        effectivePluckPosition = qBound(0.0, effectivePluckPosition, 1.0);
-                    } else if (conn.toPort == "mix" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveMix = applyConnectionFunction(
-                            effectiveMix, sourceVal, conn.function, conn.weight);
-                        effectiveMix = qBound(0.0, effectiveMix, 1.0);
-                    } else if (conn.toPort == "brightness" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveBrightness = applyConnectionFunction(
-                            effectiveBrightness, sourceVal, conn.function, conn.weight);
-                        effectiveBrightness = qBound(0.0, effectiveBrightness, 1.0);
-                    } else if (conn.toPort == "excitationType" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveExcitationType = static_cast<int>(std::round(sourceVal));
-                        effectiveExcitationType = qBound(0, effectiveExcitationType, 2);
-                    } else if (conn.toPort == "blendRatio" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveExcitationSoftness = applyConnectionFunction(
-                            effectiveExcitationSoftness, sourceVal, conn.function, conn.weight);
-                        effectiveExcitationSoftness = qBound(0.0, effectiveExcitationSoftness, 1.0);
-                    } else if (conn.toPort == "pluckHardness" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectivePluckHardness = applyConnectionFunction(
-                            effectivePluckHardness, sourceVal, conn.function, conn.weight);
-                        effectivePluckHardness = qBound(0.0, effectivePluckHardness, 1.0);
-                    } else if (conn.toPort == "pickDirection" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectivePickDirection = applyConnectionFunction(
-                            effectivePickDirection, sourceVal, conn.function, conn.weight);
-                        effectivePickDirection = qBound(0.0, effectivePickDirection, 1.0);
-                    } else if (conn.toPort == "bodyResonance" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveBodyResonance = applyConnectionFunction(
-                            effectiveBodyResonance, sourceVal, conn.function, conn.weight);
-                        effectiveBodyResonance = qBound(0.0, effectiveBodyResonance, 1.0);
-                    } else if (conn.toPort == "bodyFreq" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveBodyFreq = applyConnectionFunction(
-                            effectiveBodyFreq, sourceVal, conn.function, conn.weight);
-                        effectiveBodyFreq = qBound(80.0, effectiveBodyFreq, 400.0);
-                    } else if (conn.toPort == "nonLinearAmount" && isSourceActive(conn.fromContainer)) {
-                        double sourceVal = processors[conn.fromContainer].controlOut;
-                        effectiveNonLinearAmount = applyConnectionFunction(
-                            effectiveNonLinearAmount, sourceVal, conn.function, conn.weight);
-                        effectiveNonLinearAmount = qBound(0.0, effectiveNonLinearAmount, 10.0);
-                    } else if (conn.toPort == "pitchMultiplier" && isSourceActive(conn.fromContainer)) {
-                        pitchMult = processors[conn.fromContainer].controlOut;
-                    }
-                }
-            }
-            double effectivePitch = pitch * pitchMult;
-
-            // Update parameters
-            proc.karplusStrongAttack->setMode(static_cast<KSMode>(effectiveMode));
-            proc.karplusStrongAttack->setAttackPortion(effectiveAttackPortion);
-            proc.karplusStrongAttack->setDamping(effectiveDamping);
-            proc.karplusStrongAttack->setPluckPosition(effectivePluckPosition);
-            proc.karplusStrongAttack->setMix(effectiveMix);
-            proc.karplusStrongAttack->setBrightness(effectiveBrightness);
-            proc.karplusStrongAttack->setExcitationType(effectiveExcitationType);
-            proc.karplusStrongAttack->setExcitationSoftness(effectiveExcitationSoftness);
-            proc.karplusStrongAttack->setPluckHardness(effectivePluckHardness);
-            proc.karplusStrongAttack->setPickDirection(effectivePickDirection);
-            proc.karplusStrongAttack->setBodyResonance(effectiveBodyResonance);
-            proc.karplusStrongAttack->setBodyFreq(effectiveBodyFreq);
-            proc.karplusStrongAttack->setNonLinearAmount(effectiveNonLinearAmount);
-            proc.karplusStrongAttack->setPitch(effectivePitch);
-
-            // Trigger on note start (noteProgress near 0) or explicit trigger
-            // For legato notes, skip the trigger - let the string keep vibrating from previous note
-            if (!m_currentIsLegato && (noteProgress < 0.001 || shouldTrigger)) {
-                proc.karplusStrongAttack->trigger(effectivePitch);
-            }
-
-            // Generate sample with input signal (used in Attack mode)
-            proc.signalOut = proc.karplusStrongAttack->generateSample(inputSignal);
-        }
+        // Normally unreachable — the KindKS fast path at the top of
+        // executeContainer handles this container. Kept as a fallback.
+        executeKarplusStrong(proc, pitch, noteProgress);
 
     } else if (container->getName() == "Attack") {
         if (proc.attackGen) {

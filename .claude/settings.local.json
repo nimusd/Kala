@@ -58,7 +58,11 @@
       "Bash(sed -n '/void ScoreCanvas::editLaneCurveDialog/,/^}/p' scorecanvas.cpp)",
       "Bash(sed -n '/void EnvelopeCurveCanvas::setPoints/,/^}/p' envelopecurvecanvas.cpp)",
       "Bash(sed -n '/QPointF EnvelopeCurveCanvas::curveToScreen/,/^}/p' envelopecurvecanvas.cpp)",
-      "Bash(sed -n '/void EnvelopeCurveCanvas::drawCurve/,/^}/p' envelopecurvecanvas.cpp)"
+      "Bash(sed -n '/void EnvelopeCurveCanvas::drawCurve/,/^}/p' envelopecurvecanvas.cpp)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(/c/Qt/Tools/CMake_64/bin/cmake.exe -E copy_directory \"C:/c++code/Kala/help\" \"C:/c++code/Kala/build/Desktop_Qt_6_10_1_MinGW_64_bit-Debug/help\")",
+      "Bash(git commit -m 'render perf + string damping: KS kind fast path and per-note param cache; tail modifier freeze; one-string damping rule in harp+fretted modes *)"
     ]
   }
 }

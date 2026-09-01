@@ -133,8 +133,15 @@ public:
     SounitGraph* clone() const;
 
 private:
+    // Cached container kind for the render hot path — assigned at graph build
+    // so executeContainer can dispatch KS and modifiers without paying ~30
+    // QString comparisons per sample through the generic name chain.
+    enum ContainerKind { KindOther = 0, KindKS, KindModifier };
+
     struct ProcessorData {
         Container *container = nullptr;
+
+        int kind = KindOther;
 
         // Processor instances (only one will be used per container)
         // Using raw pointers for QMap compatibility
@@ -177,6 +184,27 @@ private:
         // Runtime string damping value (from connected port or static parameter).
         // >= 0.5 = fretted (cuts previous notes), < 0.5 = open (rings freely).
         double effectiveStringDamping = 0.0;
+
+        // KS fast-path cache: static params + connected sources resolved once
+        // per note (first sample after reset). Statics never change mid-render,
+        // so the per-sample path only re-reads connected sources' controlOuts.
+        bool ksParamsCached = false;
+        double ksMode = 0.0, ksAttackPortion = 0.15, ksDamping = 0.5,
+               ksPluckPosition = 0.5, ksMix = 0.8, ksBrightness = 0.5,
+               ksExcitationSoftness = 0.3, ksPluckHardness = 0.0,
+               ksPickDirection = 0.5, ksBodyResonance = 0.0, ksBodyFreq = 200.0,
+               ksNonLinearAmount = 0.0, ksPitchMultiplier = 1.0;
+        int ksExcitationType = 0;
+        struct KSConn {
+            Container *src = nullptr;
+            int fn = 0;    // 0=passthrough,1=add,2=multiply,3=subtract,4=replace,5=modulate
+            double wt = 1.0;
+        };
+        KSConn ksConnMode, ksConnAttackPortion, ksConnDamping, ksConnPluckPosition,
+               ksConnMix, ksConnBrightness, ksConnExcitationType, ksConnBlendRatio,
+               ksConnPluckHardness, ksConnPickDirection, ksConnBodyResonance,
+               ksConnBodyFreq, ksConnNonLinearAmount, ksConnPitchMultiplier,
+               ksConnSignalIn, ksConnTrigger;
 
         // Data storage for this container's outputs
         Spectrum spectrumOut;
@@ -281,6 +309,7 @@ private:
     void createProcessors();
     void setupPostRenderIR();   // Called after createProcessors(); lifts final IR out of graph
     void executeContainer(ProcessorData &proc, double pitch, double noteProgress);
+    void executeKarplusStrong(ProcessorData &proc, double pitch, double noteProgress);
     double getInputValue(Container *container, const QString &portName, double defaultValue);
     double getOutputValue(const ProcessorData &proc, const QString &portName) const;
     void runIRPreroll(double pitch);  // Pre-renders irIn source to capture IR before note starts

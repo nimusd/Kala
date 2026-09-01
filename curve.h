@@ -50,6 +50,14 @@ public:
 
 private:
     QVector<Point> points;
+
+    // Cached segment hint for valueAt(). Render loops evaluate monotonically
+    // increasing time, so starting from the previous call's segment makes
+    // lookups O(1) amortized instead of O(points). Purely an optimization:
+    // valueAt() validates the bracket and falls back to a full scan when the
+    // hint doesn't match, so results are always correct (and identical to the
+    // old always-from-zero scan) even for unsorted points or out-of-order access.
+    mutable int valueAtHint = 0;
 };
 
 // Rebuild a curve after dragging one of its on-screen control dots.

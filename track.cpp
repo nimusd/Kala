@@ -14,7 +14,9 @@
 #include <QJsonArray>
 #include <QCoreApplication>
 #include <QtConcurrent>
+#include <QElapsedTimer>
 #include <algorithm>
+#include <utility>
 #include <QUuid>
 #include <QHash>
 
@@ -1514,6 +1516,11 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     double vibratoPhaseAccum = 0.0;
     double organicPhaseAccum = 0.0;
 
+    // Reused across samples: clearing keeps the capacity, so no per-sample
+    // heap allocation (this loop runs millions of times per note).
+    QVector<double> scoreCurveValues;
+    scoreCurveValues.reserve(scoreCurveNames.size());
+
     for (size_t i = 0; i < noteSamples; ++i) {
         double progress = (noteSamples > 1) ? static_cast<double>(i) / static_cast<double>(noteSamples - 1) : 0.5;
 
@@ -1526,8 +1533,7 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
                      pitch, dynamics, vibratoPhaseAccum, organicPhaseAccum);
 
         // Build per-sample expressive curve values to pass to the graph.
-        QVector<double> scoreCurveValues;
-        scoreCurveValues.reserve(scoreCurveNames.size());
+        scoreCurveValues.clear();
         scoreCurveValues.append(dynamics);  // index 0: dynamics (with vibrato applied)
         for (const Curve *c : expressiveCurves) {
             double val = (c && !c->isEmpty()) ? c->valueAt(std::min(progress, 1.0)) : 0.5;
@@ -1785,9 +1791,12 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         SounitGraph *srcGraph = getGraphForVariation(note.getVariationIndex());
         if (!srcGraph || !srcGraph->isValid()) return;
 
+        QElapsedTimer timer;
+        timer.start();
         SounitGraph *graph = srcGraph->clone();
         task.success = renderNoteImpl(note, graph, task.result, snapshotNotes);
         delete graph;
+        task.renderMs = timer.nsecsElapsed() / 1000000;
 
         completedCount.fetch_add(1);
     });
@@ -1802,6 +1811,49 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         m_rendering.store(false);
         emit renderCancelled();
         return false;
+    }
+
+    // Diagnostics: per-note render times, total samples, and curve point
+    // counts. Renders scale with curve points (stretch-wide workflow), so
+    // keeping these visible makes future slow-render reports quick to triage.
+    {
+        qint64 totalMs = 0;
+        qint64 minMs = 0x7FFFFFFFFFFFFFFFLL;
+        qint64 maxMs = 0;
+        qint64 totalSamples = 0;
+        int succeeded = 0;
+        int maxPitchPts = 0;
+        int maxDynPts = 0;
+        int maxExpPts = 0;
+        long long sumDynPts = 0;
+        for (const RenderTask &task : tasks) {
+            if (!task.success) continue;
+            totalMs += task.renderMs;
+            minMs = std::min(minMs, task.renderMs);
+            maxMs = std::max(maxMs, task.renderMs);
+            totalSamples += task.result.samples.size();
+            ++succeeded;
+
+            const Note &note = snapshotNotes[task.noteIndex];
+            int pitchPts = note.getPitchCurve().getPoints().size();
+            int dynPts = note.getDynamicsCurve().getPoints().size();
+            int expPts = 0;
+            for (int ci = 1; ci < note.getExpressiveCurveCount(); ++ci) {
+                expPts += note.getExpressiveCurve(ci).getPoints().size();
+            }
+            maxPitchPts = std::max(maxPitchPts, pitchPts);
+            maxDynPts = std::max(maxDynPts, dynPts);
+            maxExpPts = std::max(maxExpPts, expPts);
+            sumDynPts += dynPts;
+        }
+        qDebug() << "Track" << m_trackId << "render timing:" << succeeded << "notes in" << totalMs << "ms"
+                 << "(avg" << (succeeded ? totalMs / succeeded : 0) << "ms, min" << minMs
+                 << "ms, max" << maxMs << "ms);" << totalSamples << "samples =>"
+                 << (totalMs > 0 ? static_cast<double>(totalSamples) * 1000.0 / totalMs : 0.0)
+                 << "samples/sec";
+        qDebug() << "Track" << m_trackId << "curve points: max pitch" << maxPitchPts
+                 << "max dynamics" << maxDynPts << "(avg" << (succeeded ? sumDynPts / succeeded : 0)
+                 << ") max expressive" << maxExpPts;
     }
 
     // Store results under mutex
@@ -2085,9 +2137,16 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
     };
 
     QHash<int, bool> dampsByVariation;
-    QHash<int, std::vector<double>> dampStartsByVariation;
+    // Every note's start per variation, as (startTimeMs, pitchHz). Feeds the
+    // "one string per note" rule: a same-pitch repeat silences the still
+    // ringing copy before its own attack — in harp mode AND fretted mode.
+    QHash<int, std::vector<std::pair<double,double>>> noteStartsByVariation;
+    // Fretted note starts per variation. A new fretted pluck damps the whole
+    // string (monophonic cut at any pitch).
+    QHash<int, std::vector<std::pair<double,double>>> dampStartsByVariation;
     for (const Note &note : m_notes) {
         int varIdx = canonicalVarIdx(note.getVariationIndex());
+        noteStartsByVariation[varIdx].push_back({note.getStartTime(), note.getPitchHz()});
         auto dIt = dampsByVariation.find(varIdx);
         if (dIt == dampsByVariation.end()) {
             SounitGraph* g = graphForCanonical(varIdx);
@@ -2106,11 +2165,20 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
             noteIsFretted = c.valueAt(0.0) >= 0.5;
         }
         if (noteIsFretted) {
-            dampStartsByVariation[varIdx].push_back(note.getStartTime());
+            dampStartsByVariation[varIdx].push_back({note.getStartTime(), note.getPitchHz()});
         }
     }
+    auto sortStarts = [](std::vector<std::pair<double,double>> &v) {
+        std::sort(v.begin(), v.end(),
+                  [](const std::pair<double,double> &a, const std::pair<double,double> &b) {
+                      return a.first < b.first;
+                  });
+    };
+    for (auto it = noteStartsByVariation.begin(); it != noteStartsByVariation.end(); ++it) {
+        sortStarts(it.value());
+    }
     for (auto it = dampStartsByVariation.begin(); it != dampStartsByVariation.end(); ++it) {
-        std::sort(it.value().begin(), it.value().end());
+        sortStarts(it.value());
     }
 
     // String damping fade-out duration (5ms = fast but click-free)
@@ -2139,15 +2207,40 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
             continue;  // Note doesn't overlap requested range
         }
 
-        // String damping: find the next note's start time after this note starts.
-        // That's when the string gets re-plucked and this note should be damped.
-        // Scoped to this note's variation so notes on other sounits aren't damped.
+        // String damping: find the next fretted note's start after this note
+        // starts. That's when the string gets re-plucked and this note should
+        // be damped. Scoped to this note's variation so notes on other
+        // sounits aren't damped.
         double dampTimeMs = -1.0;
         auto sIt = dampStartsByVariation.find(canonicalVarIdx(note.getVariationIndex()));
         if (sIt != dampStartsByVariation.end()) {
-            const std::vector<double> &starts = sIt.value();
-            auto upIt = std::upper_bound(starts.begin(), starts.end(), noteStartMs);
-            if (upIt != starts.end()) dampTimeMs = *upIt;
+            const std::vector<std::pair<double,double>> &starts = sIt.value();
+            auto upIt = std::upper_bound(starts.begin(), starts.end(), noteStartMs,
+                                         [](double val, const std::pair<double,double> &p) {
+                                             return val < p.first;
+                                         });
+            if (upIt != starts.end()) dampTimeMs = upIt->first;
+        }
+
+        // Same-pitch repeat: the first later note (fretted or not) at the same
+        // pitch (~1 cent tolerance). One string can't ring twice at once, so
+        // this note's tail gets a fade that ENDS at the repeat's start — in
+        // harp mode too, where the fretted list is empty.
+        double samePitchDampTimeMs = -1.0;
+        auto aIt = noteStartsByVariation.find(canonicalVarIdx(note.getVariationIndex()));
+        if (aIt != noteStartsByVariation.end()) {
+            const std::vector<std::pair<double,double>> &starts = aIt.value();
+            auto upIt = std::upper_bound(starts.begin(), starts.end(), noteStartMs,
+                                         [](double val, const std::pair<double,double> &p) {
+                                             return val < p.first;
+                                         });
+            const double pitchHz = note.getPitchHz();
+            for (auto spIt = upIt; spIt != starts.end(); ++spIt) {
+                if (std::abs(spIt->second - pitchHz) <= pitchHz * 0.0006) {
+                    samePitchDampTimeMs = spIt->first;
+                    break;
+                }
+            }
         }
 
         // Mix this note's samples into the stereo buffer
@@ -2166,14 +2259,34 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
                 if (noteIdx < render.samples.size()) {
                     float sample = render.samples[noteIdx];
 
-                    // Apply string damping fade-out if a later note cuts this one
-                    if (dampTimeMs > 0 && timeMs >= dampTimeMs) {
+                    // Apply string damping fade-out if a later note cuts this one.
+                    // Same-pitch repeats fade BEFORE the re-pluck (the old ring
+                    // must be silent when the new attack sounds); different-pitch
+                    // successors fade after it (the string is damped as struck).
+                    double dampGain = 1.0;
+                    bool fullyDamped = false;
+                    if (samePitchDampTimeMs > 0 && timeMs >= samePitchDampTimeMs - DAMP_FADE_MS) {
+                        if (timeMs >= samePitchDampTimeMs) {
+                            fullyDamped = true;
+                        } else {
+                            // Cosine fade that ENDS at the repeat's start
+                            double fadeRemaining = samePitchDampTimeMs - timeMs;
+                            dampGain *= 0.5 * (1.0 - std::cos(fadeRemaining / DAMP_FADE_MS * M_PI));
+                        }
+                    }
+                    if (!fullyDamped && dampTimeMs > 0 && timeMs >= dampTimeMs) {
                         double fadeElapsed = timeMs - dampTimeMs;
                         if (fadeElapsed >= DAMP_FADE_MS) {
-                            continue;  // Fully damped, skip
+                            fullyDamped = true;
+                        } else {
+                            dampGain *= 0.5 * (1.0 + std::cos(fadeElapsed / DAMP_FADE_MS * M_PI));
                         }
-                        // Cosine fade for smooth damping
-                        sample *= static_cast<float>(0.5 * (1.0 + std::cos(fadeElapsed / DAMP_FADE_MS * M_PI)));
+                    }
+                    if (fullyDamped) {
+                        continue;  // Fully damped, skip
+                    }
+                    if (dampGain < 1.0) {
+                        sample *= static_cast<float>(dampGain);
                     }
 
                     // Apply per-note pan (from Pan container in sounit graph)
