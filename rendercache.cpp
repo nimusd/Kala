@@ -63,6 +63,11 @@ bool RenderCache::saveToFile(const QString &filePath,
             stream << render.graphHash;
             stream << render.noteHash;
 
+            // v2: per-entry sample rate - a cache can hold renders made at
+            // different rates (device rate from playback, project rate from
+            // export), and the header rate alone would mislabel the others.
+            stream << render.sampleRate;
+
             // Write sample count and samples
             uint64_t sampleCount = static_cast<uint64_t>(render.samples.size());
             stream << sampleCount;
@@ -101,13 +106,15 @@ int RenderCache::loadFromFile(const QString &filePath, const QList<Track*> &trac
     // Read header
     double sampleRate;
     uint32_t entryCount;
-    if (!readHeader(stream, sampleRate, entryCount)) {
+    uint32_t fileVersion = 0;
+    if (!readHeader(stream, sampleRate, entryCount, fileVersion)) {
         qWarning() << "RenderCache: Invalid or corrupted cache file";
         file.close();
         return -1;
     }
 
-    qDebug() << "RenderCache: Loading" << entryCount << "entries at" << sampleRate << "Hz";
+    qDebug() << "RenderCache: Loading" << entryCount << "entries (v" << fileVersion
+             << ", header rate" << sampleRate << "Hz)";
 
     // Build a map of track ID -> Track pointer for fast lookup
     QMap<int, Track*> trackMap;
@@ -152,6 +159,11 @@ int RenderCache::loadFromFile(const QString &filePath, const QList<Track*> &trac
         stream >> storedGraphHash;
         stream >> storedNoteHash;
 
+        // Read this render's own sample rate (v2). v1 files stored a single
+        // header rate that applied to every entry.
+        double entryRate = sampleRate;
+        if (fileVersion >= 2) stream >> entryRate;
+
         // Read sample count
         uint64_t sampleCount;
         stream >> sampleCount;
@@ -159,6 +171,14 @@ int RenderCache::loadFromFile(const QString &filePath, const QList<Track*> &trac
         if (sampleCount > 100000000) {  // Sanity check (~38 minutes at 44100 Hz)
             qWarning() << "RenderCache: Invalid sample count:" << sampleCount;
             break;
+        }
+
+        if (entryRate < 8000.0 || entryRate > 384000.0) {
+            qWarning() << "RenderCache: Unreasonable sample rate" << entryRate
+                       << "for note" << noteId << "- skipping entry";
+            skippedCount++;
+            stream.skipRawData(static_cast<int>(sampleCount * sizeof(float)));
+            continue;
         }
 
         // Read samples
@@ -203,7 +223,7 @@ int RenderCache::loadFromFile(const QString &filePath, const QList<Track*> &trac
         // All validations passed - restore the render
         NoteRender render;
         render.samples = std::move(samples);
-        render.sampleRate = sampleRate;
+        render.sampleRate = entryRate;
         render.graphHash = storedGraphHash;
         render.noteHash = storedNoteHash;
         render.valid = true;
@@ -245,7 +265,8 @@ bool RenderCache::writeHeader(QDataStream &stream, double sampleRate, uint32_t e
     return stream.status() == QDataStream::Ok;
 }
 
-bool RenderCache::readHeader(QDataStream &stream, double &sampleRate, uint32_t &entryCount)
+bool RenderCache::readHeader(QDataStream &stream, double &sampleRate, uint32_t &entryCount,
+                             uint32_t &version)
 {
     // Read and verify magic bytes
     char magic[4];
@@ -259,11 +280,12 @@ bool RenderCache::readHeader(QDataStream &stream, double &sampleRate, uint32_t &
         return false;
     }
 
-    // Read and verify version
-    uint32_t version;
+    // Read and verify version (v1 files stay readable - the per-entry rate
+    // simply falls back to the header rate)
     stream >> version;
-    if (version != VERSION) {
-        qWarning() << "RenderCache: Unsupported version:" << version << "(expected" << VERSION << ")";
+    if (version < VERSION_LEGACY || version > VERSION) {
+        qWarning() << "RenderCache: Unsupported version:" << version << "(expected"
+                   << VERSION_LEGACY << "-" << VERSION << ")";
         return false;
     }
 

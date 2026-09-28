@@ -26,6 +26,7 @@
  *   - Note ID: UTF-8 string (variable)
  *   - Graph hash: uint64_t (8 bytes)
  *   - Note hash: uint64_t (8 bytes)
+ *   - Sample rate: double (8 bytes) — v2 only; v1 uses the header rate
  *   - Sample count: uint64_t (8 bytes)
  *
  * Per-entry audio data:
@@ -77,12 +78,17 @@ public:
 private:
     // File format constants
     static constexpr char MAGIC[4] = {'C', 'L', 'M', 'R'};
-    static constexpr uint32_t VERSION = 1;
+    // v1: all renders share the header sample rate.
+    // v2: each render carries its own sample rate (device rate vs project
+    //     rate renders can coexist in one cache without being mislabeled).
+    static constexpr uint32_t VERSION = 2;
+    static constexpr uint32_t VERSION_LEGACY = 1;
     static constexpr size_t HEADER_SIZE = 32;
 
     // Helper methods
     static bool writeHeader(QDataStream &stream, double sampleRate, uint32_t entryCount);
-    static bool readHeader(QDataStream &stream, double &sampleRate, uint32_t &entryCount);
+    static bool readHeader(QDataStream &stream, double &sampleRate, uint32_t &entryCount,
+                           uint32_t &version);
 };
 
 #endif // RENDERCACHE_H

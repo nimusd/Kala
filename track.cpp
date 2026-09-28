@@ -1748,8 +1748,13 @@ bool Track::prerenderDirtyNotes(double sampleRate)
                 needsRender = true;
             } else {
                 const NoteRender &existing = m_noteRenders[noteId];
+                // Sample-rate aware: a render made at the device rate is not
+                // valid for an export at the project rate (or vice versa).
+                // Mixing it anyway time-compresses the audio (the "shorter
+                // export" bug: 44.1 kHz renders on a 48 kHz timeline).
                 if (!existing.valid || existing.graphHash != m_graphHash ||
-                    existing.noteHash != noteHash) {
+                    existing.noteHash != noteHash ||
+                    existing.sampleRate != sampleRate) {
                     needsRender = true;
                 }
             }
@@ -1951,8 +1956,13 @@ bool Track::startBackgroundRender(double sampleRate)
                 needsRender = true;
             } else {
                 const NoteRender &existing = m_noteRenders[noteId];
+                // Sample-rate aware: a render made at the device rate is not
+                // valid for an export at the project rate (or vice versa).
+                // Mixing it anyway time-compresses the audio (the "shorter
+                // export" bug: 44.1 kHz renders on a 48 kHz timeline).
                 if (!existing.valid || existing.graphHash != m_graphHash ||
-                    existing.noteHash != noteHash) {
+                    existing.noteHash != noteHash ||
+                    existing.sampleRate != sampleRate) {
                     needsRender = true;
                 }
             }
@@ -2081,6 +2091,17 @@ void Track::setNoteRender(const QString &noteId, const NoteRender &render)
     m_noteRenders[noteId] = render;
     qDebug() << "Track" << m_trackId << "loaded cached render for note" << noteId
              << "with" << render.samples.size() << "samples";
+}
+
+double Track::cachedRenderSampleRate() const
+{
+    std::lock_guard<std::mutex> lock(m_playbackMutex);
+    for (auto it = m_noteRenders.begin(); it != m_noteRenders.end(); ++it) {
+        if (it.value().valid && !it.value().samples.empty() && it.value().sampleRate > 0.0) {
+            return it.value().sampleRate;
+        }
+    }
+    return 0.0;
 }
 
 bool Track::hasRenderWork() const

@@ -3024,7 +3024,21 @@ QJsonObject KalaTools::toolDuplicateNotes(const QJsonObject &args)
 
     Phrase &phrase = sc->getPhrase();
     const QVector<Note> &notes = phrase.getNotes();
-    const QVector<int> indices = resolveNoteIndices(sc, args["noteIds"].toArray());
+
+    // An empty noteIds used to resolve to EVERY note in the phrase (see
+    // resolveNoteIndices), so a call that omitted it silently duplicated the
+    // whole score - stacked invisible copies and 20x render/export cost.
+    // Never do that: fall back to the canvas selection, and fail loudly if
+    // neither is given.
+    QVector<int> indices;
+    if (args.value("noteIds").toArray().isEmpty()) {
+        indices = sc->getSelectedNoteIndices();
+        if (indices.isEmpty())
+            return error("duplicate_notes: 'noteIds' is empty and no notes are selected "
+                         "on the canvas. Pass noteIds or select the notes first.");
+    } else {
+        indices = resolveNoteIndices(sc, args["noteIds"].toArray());
+    }
     if (indices.isEmpty()) return error("No matching notes found.");
 
     // Find earliest start time of source notes
@@ -3059,12 +3073,20 @@ QJsonObject KalaTools::toolDuplicateNotes(const QJsonObject &args)
             newIds.append(updated[i].getId());
     }
 
-    return QJsonObject{ {"result", QJsonObject{
+    QJsonObject result{
         {"count",   (int)newIds.size()},
         {"noteIds", newIds},
         {"message", QString("Duplicated %1 note(s) at offset %2 ms.")
                     .arg(newIds.size()).arg(offsetMs, 0, 'f', 1)}
-    }}};
+    };
+    if (qFuzzyIsNull(offsetMs)) {
+        // Offset 0 lands the copies exactly on the originals: identical
+        // start/pitch, invisible on the canvas, double rendering cost.
+        result["warning"] = "offsetMs is 0 - the copies sit exactly on top of the "
+                            "originals (invisible on the canvas, stacked audio). "
+                            "Use a non-zero offset unless stacking is intended.";
+    }
+    return QJsonObject{ {"result", result} };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

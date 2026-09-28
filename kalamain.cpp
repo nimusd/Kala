@@ -5144,6 +5144,33 @@ void KalaMain::onExportAudio()
         return;
     }
 
+    // Warn before re-rendering at a different rate: the cached renders were
+    // made at the audio device rate, the export runs at the project rate.
+    // A silent full re-render here made exports look mysteriously slow.
+    double cachedRate = 0.0;
+    for (int i = 0; i < trackManager->getTrackCount(); ++i) {
+        Track *track = trackManager->getTrack(i);
+        if (!track) continue;
+        double t = track->cachedRenderSampleRate();
+        if (t > 0.0 && t != sampleRate) {
+            cachedRate = t;
+            break;
+        }
+    }
+    if (cachedRate > 0.0) {
+        QMessageBox::StandardButton btn = QMessageBox::warning(
+            this, "Export Audio",
+            QString("The pre-rendered audio was rendered at %1 Hz (your audio device rate),\n"
+                    "but this export uses the project rate of %2 Hz.\n\n"
+                    "Kala will re-render the notes at %2 Hz so the timing is exact.\n"
+                    "This may take a moment.")
+                .arg(cachedRate).arg(sampleRate),
+            QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Ok);
+        if (btn != QMessageBox::Ok) {
+            return;
+        }
+    }
+
     // Pre-render all dirty notes on all tracks
     qDebug() << "Pre-rendering tracks for export...";
     for (int i = 0; i < trackManager->getTrackCount(); ++i) {

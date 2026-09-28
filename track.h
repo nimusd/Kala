@@ -479,6 +479,10 @@ public:
      */
     bool hasRenderWork() const;
 
+    // Sample rate of the first valid cached render, or 0.0 if none.
+    // Used to warn before an export re-renders everything at a different rate.
+    double cachedRenderSampleRate() const;
+
     /**
      * Get mixed audio buffer for a time range (for playback)
      * Mixes all note renders that overlap the time range.
