@@ -58,6 +58,14 @@ public:
     void shutdown();
     bool isRunning() const;
 
+    /**
+     * Reopen the audio stream at a new sample rate (same device).
+     * Stops any running playback (emits playbackStopRequested) and closes the
+     * MIDI port, then reopens at the requested rate. On failure the previous
+     * rate is restored and false is returned.
+     */
+    bool setSampleRate(unsigned int newRate);
+
     // Note playback (simple gate on/off for now)
     void playNote(const Note& note);
     void stopNote();

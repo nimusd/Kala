@@ -282,6 +282,37 @@ bool Track::rebuildGraph(double sampleRate)
     return isValid;
 }
 
+void Track::rebuildAllGraphsAtRate(double sampleRate)
+{
+    qDebug() << "Track" << m_trackId << "rebuilding all graphs at" << sampleRate << "Hz";
+
+    // Wait for any in-progress background render so its results (made with
+    // the old graphs and labeled with the old rate) don't land after we
+    // swap the graphs and change m_sampleRate.
+    if (m_rendering.load()) {
+        qDebug() << "Track" << m_trackId << "waiting for in-progress render before rate rebuild";
+        if (m_renderWatcher && m_renderWatcher->isRunning()) {
+            m_renderWatcher->waitForFinished();
+        }
+    }
+
+    // Base graph (bumps the graph hash and invalidates the render cache).
+    rebuildGraph(sampleRate);
+
+    // Variation graphs are compiled from their stored graphData at the rate
+    // the variation was created with; recompile them at the new rate too,
+    // freeing the old compiled graph + source canvas.
+    for (SounitVariation *var : m_variations) {
+        delete var->compiledGraph;
+        var->compiledGraph = nullptr;
+        delete var->sourceCanvas;
+        var->sourceCanvas = nullptr;
+        if (!var->graphData.isEmpty()) {
+            buildGraphFromJson(var->graphData, sampleRate, var);
+        }
+    }
+}
+
 // ========== Note Management ==========
 
 void Track::addNote(const Note &note)

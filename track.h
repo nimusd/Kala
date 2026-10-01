@@ -170,6 +170,15 @@ public:
      */
     bool rebuildGraph(double sampleRate);
 
+    /**
+     * Rebuild the base graph AND every variation's compiled graph at a new
+     * sample rate. Invalidates the render cache (graph hash bump) - call
+     * this when the engine rate changes so playback and export share it.
+     * Waits for any in-progress background render first so its results
+     * (made with the old graphs at the old rate) don't land after the swap.
+     */
+    void rebuildAllGraphsAtRate(double sampleRate);
+
     // ========== Note Management ==========
 
     /**

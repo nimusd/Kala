@@ -95,9 +95,13 @@ KalaMain::KalaMain(QWidget *parent)
             ui->MainTab->setCurrentIndex(savedTab);
     }
 
-    // Initialize shared audio engine FIRST
+    // Initialize shared audio engine FIRST, at the default project rate
+    // (48000) so a fresh project needs no device restart. Fall back to
+    // 44100 if the device refuses that rate.
     audioEngine = new AudioEngine();
-    if (!audioEngine->initialize()) {
+    const unsigned int defaultProjectRate =
+        static_cast<unsigned int>(CompositionSettings::defaults().sampleRate);
+    if (!audioEngine->initialize(defaultProjectRate) && !audioEngine->initialize(44100)) {
         qWarning("Failed to initialize audio engine - playback will not work");
     } else {
         qDebug() << "Shared AudioEngine initialized successfully";
@@ -4950,6 +4954,9 @@ void KalaMain::newProject()
     CompositionSettings defaultSettings = CompositionSettings::defaults();
     scoreCanvasWindow->updateFromSettings(defaultSettings);
 
+    // The engine follows the project rate - back to the default (48000).
+    applyProjectSampleRate(defaultSettings.sampleRate);
+
     // Refresh the settings tab to show reset values
     populateSettingsTab();
 
@@ -4990,6 +4997,39 @@ void KalaMain::onNewProject()
     }
 
     newProject();
+}
+
+void KalaMain::applyProjectSampleRate(int sampleRate, bool rebuildTracks)
+{
+    if (!audioEngine || sampleRate <= 0) return;
+    const unsigned int target = static_cast<unsigned int>(sampleRate);
+
+    // Switch the engine only when it is actually at a different rate. On
+    // failure the device keeps the previous rate and export falls back to
+    // the old re-render-at-project-rate path.
+    if (audioEngine->getSampleRate() != target || !audioEngine->isRunning()) {
+        if (!audioEngine->setSampleRate(target)) {
+            QMessageBox::warning(this, "Audio Device",
+                QString("The audio device could not open at the project sample rate of %1 Hz.\n\n"
+                        "Kala keeps the previous rate for playback. Exports will re-render at "
+                        "the project rate as before.").arg(target));
+            return;
+        }
+    }
+
+    if (!rebuildTracks) return;
+
+    // Engine now runs at the project rate; rebuild every track's graphs
+    // (base + variations) at that rate and re-render in the background.
+    // The graph hash bump invalidates the old-rate renders, so the first
+    // play after this is guaranteed to sound right.
+    for (int i = 0; i < trackManager->getTrackCount(); ++i) {
+        Track *track = trackManager->getTrack(i);
+        if (!track) continue;
+        track->rebuildAllGraphsAtRate(target);
+        track->prepareClipForPlayback();
+        track->startBackgroundRender(target);
+    }
 }
 
 void KalaMain::onOpenProject()
@@ -5174,9 +5214,17 @@ void KalaMain::onExportAudio()
 
     // Pre-render all dirty notes on all tracks
     qDebug() << "Pre-rendering tracks for export...";
+    // Graphs are compiled at the rate they were built at. When the export
+    // runs at a rate the engine is not at (device refused the project rate),
+    // rebuild every graph at the export rate first so the re-rendered audio
+    // is exact, not time-compressed.
+    const bool rateMismatch = (cachedRate > 0.0);
     for (int i = 0; i < trackManager->getTrackCount(); ++i) {
         Track *track = trackManager->getTrack(i);
         if (track) {
+            if (rateMismatch) {
+                track->rebuildAllGraphsAtRate(sampleRate);
+            }
             track->prerenderDirtyNotes(sampleRate);
             // Load baked clip PCM so getMixedBuffer includes it in the
             // export mix (Phase 9).
@@ -5288,6 +5336,22 @@ void KalaMain::onExportAudio()
                 exportedFiles << filePath;
             } else {
                 success = false;
+            }
+        }
+    }
+
+    // When the export ran at a different rate than the engine (device refused
+    // the project rate), rebuild the graphs back at the engine rate and
+    // re-render in the background so playback is correct at next play.
+    if (rateMismatch) {
+        const unsigned int engineRate = audioEngine->getSampleRate();
+        if (engineRate != sampleRate) {
+            for (int i = 0; i < trackManager->getTrackCount(); ++i) {
+                Track *track = trackManager->getTrack(i);
+                if (!track) continue;
+                track->rebuildAllGraphsAtRate(engineRate);
+                track->prepareClipForPlayback();
+                track->startBackgroundRender(engineRate);
             }
         }
     }
@@ -5529,6 +5593,10 @@ bool KalaMain::loadProject(const QString &filePath)
     if (projectJson.contains("compositionSettings")) {
         CompositionSettings settings = CompositionSettings::fromJson(projectJson["compositionSettings"].toObject());
         scoreCanvasWindow->updateFromSettings(settings);
+        // Switch the audio engine to the project rate BEFORE tracks load so
+        // every graph built below is compiled at the right rate. Track
+        // rebuilds wait until after the render cache is restored (below).
+        applyProjectSampleRate(settings.sampleRate, /*rebuildTracks=*/false);
     }
 
     // Load container settings (preferences)
@@ -5720,6 +5788,23 @@ bool KalaMain::loadProject(const QString &filePath)
     int loadedRenders = RenderCache::loadFromFile(renderPath, trackManager->getTracks());
     if (loadedRenders >= 0) {
         qDebug() << "Loaded" << loadedRenders << "cached renders";
+    }
+
+    // The engine now runs at the project rate, but tracks load their graphs
+    // compiled at the rate the project was last saved with. Rebuild every
+    // track's graphs (base + variations) at the engine rate, preserving the
+    // graph hashes so the render cache loaded above stays valid - cached
+    // renders at a stale rate are caught by the sample-rate check and
+    // re-rendered in the background.
+    const unsigned int engineRate = audioEngine->getSampleRate();
+    for (int i = 0; i < trackManager->getTrackCount(); ++i) {
+        Track *track = trackManager->getTrack(i);
+        if (!track) continue;
+        const uint64_t savedHash = track->getGraphHash();
+        track->rebuildAllGraphsAtRate(engineRate);
+        track->setGraphHash(savedHash);
+        track->prepareClipForPlayback();
+        track->startBackgroundRender(engineRate);
     }
 
     // Rebuild UI
@@ -8330,9 +8415,16 @@ void KalaMain::populateSettingsTab()
     if (srIndex >= 0) sampleRateCombo->setCurrentIndex(srIndex);
     connect(sampleRateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, sampleRateCombo](int index) {
         CompositionSettings settings = scoreCanvasWindow->getSettings();
-        settings.sampleRate = sampleRateCombo->itemData(index).toInt();
+        const int newRate = sampleRateCombo->itemData(index).toInt();
+        const bool rateChanged = (newRate != settings.sampleRate);
+        settings.sampleRate = newRate;
         scoreCanvasWindow->updateFromSettings(settings);
         markProjectDirty();
+        // The audio engine follows the project rate: switching it restarts
+        // the audio device and re-renders notes at the new rate.
+        if (rateChanged) {
+            applyProjectSampleRate(newRate);
+        }
     });
     projectLayout->addRow("Sample Rate:", sampleRateCombo);
 

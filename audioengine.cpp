@@ -116,6 +116,58 @@ void AudioEngine::shutdown()
     std::cout << "AudioEngine shut down" << std::endl;
 }
 
+bool AudioEngine::setSampleRate(unsigned int newRate)
+{
+    // Nothing to do if the stream is already open at this rate.
+    if (initialized && newRate == sampleRate) {
+        return true;
+    }
+
+    // The engine never got a stream (no device at startup): a plain
+    // initialize attempt is the only sensible move here.
+    if (!initialized) {
+        return initialize(newRate);
+    }
+
+    // Don't fight a pending default-device switch - its 300 ms timer will
+    // reopen the stream at the current rate.
+    bool expected = false;
+    if (!m_deviceSwitchInProgress.compare_exchange_strong(expected, true)) {
+        std::cout << "AudioEngine: device switch in progress, sample rate change ignored" << std::endl;
+        return false;
+    }
+
+    const unsigned int oldRate = sampleRate;
+
+    // Stop every playback mode before closing the stream - same dance as
+    // onDefaultDeviceChanged().
+    useRenderBuffer.store(false);
+    useTrackPlayback.store(false);
+    gateOpen.store(false);
+    closeMidiOut();
+    emit playbackStopRequested();
+
+    shutdown();
+
+    if (initialize(newRate)) {
+        std::cout << "AudioEngine: switched to " << newRate << " Hz" << std::endl;
+        m_deviceSwitchInProgress.store(false);
+        return true;
+    }
+
+    // The device refused the new rate - fall back so playback still works.
+    // initialize() leaves sampleRate set to the requested value on failure,
+    // so reopen at the rate captured above.
+    std::cerr << "AudioEngine: could not open device at " << newRate
+              << " Hz, falling back to " << oldRate << " Hz" << std::endl;
+    if (!initialize(oldRate)) {
+        emit audioDeviceError(QString("Failed to reopen the audio device after a sample rate "
+                                      "change. Please restart the application."));
+    }
+    m_deviceSwitchInProgress.store(false);
+    return false;
+}
+
 bool AudioEngine::isRunning() const
 {
     return initialized && audioDevice.isStreamRunning();

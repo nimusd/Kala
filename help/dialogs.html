@@ -1361,7 +1361,9 @@ to user’s Music folder + project name + <code>.wav</code>.</td>
 <tr>
 <td>Sample Rate</td>
 <td>QLabel</td>
-<td>Shows the AudioEngine sample rate (e.g., “44100 Hz”)</td>
+<td>Shows the project sample rate (e.g., “48000 Hz”). The audio engine
+follows the project rate, so playback pre-renders are already at this rate
+and export normally needs no re-render.</td>
 </tr>
 <tr>
 <td>Bit Depth</td>

@@ -192,6 +192,10 @@ private:
     bool saveProject(const QString &filePath);  // Save project to file
     bool loadProject(const QString &filePath);  // Load project from file
     void newProject();                          // Create new empty project
+    // Make the audio engine follow the project sample rate: reopen the device
+    // at the given rate and (unless rebuildTracks is false) rebuild every
+    // track's graphs at that rate and re-render in the background.
+    void applyProjectSampleRate(int sampleRate, bool rebuildTracks = true);
     void updateWindowTitle();                   // Update title bar with project name and dirty state
     bool checkUnsavedChanges();                 // Prompt to save if dirty, returns false if cancelled
     void markProjectDirty();                    // Mark project as having unsaved changes
