@@ -326,7 +326,7 @@ KalaMain::KalaMain(QWidget *parent)
             this, &KalaMain::onNoteStartChanged);
     connect(ui->spinNoteDuration, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &KalaMain::onNoteDurationChanged);
-    connect(ui->spinNotePitch, QOverload<int>::of(&QSpinBox::valueChanged),
+    connect(ui->spinNotePitch, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &KalaMain::onNotePitchChanged);
     connect(ui->noteVariationComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &KalaMain::onNoteVariationChanged);
@@ -354,7 +354,8 @@ KalaMain::KalaMain(QWidget *parent)
     ui->spinNoteDuration->setRange(1.0, 60000.0);  // 1ms to 1 minute
     ui->spinNoteDuration->setDecimals(1);
     ui->spinNoteDuration->setSuffix(" ms");
-    ui->spinNotePitch->setRange(20, 20000);  // 20 Hz to 20 kHz
+    ui->spinNotePitch->setRange(20.0, 20000.0);  // 20 Hz to 20 kHz
+    ui->spinNotePitch->setDecimals(3);
     ui->spinNotePitch->setSuffix(" Hz");
 
     // Initialize note inspector as disabled (no selection)
@@ -5578,7 +5579,7 @@ bool KalaMain::loadProject(const QString &filePath)
         ScoreCanvas *sc = scoreCanvasWindow->getScoreCanvas();
 
         // Load default tempo/time signature
-        double defaultTempo = tempoJson["2defaultTempo"].toDouble(60.0);
+        double defaultTempo = tempoJson["defaultTempo"].toDouble(60.0);
         int defaultTimeSigNum = tempoJson["defaultTimeSigNum"].toInt(4);
         int defaultTimeSigDenom = tempoJson["defaultTimeSigDenom"].toInt(4);
         sc->setDefaultTempo(defaultTempo);
@@ -7894,7 +7895,7 @@ void KalaMain::updateNoteInspector()
         m_updatingNoteInspector = true;
         ui->spinNoteStart->setValue(0.0);
         ui->spinNoteDuration->setValue(0.0);
-        ui->spinNotePitch->setValue(0);
+        ui->spinNotePitch->setValue(0.0);
         ui->noteVariationComboBox->setCurrentIndex(-1);
         ui->checkNoteVibrato->setChecked(false);
         ui->comboExpressiveCurve->clear();
@@ -7927,7 +7928,7 @@ void KalaMain::updateNoteInspector()
 
     ui->spinNoteStart->setValue(note.getStartTime());
     ui->spinNoteDuration->setValue(note.getDuration());
-    ui->spinNotePitch->setValue(static_cast<int>(note.getPitchHz()));
+    ui->spinNotePitch->setValue(note.getPitchHz());
 
     // Set variation index (0 = base sounit, 1+ = variations)
     int varIndex = note.getVariationIndex();
@@ -8030,7 +8031,7 @@ void KalaMain::onNoteDurationChanged(double value)
     qDebug() << "KalaMain: Note duration changed to" << value << "ms";
 }
 
-void KalaMain::onNotePitchChanged(int value)
+void KalaMain::onNotePitchChanged(double value)
 {
     if (m_updatingNoteInspector) return;
 
@@ -8043,7 +8044,7 @@ void KalaMain::onNotePitchChanged(int value)
     for (int index : selectedIndices) {
         if (index >= 0 && index < notes.size()) {
             double oldVal = notes[index].getPitchHz();
-            double newVal = static_cast<double>(value);
+            double newVal = value;
             if (oldVal != newVal)
                 changes.append({index, oldVal, newVal});
         }

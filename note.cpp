@@ -365,6 +365,11 @@ void Note::removeEnvelopeControlPoints(const QString &curveName)
     m_envelopeControlPoints.remove(curveName);
 }
 
+QStringList Note::getEnvelopeCurveNames() const
+{
+    return m_envelopeControlPoints.keys();
+}
+
 QJsonObject Note::toJson() const
 {
     QJsonObject json;

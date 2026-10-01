@@ -462,7 +462,7 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QSpinBox" name="spinNotePitch"/>
+                   <widget class="QDoubleSpinBox" name="spinNotePitch"/>
                   </item>
                   <item>
                    <widget class="QLabel" name="noteVariationLabel">

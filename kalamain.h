@@ -281,7 +281,7 @@ private slots:
     void onNoteSelectionChanged();
     void onNoteStartChanged(double value);
     void onNoteDurationChanged(double value);
-    void onNotePitchChanged(int value);
+    void onNotePitchChanged(double value);
     void onNoteVariationChanged(int index);
     void onNoteVibratoToggled(bool checked);
     void onNoteVibratoEditClicked();

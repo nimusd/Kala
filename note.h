@@ -5,6 +5,7 @@
 #include "vibrato.h"
 #include "envelopelibraryDialog.h"
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -137,6 +138,8 @@ public:
     QVector<EnvelopePoint> getEnvelopeControlPoints(const QString &curveName) const;
     bool hasEnvelopeControlPoints(const QString &curveName) const;
     void removeEnvelopeControlPoints(const QString &curveName);
+    // Names of every curve that carries stored envelope editor control points.
+    QStringList getEnvelopeCurveNames() const;
 
     // Setters
     void setStartTime(double time) { startTime = time; }

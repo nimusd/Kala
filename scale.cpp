@@ -175,89 +175,92 @@ Scale Scale::quarterCommaMeantone()
 
 // ============================================================================
 // MAQAM SCALES (Arabic/Turkish/Middle Eastern)
+// 24-TET quarter-tone system: each quarter tone = 50 cents.
+// Ratios are 2^(q/24) where q = quarter-tone count from the tonic.
 // ============================================================================
 
 Scale Scale::maqamRast()
 {
-    // Maqam Rast: C D E♭+ F G A B♭+ C
-    // Using Turkish/Arabic quarter-tone approximations
+    // Maqam Rast: C D E♭+ F G A B♭+ C (E♭+, B♭+ = half-flat, 3/4-tone steps)
     QVector<double> ratios = {
-        1.0,            // C (Rast)
-        9.0/8.0,        // D
-        5.0/4.0,        // E (slightly flat in practice, but using 5/4)
-        4.0/3.0,        // F
-        3.0/2.0,        // G (Nawa)
-        27.0/16.0,      // A
-        15.0/8.0        // B
+        1.0,                       // C        (0¢)
+        std::pow(2.0, 4.0/24.0),   // D        (200¢)
+        std::pow(2.0, 7.0/24.0),   // E♭+      (350¢, half-flat)
+        std::pow(2.0, 10.0/24.0),  // F        (500¢)
+        std::pow(2.0, 14.0/24.0),  // G (Nawa) (700¢)
+        std::pow(2.0, 18.0/24.0),  // A        (900¢)
+        std::pow(2.0, 21.0/24.0)   // B♭+      (1050¢, half-flat)
     };
-    QVector<QString> names = {"C", "D", "E", "F", "G", "A", "B"};
+    QVector<QString> names = {"C", "D", "Eb+", "F", "G", "A", "Bb+"};
     return Scale("Maqam Rast", 4, ratios, names);
 }
 
 Scale Scale::maqamBayati()
 {
-    // Maqam Bayati: D E♭ F G A B♭ C D
-    // Transposed to start on C: C D♭+ E♭ F G A♭+ B♭ C
+    // Maqam Bayati: D E♭+ F G A B♭ C D
+    // Transposed to start on C: C D♭+ E♭ F G A♭ B♭ C
+    // Signature: half-flat 2nd (150¢) and full-flat 6th (800¢)
     QVector<double> ratios = {
-        1.0,            // C
-        16.0/15.0,      // D♭ (quarter-tone approximation)
-        6.0/5.0,        // E♭
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        8.0/5.0,        // A♭
-        9.0/5.0         // B♭
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 3.0/24.0),   // D♭+  (150¢, half-flat)
+        std::pow(2.0, 6.0/24.0),   // E♭   (300¢)
+        std::pow(2.0, 10.0/24.0),  // F    (500¢)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 16.0/24.0),  // A♭   (800¢)
+        std::pow(2.0, 20.0/24.0)   // B♭   (1000¢)
     };
-    QVector<QString> names = {"C", "Db+", "Eb", "F", "G", "Ab+", "Bb"};
+    QVector<QString> names = {"C", "Db+", "Eb", "F", "G", "Ab", "Bb"};
     return Scale("Maqam Bayati", 5, ratios, names);
 }
 
 Scale Scale::maqamSaba()
 {
-    // Maqam Saba: D E♭- E F♭+ G♭ A♭ B♭ C D
-    // Complex scale with many microtones
+    // Maqam Saba: D E♭+ F G♭ A♭ B♭ C D
+    // Transposed to start on C: C D♭+ E♭ E G♭ A♭ B♭ C
+    // Steps: 3/4, 3/4, 1/2, 1, 1, 1, 1 tones
     QVector<double> ratios = {
-        1.0,            // D (starting note, transposed to C)
-        16.0/15.0,      // E♭-
-        6.0/5.0,        // E (natural)
-        27.0/20.0,      // F#+
-        45.0/32.0,      // G
-        8.0/5.0,        // A♭
-        9.0/5.0,        // B♭
-        15.0/8.0        // C#
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 3.0/24.0),   // D♭+  (150¢, half-flat)
+        std::pow(2.0, 6.0/24.0),   // E♭   (300¢)
+        std::pow(2.0, 8.0/24.0),   // E    (400¢)
+        std::pow(2.0, 12.0/24.0),  // G♭   (600¢)
+        std::pow(2.0, 16.0/24.0),  // A♭   (800¢)
+        std::pow(2.0, 20.0/24.0)   // B♭   (1000¢)
     };
-    QVector<QString> names = {"C", "Db", "Eb", "E", "F#", "Ab", "Bb", "C#"};
+    QVector<QString> names = {"C", "Db+", "Eb", "E", "Gb", "Ab", "Bb"};
     return Scale("Maqam Saba", 6, ratios, names);
 }
 
 Scale Scale::maqamHijaz()
 {
     // Maqam Hijaz: D E♭ F# G A B♭ C D
-    // Characteristic augmented 2nd between E♭ and F#
+    // Transposed to start on C: C D♭ E F G A♭ B♭ C
+    // Characteristic augmented 2nd (300¢) between D♭ and E
     QVector<double> ratios = {
-        1.0,            // C
-        16.0/15.0,      // D♭
-        5.0/4.0,        // E
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        8.0/5.0,        // A♭
-        15.0/8.0        // B
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 2.0/24.0),   // D♭   (100¢)
+        std::pow(2.0, 8.0/24.0),   // E    (400¢)
+        std::pow(2.0, 10.0/24.0),  // F    (500¢)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 16.0/24.0),  // A♭   (800¢)
+        std::pow(2.0, 20.0/24.0)   // B♭   (1000¢)
     };
-    QVector<QString> names = {"C", "Db", "E", "F", "G", "Ab", "B"};
+    QVector<QString> names = {"C", "Db", "E", "F", "G", "Ab", "Bb"};
     return Scale("Maqam Hijaz", 7, ratios, names);
 }
 
 Scale Scale::maqamNahawand()
 {
-    // Maqam Nahawand: similar to natural minor
+    // Maqam Nahawand: equivalent to natural minor
     // C D E♭ F G A♭ B C
     QVector<double> ratios = {
-        1.0,            // C
-        9.0/8.0,        // D
-        6.0/5.0,        // E♭
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        8.0/5.0,        // A♭
-        15.0/8.0        // B
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 4.0/24.0),   // D    (200¢)
+        std::pow(2.0, 6.0/24.0),   // E♭   (300¢)
+        std::pow(2.0, 10.0/24.0),  // F    (500¢)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 16.0/24.0),  // A♭   (800¢)
+        std::pow(2.0, 22.0/24.0)   // B    (1100¢)
     };
     QVector<QString> names = {"C", "D", "Eb", "F", "G", "Ab", "B"};
     return Scale("Maqam Nahawand", 8, ratios, names);
@@ -268,13 +271,13 @@ Scale Scale::maqamKurd()
     // Maqam Kurd: C D♭ E♭ F G A♭ B♭ C
     // Similar to Phrygian mode
     QVector<double> ratios = {
-        1.0,            // C
-        16.0/15.0,      // D♭
-        6.0/5.0,        // E♭
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        8.0/5.0,        // A♭
-        9.0/5.0         // B♭
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 2.0/24.0),   // D♭   (100¢)
+        std::pow(2.0, 6.0/24.0),   // E♭   (300¢)
+        std::pow(2.0, 10.0/24.0),  // F    (500¢)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 16.0/24.0),  // A♭   (800¢)
+        std::pow(2.0, 20.0/24.0)   // B♭   (1000¢)
     };
     QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "Bb"};
     return Scale("Maqam Kurd", 9, ratios, names);
@@ -590,18 +593,18 @@ Scale Scale::ragaPurvi()
 
 Scale Scale::maqamSikah()
 {
-    // Maqam Sikah: built on a neutral (3/4-flat) 3rd degree
-    // 12/11 (~151 cents) approximates the characteristic 3/4-tone step
+    // Maqam Sikah: built on the half-flat 3rd degree (350¢, the "sikah" note)
+    // C D♭+ E♭+ F+ G A♭+ B♭+ C — 3/4, 1, 1, 3/4, 3/4, 1, 3/4 tones
     QVector<double> ratios = {
-        1.0,            // C
-        12.0/11.0,      // D♭+ (~150 cents, 3/4-tone step)
-        6.0/5.0,        // E♭
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        8.0/5.0,        // A♭
-        9.0/5.0         // B♭
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 3.0/24.0),   // D♭+  (150¢, half-flat)
+        std::pow(2.0, 7.0/24.0),   // E♭+  (350¢, half-flat — sikah)
+        std::pow(2.0, 11.0/24.0),  // F+   (550¢, half-sharp)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 17.0/24.0),  // A♭+  (850¢, half-flat)
+        std::pow(2.0, 21.0/24.0)   // B♭+  (1050¢, half-flat)
     };
-    QVector<QString> names = {"C", "D♭+", "E♭", "F", "G", "A♭", "B♭"};
+    QVector<QString> names = {"C", "D♭+", "E♭+", "F+", "G", "A♭+", "B♭+"};
     return Scale("Maqam Sikah", 27, ratios, names);
 }
 
@@ -610,13 +613,13 @@ Scale Scale::maqamAjam()
     // Maqam Ajam: major tetrachord character with minor 7th
     // C D E F G A Bb
     QVector<double> ratios = {
-        1.0,            // C
-        9.0/8.0,        // D
-        5.0/4.0,        // E
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        5.0/3.0,        // A
-        9.0/5.0         // Bb
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 4.0/24.0),   // D    (200¢)
+        std::pow(2.0, 8.0/24.0),   // E    (400¢)
+        std::pow(2.0, 10.0/24.0),  // F    (500¢)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 18.0/24.0),  // A    (900¢)
+        std::pow(2.0, 20.0/24.0)   // B♭   (1000¢)
     };
     QVector<QString> names = {"C", "D", "E", "F", "G", "A", "Bb"};
     return Scale("Maqam Ajam", 28, ratios, names);
@@ -625,15 +628,15 @@ Scale Scale::maqamAjam()
 Scale Scale::maqamAtharKurd()
 {
     // Maqam Athar Kurd: Kurd lower tetrachord + Athar upper tetrachord
-    // C Db Eb F G Ab B — augmented 2nd between Ab and B
+    // C Db Eb F G Ab B — augmented 2nd (300¢) between Ab and B
     QVector<double> ratios = {
-        1.0,            // C
-        16.0/15.0,      // Db
-        6.0/5.0,        // Eb
-        4.0/3.0,        // F
-        3.0/2.0,        // G
-        8.0/5.0,        // Ab
-        15.0/8.0        // B (augmented 2nd above Ab)
+        1.0,                       // C    (0¢)
+        std::pow(2.0, 2.0/24.0),   // D♭   (100¢)
+        std::pow(2.0, 6.0/24.0),   // E♭   (300¢)
+        std::pow(2.0, 10.0/24.0),  // F    (500¢)
+        std::pow(2.0, 14.0/24.0),  // G    (700¢)
+        std::pow(2.0, 16.0/24.0),  // A♭   (800¢)
+        std::pow(2.0, 22.0/24.0)   // B    (1100¢)
     };
     QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "B"};
     return Scale("Maqam Athar Kurd", 29, ratios, names);

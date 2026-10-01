@@ -59,6 +59,9 @@ public:
     void addScaleChange(double timeMs, const Scale &scale, double baseFreq);
     void removeScaleChange(double timeMs);
     void clearScaleChanges();
+    // Replace the whole modulation map (undo/redo of retrograde's mirrored
+    // modulations). No signal — callers emit scaleSettingsChanged themselves.
+    void setScaleChanges(const QMap<double, QPair<Scale, double>> &changes);
     Scale getScaleAtTime(double timeMs) const;
     double getBaseFrequencyAtTime(double timeMs) const;
     QMap<double, QPair<Scale, double>> getScaleChanges() const { return scaleChanges; }
@@ -147,6 +150,13 @@ public:
         const Scale &oldScale, double oldBaseFreq,
         const Scale &newScale, double newBaseFreq);
     void applyNotePitchChanges(const QVector<NotePitchChange> &changes, bool forward);
+    // Remap a single pitch across a scale change, preserving scale degree and
+    // octave (same policy as remapDiscreteNotesForModulation). Shared by
+    // modulation edits and the Retrograde command so retrograded notes land
+    // quantized to the scale in effect at their new position.
+    double remapPitchAcrossScales(double pitchHz,
+                                  const Scale &oldScale, double oldBaseFreq,
+                                  const Scale &newScale, double newBaseFreq) const;
 
     // Pitch curve quantization (public so SnapToScaleCommand can call it)
     Curve quantizePitchCurveToScale(const Curve &pitchCurve, const Note &note) const;

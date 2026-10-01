@@ -1,0 +1,6 @@
+kala bugs
+
+
+anima doesn't understand what the end of the piece means. She thinks it is the end of where there is notation and not the composition length in time as set in the "projects settings/audio settings/ duration" in the sound engine settings tab. 
+
+the colors of the track are not the same on the score tab and in the score canvas except for the first track. When I create a track it assigns a color and when I load a sounit into it the color in the score canvas changes but not the one in the Tracks/mixer of the score tab but when I reload later all colors are ok

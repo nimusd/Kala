@@ -467,6 +467,7 @@ void ScoreCanvasWindow::setupCompositionSettings()
 
     kalaPulsesSpin = new QSpinBox(this);
     kalaPulsesSpin->setRange(1, 99);
+    kalaPulsesSpin->setKeyboardTracking(false);
     kalaPulsesSpin->setValue(cachedKalaPulses);
     kalaPulsesSpin->setMinimumWidth(50);
     kalaPulsesSpin->setFocusPolicy(Qt::StrongFocus);
@@ -477,6 +478,7 @@ void ScoreCanvasWindow::setupCompositionSettings()
 
     kalaDurationSpin = new QSpinBox(this);
     kalaDurationSpin->setRange(1, 60000);
+    kalaDurationSpin->setKeyboardTracking(false);
     kalaDurationSpin->setValue(cachedKalaDurationMs);
     kalaDurationSpin->setMinimumWidth(70);
     kalaDurationSpin->setFocusPolicy(Qt::StrongFocus);
@@ -494,6 +496,7 @@ void ScoreCanvasWindow::setupCompositionSettings()
 
     westernTempoSpin = new QSpinBox(this);
     westernTempoSpin->setRange(1, 300);
+    westernTempoSpin->setKeyboardTracking(false);
     westernTempoSpin->setValue(cachedWesternTempo);
     westernTempoSpin->setSuffix(" BPM");
     westernTempoSpin->setMinimumWidth(80);
@@ -505,6 +508,7 @@ void ScoreCanvasWindow::setupCompositionSettings()
 
     westernNumSpin = new QSpinBox(this);
     westernNumSpin->setRange(1, 99);
+    westernNumSpin->setKeyboardTracking(false);
     westernNumSpin->setValue(cachedWesternNum);
     westernNumSpin->setMinimumWidth(50);
     westernNumSpin->setFocusPolicy(Qt::StrongFocus);
@@ -515,6 +519,7 @@ void ScoreCanvasWindow::setupCompositionSettings()
 
     westernDenSpin = new QSpinBox(this);
     westernDenSpin->setRange(0, 99);
+    westernDenSpin->setKeyboardTracking(false);
     westernDenSpin->setValue(cachedWesternDen);
     westernDenSpin->setMinimumWidth(50);
     westernDenSpin->setFocusPolicy(Qt::StrongFocus);
@@ -2392,12 +2397,14 @@ void ScoreCanvasWindow::onTimeSettingsChanged()
 
     double nowTime = timeline->getNowMarker();
     int newTempo, newTop, newBottom;
+    double exactTempo = 0.0;  // Exact (unrounded) BPM stored on the canvas
 
     if (timeSignatureModeCombo->currentIndex() == 0) {
         // Kala mode: tempo derived from pulse duration
         newTop = kalaPulsesSpin->value();
         newBottom = 0;
-        newTempo = static_cast<int>(60000.0 / kalaDurationSpin->value());
+        exactTempo = 60000.0 / kalaDurationSpin->value();
+        newTempo = qRound(exactTempo);
         if (newTempo < 1) newTempo = 1;
         if (newTempo > 300) newTempo = 300;
 
@@ -2408,6 +2415,7 @@ void ScoreCanvasWindow::onTimeSettingsChanged()
         newTempo = westernTempoSpin->value();
         newTop = westernNumSpin->value();
         newBottom = westernDenSpin->value();
+        exactTempo = newTempo;
 
         cachedWesternTempo = newTempo;
         cachedWesternNum = newTop;
@@ -2419,13 +2427,13 @@ void ScoreCanvasWindow::onTimeSettingsChanged()
 
     // Update the marker at the current position (or default at time 0)
     if (nowTime == 0.0) {
-        scoreCanvas->setDefaultTempo(newTempo);
+        scoreCanvas->setDefaultTempo(exactTempo);
         scoreCanvas->setDefaultTimeSignature(newTop, newBottom);
         compositionSettings.tempo = newTempo;
         compositionSettings.referenceTempo = newTempo;
     } else {
         TempoTimeSignature tts = scoreCanvas->getTempoTimeSignatureAtTime(nowTime);
-        tts.bpm = newTempo;
+        tts.bpm = exactTempo;
         tts.timeSigNumerator = newTop;
         tts.timeSigDenominator = newBottom;
         scoreCanvas->addTempoChange(nowTime, tts);
@@ -2470,14 +2478,14 @@ void ScoreCanvasWindow::onNowMarkerChanged(double timeMs)
     westernNumSpin->blockSignals(true);
     westernDenSpin->blockSignals(true);
 
-    int tempo = static_cast<int>(tts.bpm);
+    int tempo = qRound(tts.bpm);
 
     if (tts.timeSigDenominator == 0) {
         // Kala mode
         timeSignatureModeCombo->setCurrentIndex(0);
         timeSigStack->setCurrentIndex(0);
         kalaPulsesSpin->setValue(tts.timeSigNumerator);
-        kalaDurationSpin->setValue(static_cast<int>(60000.0 / tempo));
+        kalaDurationSpin->setValue(qMax(1, qRound(60000.0 / tts.bpm)));
     } else {
         // Western mode
         timeSignatureModeCombo->setCurrentIndex(1);

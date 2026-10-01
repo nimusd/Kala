@@ -1043,6 +1043,12 @@ private:
     QVector<int> m_insertedIndices;
     ScoreCanvas *m_canvas;
 
+    // Mirrored modulations: timeline before/after, and the pitch changes the
+    // mirror caused to pre-existing notes.
+    QMap<double, QPair<Scale, double>> m_oldScaleChanges;
+    QMap<double, QPair<Scale, double>> m_newScaleChanges;
+    QVector<ScoreCanvas::NotePitchChange> m_pitchChanges;
+
     static Curve reverseCurve(const Curve &curve);
 };
 

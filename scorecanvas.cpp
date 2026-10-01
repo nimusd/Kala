@@ -218,6 +218,13 @@ void ScoreCanvas::clearScaleChanges()
     update();
 }
 
+void ScoreCanvas::setScaleChanges(const QMap<double, QPair<Scale, double>> &changes)
+{
+    scaleChanges = changes;
+    generateScaleLines();
+    update();
+}
+
 Scale ScoreCanvas::getScaleAtTime(double timeMs) const
 {
     // Find the most recent scale change before or at this time
@@ -828,9 +835,6 @@ QVector<ScoreCanvas::NotePitchChange> ScoreCanvas::remapDiscreteNotesForModulati
         nextModulationTime = it.key();
     }
 
-    // Generate old scale lines to match against
-    QVector<ScaleLine> oldLines = generateScaleLinesForScale(oldScale, oldBaseFreq);
-
     const QVector<Note> &notes = phrase.getNotes();
     for (int i = 0; i < notes.size(); ++i) {
         const Note &note = notes[i];
@@ -841,36 +845,8 @@ QVector<ScoreCanvas::NotePitchChange> ScoreCanvas::remapDiscreteNotesForModulati
         if (note.hasPitchCurve()) continue;
 
         double pitchHz = note.getPitchHz();
-
-        // Find closest old scale line
-        double closestDist = std::numeric_limits<double>::max();
-        int closestDegree = 0;  // 0-based
-        int closestOctave = 0;
-
-        int degreeCount = oldScale.getDegreeCount();
-        for (const ScaleLine &line : oldLines) {
-            double dist = std::abs(pitchHz - line.frequencyHz);
-            if (dist < closestDist) {
-                closestDist = dist;
-                closestDegree = line.scaleDegree - 1;  // Convert 1-based to 0-based
-
-                // Determine octave: line.frequencyHz = oldBaseFreq * 2^octave * ratio
-                double ratio = oldScale.getRatio(closestDegree);
-                if (ratio > 0) {
-                    double octaveFloat = std::log2(line.frequencyHz / (oldBaseFreq * ratio));
-                    closestOctave = static_cast<int>(std::round(octaveFloat));
-                }
-            }
-        }
-
-        // Compute new frequency at same degree + octave in new scale
-        int newDegreeCount = newScale.getDegreeCount();
-        int mappedDegree = closestDegree;
-        if (mappedDegree >= newDegreeCount) {
-            mappedDegree = newDegreeCount - 1;  // Clamp if new scale has fewer degrees
-        }
-
-        double newHz = newBaseFreq * std::pow(2.0, closestOctave) * newScale.getRatio(mappedDegree);
+        double newHz = remapPitchAcrossScales(pitchHz, oldScale, oldBaseFreq,
+                                              newScale, newBaseFreq);
 
         if (std::abs(newHz - pitchHz) > 0.001) {
             NotePitchChange change;
@@ -882,6 +858,42 @@ QVector<ScoreCanvas::NotePitchChange> ScoreCanvas::remapDiscreteNotesForModulati
     }
 
     return changes;
+}
+
+double ScoreCanvas::remapPitchAcrossScales(double pitchHz,
+                                           const Scale &oldScale, double oldBaseFreq,
+                                           const Scale &newScale, double newBaseFreq) const
+{
+    // Find the closest line in the old scale
+    QVector<ScaleLine> oldLines = generateScaleLinesForScale(oldScale, oldBaseFreq);
+
+    double closestDist = std::numeric_limits<double>::max();
+    int closestDegree = 0;  // 0-based
+    int closestOctave = 0;
+
+    for (const ScaleLine &line : oldLines) {
+        double dist = std::abs(pitchHz - line.frequencyHz);
+        if (dist < closestDist) {
+            closestDist = dist;
+            closestDegree = line.scaleDegree - 1;  // Convert 1-based to 0-based
+
+            // Determine octave: line.frequencyHz = oldBaseFreq * 2^octave * ratio
+            double ratio = oldScale.getRatio(closestDegree);
+            if (ratio > 0) {
+                double octaveFloat = std::log2(line.frequencyHz / (oldBaseFreq * ratio));
+                closestOctave = static_cast<int>(std::round(octaveFloat));
+            }
+        }
+    }
+
+    // Compute new frequency at same degree + octave in the new scale
+    int newDegreeCount = newScale.getDegreeCount();
+    int mappedDegree = closestDegree;
+    if (mappedDegree >= newDegreeCount) {
+        mappedDegree = newDegreeCount - 1;  // Clamp if new scale has fewer degrees
+    }
+
+    return newBaseFreq * std::pow(2.0, closestOctave) * newScale.getRatio(mappedDegree);
 }
 
 void ScoreCanvas::applyNotePitchChanges(const QVector<NotePitchChange> &changes, bool forward)

@@ -788,6 +788,21 @@ void PasteNotesCommand::redo()
         pastedNote.setTrackIndex(m_targetTrackIndex);
         pastedNote.setRenderDirty(true);
 
+        // Re-quantize discrete notes to the scale in effect at their new
+        // position, so a paste crossing a scale modulation lands on the staff.
+        if (!note.hasPitchCurve()) {
+            Scale oldScale = m_canvas->getScaleAtTime(note.getStartTime());
+            double oldBase = m_canvas->getBaseFrequencyAtTime(note.getStartTime());
+            Scale newScale = m_canvas->getScaleAtTime(pastedNote.getStartTime());
+            double newBase = m_canvas->getBaseFrequencyAtTime(pastedNote.getStartTime());
+            if (oldScale.getScaleId() != newScale.getScaleId()
+                || oldBase != newBase
+                || oldScale.getCentOffsets() != newScale.getCentOffsets()) {
+                pastedNote.setPitchHz(m_canvas->remapPitchAcrossScales(
+                    note.getPitchHz(), oldScale, oldBase, newScale, newBase));
+            }
+        }
+
         // Add note and track its index
         int insertIndex = phraseNotes.size();
         m_phrase->addNote(pastedNote);
@@ -3465,7 +3480,75 @@ RetrogradeNotesCommand::RetrogradeNotesCommand(Phrase *phrase, const QVector<Not
         if (ns < selectionStart) selectionStart = ns;
         if (ne > selectionEnd) selectionEnd = ne;
     }
-    double selectionDuration = selectionEnd - selectionStart;
+    // Snapshot the timeline's scale modulations, then mirror the ones inside
+    // the selection span into the retrograded passage: a modulation at t
+    // reappears at targetTime + (selectionEnd - t) carrying the scale that was
+    // active just before t. The passage's opening scale (the scale it closed
+    // on) is inserted at targetTime. Existing markers are never overwritten.
+    m_oldScaleChanges = m_canvas->getScaleChanges();
+    m_newScaleChanges = m_oldScaleChanges;
+
+    const QPair<Scale, double> defaultPair =
+        qMakePair(m_canvas->getCurrentScale(), m_canvas->getBaseFrequency());
+
+    auto samePair = [](const QPair<Scale, double> &a, const QPair<Scale, double> &b) {
+        return a.first.getScaleId() == b.first.getScaleId()
+            && a.second == b.second
+            && a.first.getCentOffsets() == b.first.getCentOffsets();
+    };
+    // Pair in effect at time t: the latest marker at or before t.
+    auto pairAt = [&defaultPair](const QMap<double, QPair<Scale, double>> &map, double t) {
+        auto it = map.upperBound(t);
+        if (it == map.begin()) return defaultPair;
+        --it;
+        return it.value();
+    };
+    // Pair in effect strictly before t.
+    auto pairBefore = [&defaultPair](const QMap<double, QPair<Scale, double>> &map, double t) {
+        auto it = map.lowerBound(t);
+        if (it == map.begin()) return defaultPair;
+        --it;
+        return it.value();
+    };
+
+    for (auto it = m_oldScaleChanges.constBegin(); it != m_oldScaleChanges.constEnd(); ++it) {
+        double t = it.key();
+        if (t <= selectionStart || t >= selectionEnd) continue;
+        double mirroredTime = m_targetTime + (selectionEnd - t);
+        if (m_newScaleChanges.contains(mirroredTime)) continue;  // never clobber
+        QPair<Scale, double> pre = pairBefore(m_oldScaleChanges, t);
+        if (samePair(pairAt(m_newScaleChanges, mirroredTime), pre)) continue;  // already in effect
+        m_newScaleChanges.insert(mirroredTime, pre);
+    }
+
+    // Opening marker: the retrograde opens under the scale the original
+    // passage closed with. Skipped at time 0 (the default scale lives there).
+    QPair<Scale, double> pairLast = pairBefore(m_oldScaleChanges, selectionEnd);
+    if (m_targetTime > 0
+        && !m_newScaleChanges.contains(m_targetTime)
+        && !samePair(pairAt(m_newScaleChanges, m_targetTime), pairLast)) {
+        m_newScaleChanges.insert(m_targetTime, pairLast);
+    }
+
+    // Where the mirrored modulations changed the active scale, re-quantize
+    // pre-existing discrete notes so the whole score stays on the staff.
+    const QVector<Note> &notes = m_phrase->getNotes();
+    for (int i = 0; i < notes.size(); ++i) {
+        const Note &note = notes[i];
+        if (note.hasPitchCurve()) continue;
+        QPair<Scale, double> oldPair = pairAt(m_oldScaleChanges, note.getStartTime());
+        QPair<Scale, double> newPair = pairAt(m_newScaleChanges, note.getStartTime());
+        if (samePair(oldPair, newPair)) continue;
+        double newHz = m_canvas->remapPitchAcrossScales(
+            note.getPitchHz(), oldPair.first, oldPair.second, newPair.first, newPair.second);
+        if (std::abs(newHz - note.getPitchHz()) > 0.001) {
+            ScoreCanvas::NotePitchChange change;
+            change.noteIndex = i;
+            change.oldPitchHz = note.getPitchHz();
+            change.newPitchHz = newHz;
+            m_pitchChanges.append(change);
+        }
+    }
 
     // Build retrograded notes: mirror each note's position within the span
     for (const Note &note : selectedNotes) {
@@ -3481,6 +3564,35 @@ RetrogradeNotesCommand::RetrogradeNotesCommand(Phrase *phrase, const QVector<Not
         }
         retNote.setTrackIndex(m_targetTrackIndex);
         retNote.setRenderDirty(true);
+
+        // Re-quantize discrete notes to the scale in effect at their new
+        // position under the merged timeline. With the mirrored modulations
+        // in place this is a no-op in the clean case (exact mirror); it only
+        // adapts pitches where the destination's own modulations differ.
+        if (!note.hasPitchCurve()) {
+            QPair<Scale, double> oldPair = pairAt(m_oldScaleChanges, note.getStartTime());
+            QPair<Scale, double> newPair = pairAt(m_newScaleChanges, retNote.getStartTime());
+            if (!samePair(oldPair, newPair)) {
+                retNote.setPitchHz(m_canvas->remapPitchAcrossScales(
+                    note.getPitchHz(), oldPair.first, oldPair.second,
+                    newPair.first, newPair.second));
+            }
+        }
+
+        // Reverse stored envelope editor shapes so the curve dialogs reload
+        // the mirrored shape (the playback curves are reversed below).
+        const QStringList envNames = retNote.getEnvelopeCurveNames();
+        for (const QString &name : envNames) {
+            const QVector<EnvelopePoint> pts = retNote.getEnvelopeControlPoints(name);
+            QVector<EnvelopePoint> mirrored;
+            mirrored.reserve(pts.size());
+            for (int i = pts.size() - 1; i >= 0; --i) {
+                EnvelopePoint p = pts[i];
+                p.time = 1.0 - p.time;
+                mirrored.append(p);
+            }
+            retNote.setEnvelopeControlPoints(name, mirrored);
+        }
 
         // Reverse internal curves
         retNote.getDynamicsCurve() = reverseCurve(note.getDynamicsCurve());
@@ -3511,6 +3623,7 @@ Curve RetrogradeNotesCommand::reverseCurve(const Curve &curve)
 
 void RetrogradeNotesCommand::undo()
 {
+    // Remove the retrograded notes (reverse order keeps stored indices valid)
     QVector<Note> &notes = m_phrase->getNotes();
     for (int i = m_insertedIndices.size() - 1; i >= 0; --i) {
         int index = m_insertedIndices[i];
@@ -3518,12 +3631,27 @@ void RetrogradeNotesCommand::undo()
             notes.removeAt(index);
         }
     }
+
+    // Revert the re-quantization the mirrored modulations caused
+    m_canvas->applyNotePitchChanges(m_pitchChanges, false);
+
+    // Remove the mirrored modulations
+    m_canvas->setScaleChanges(m_oldScaleChanges);
+    emit m_canvas->scaleSettingsChanged();
+
     m_canvas->update();
 }
 
 void RetrogradeNotesCommand::redo()
 {
     if (m_retrogradeNotes.isEmpty()) return;
+
+    // Install the mirrored modulations first
+    m_canvas->setScaleChanges(m_newScaleChanges);
+    emit m_canvas->scaleSettingsChanged();
+
+    // Keep pre-existing notes on the staff under the new modulations
+    m_canvas->applyNotePitchChanges(m_pitchChanges, true);
 
     QVector<Note> &phraseNotes = m_phrase->getNotes();
     m_insertedIndices.clear();
