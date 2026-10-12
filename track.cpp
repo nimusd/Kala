@@ -1474,8 +1474,158 @@ void Track::detectNoteChangesAndInvalidate()
 
 // ========== Note-Based Rendering (New System) ==========
 
+// ========== Legato chains ==========
+
+// True when `next` starts inside the continuation window after `prev`'s end.
+// Mirrors the "a legato note follows" scan in renderNoteImpl, so the score-side
+// view of a chain matches what the renderer does.
+static bool legatoConnects(const Note &prev, const Note &next)
+{
+    const double window = std::max(200.0, prev.getDuration() * 0.1);
+    const double timeDiff = prev.getEndTime() - next.getStartTime();
+    return timeDiff > -50.0 && timeDiff < window;
+}
+
+QVector<Track::LegatoChainInfo> Track::computeLegatoChains(const QList<Note> &notes)
+{
+    const int n = notes.size();
+    QVector<LegatoChainInfo> info(n);
+
+    // Start-time order (stable so equal starts keep list order).
+    QVector<int> order(n);
+    for (int i = 0; i < n; ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&notes](int a, int b) {
+        return notes[a].getStartTime() < notes[b].getStartTime();
+    });
+
+    // Who continues whom: the predecessor is the closest earlier note on the
+    // same variation (same graph = same state to continue from).
+    QHash<int, int> lastOfVariation;   // variationIndex -> list index of its last note
+    for (int k = 0; k < n; ++k) {
+        const int idx = order[k];
+        const Note &note = notes[idx];
+
+        const int prevIdx = lastOfVariation.value(note.getVariationIndex(), -1);
+        if (prevIdx >= 0 && note.isLegato() && legatoConnects(notes[prevIdx], note)) {
+            info[idx].isContinuation = true;
+            info[idx].chainFirst = info[prevIdx].chainFirst >= 0
+                                   ? info[prevIdx].chainFirst : prevIdx;
+        } else {
+            info[idx].chainFirst = idx;
+        }
+        info[idx].chainLast = idx;
+        lastOfVariation[note.getVariationIndex()] = idx;
+    }
+
+    // A chain ends at its latest member.
+    for (int idx = 0; idx < n; ++idx) {
+        if (!info[idx].isContinuation) continue;
+        const int head = info[idx].chainFirst;
+        if (notes[idx].getStartTime() >= notes[info[head].chainLast].getStartTime())
+            info[head].chainLast = idx;
+    }
+    for (int idx = 0; idx < n; ++idx) {
+        if (info[idx].isContinuation)
+            info[idx].chainLast = info[info[idx].chainFirst].chainLast;
+    }
+
+    return info;
+}
+
+uint64_t Track::effectiveNoteHash(const QList<Note> &notes, int index)
+{
+    return effectiveNoteHash(notes, index, computeLegatoChains(notes));
+}
+
+uint64_t Track::effectiveNoteHash(const QList<Note> &notes, int index,
+                                  const QVector<LegatoChainInfo> &chains)
+{
+    if (index < 0 || index >= notes.size()) return 0;
+    if (index >= chains.size() || chains[index].chainFirst < 0)
+        return notes[index].computeHash();
+
+    // Fold in the whole chain: state accumulates across its members, so any
+    // edit inside the chain invalidates every member of it. FNV-1a style
+    // (same basis as Note::computeHash) — a plain XOR fold would cancel a
+    // chain-of-one's own hash down to zero and freeze its cached render.
+    const int head = chains[index].chainFirst;
+    QVector<int> members;
+    for (int i = 0; i < notes.size(); ++i)
+        if (chains[i].chainFirst == head) members.append(i);
+    std::sort(members.begin(), members.end(), [&notes](int a, int b) {
+        return notes[a].getStartTime() < notes[b].getStartTime();
+    });
+
+    uint64_t hash = 14695981039346656037ULL;  // FNV offset basis
+    const uint64_t prime = 1099511628211ULL;
+    for (int m = 0; m < members.size(); ++m) {
+        hash ^= notes[members[m]].computeHash();
+        hash *= prime;
+
+        // Relative gaps to the neighbours decide whether the connection still
+        // holds (the release/tail decisions ride on them). Relative, so
+        // dragging the whole chain — a pure time shift — needs no re-render.
+        if (m > 0) {
+            const double gapPrevMs = (notes[members[m - 1]].getEndTime()
+                                      - notes[members[m]].getStartTime()) * 1000.0;
+            hash ^= static_cast<uint64_t>(static_cast<qint64>(std::llround(gapPrevMs)));
+            hash *= prime;
+        }
+        if (m + 1 < members.size()) {
+            const double gapNextMs = (notes[members[m]].getEndTime()
+                                      - notes[members[m + 1]].getStartTime()) * 1000.0;
+            hash ^= static_cast<uint64_t>(static_cast<qint64>(std::llround(gapNextMs)));
+            hash *= prime;
+        }
+    }
+
+    return hash;
+}
+
+QVector<Track::RenderTask> Track::buildRenderTasks(const QList<Note> &notes,
+                                                   const QVector<char> &needsRender,
+                                                   const QVector<LegatoChainInfo> &chains)
+{
+    QVector<RenderTask> tasks;
+
+    // One task per legato chain that has a stale member. The whole chain is
+    // re-rendered in order — engine state carries from note to note, so a
+    // member cannot be rendered on its own.
+    QVector<int> chainsToRender;
+    for (int i = 0; i < notes.size(); ++i) {
+        if (i >= needsRender.size() || !needsRender[i]) continue;
+        const int head = chains[i].chainFirst;
+        if (!chainsToRender.contains(head)) chainsToRender.append(head);
+    }
+
+    for (int head : chainsToRender) {
+        QVector<int> members;
+        for (int i = 0; i < notes.size(); ++i)
+            if (chains[i].chainFirst == head) members.append(i);
+        std::sort(members.begin(), members.end(), [&notes](int a, int b) {
+            return notes[a].getStartTime() < notes[b].getStartTime();
+        });
+
+        RenderTask task;
+        task.noteIndices.reserve(members.size());
+        task.noteIds.reserve(members.size());
+        task.continuations.reserve(members.size());
+        task.results.reserve(members.size());
+        for (int idx : members) {
+            task.noteIndices.append(idx);
+            task.noteIds.append(notes[idx].getId());
+            task.continuations.append(chains[idx].isContinuation ? 1 : 0);
+            task.results.append(NoteRender());
+        }
+        tasks.append(task);
+    }
+
+    return tasks;
+}
+
 bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender,
-                            const QList<Note> &allNotes) const
+                            const QList<Note> &allNotes, bool isContinuation,
+                            double chainStartMs, double chainSpanMs) const
 {
     QString noteId = note.getId();
 
@@ -1503,9 +1653,29 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     }
 
     // Reset graph for this note
-    // For legato notes, don't fully reset - preserve K-S state so string keeps vibrating
-    bool isLegato = note.isLegato();
+    // For legato notes, don't fully reset - preserve K-S state so string keeps vibrating.
+    // Only a genuine chain member counts (see computeLegatoChains): a stray
+    // `legato` flag with nothing to continue from would otherwise skip the
+    // attack entirely - and on models like Karplus-Strong, render silence.
+    bool isLegato = isContinuation;
     graph->reset(isLegato);
+    // A continuation's progress is the chain's timeline, not a fresh note's.
+    graph->setChainTimelineProgress(isContinuation);
+
+    // Chain timeline. Everything the *graph* sees — note progress and the model
+    // envelopes driven by it — runs on the legato chain's timeline, so a linked
+    // phrase behaves like the one continuous note it used to be: models attack
+    // once at the phrase start and release once at its end instead of
+    // re-articulating at every member boundary (a recorder fades its breath
+    // over the last 5% of *every* note, bowed fires a full ADSR release at 98%).
+    // The note's own curves keep using its own 0-1 progress. A standalone note
+    // is a chain of one, so this reduces to the note's own timeline.
+    const bool haveChainSpan = chainSpanMs > 0.0;
+    const double chainOffset = haveChainSpan
+        ? (note.getStartTime() - chainStartMs) / chainSpanMs : 0.0;
+    const double chainScale = haveChainSpan
+        ? (note.getDuration() / chainSpanMs) : 1.0;
+    const double envelopeSpanMs = haveChainSpan ? chainSpanMs : note.getDuration();
 
     // Check if a legato note follows this one (to skip release)
     bool hasLegatoFollowing = false;
@@ -1521,10 +1691,8 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
         }
     }
 
-    bool skipAttack = note.isLegato();
     // Skip release envelope when graph has a tail — the reverb/decay handles the fade naturally
     bool graphHasTail = graph->hasTail();
-    bool skipRelease = hasLegatoFollowing || graphHasTail;
 
     // Precompute expressive curve names for this note (index 0 = Dynamics).
     // These feed Envelope Engines with followDynamics=on via scoreCurveName match.
@@ -1554,6 +1722,8 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
 
     for (size_t i = 0; i < noteSamples; ++i) {
         double progress = (noteSamples > 1) ? static_cast<double>(i) / static_cast<double>(noteSamples - 1) : 0.5;
+        // The graph runs on the chain's timeline (see chainOffset/chainScale).
+        const double graphProgress = std::clamp(chainOffset + progress * chainScale, 0.0, 1.0);
 
         double pitch = note.getPitchAt(progress);
         double dynamics = note.getDynamicsAt(progress);
@@ -1571,19 +1741,22 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
             scoreCurveValues.append(val);
         }
 
-        double sample = graph->generateSample(pitch, progress, isLegato, false,
+        double sample = graph->generateSample(pitch, graphProgress, isLegato, false,
                                               dynamics, scoreCurveValues, scoreCurveNames);
 
-        // Simple envelope with capped durations for long notes (e.g. legato merges)
-        double envAttackMs = std::min(50.0, note.getDuration() * 0.05);
-        double envReleaseMs = std::min(100.0, note.getDuration() * 0.10);
-        double attackThreshold = envAttackMs / note.getDuration();
-        double releaseThreshold = 1.0 - (envReleaseMs / note.getDuration());
+        // Outer envelope on the chain timeline too: exactly one attack at the
+        // phrase start and one release at its end, whatever member covers
+        // them — the shape the old single merged note had. Capped for long
+        // phrases (e.g. legato chains).
+        double envAttackMs = std::min(50.0, envelopeSpanMs * 0.05);
+        double envReleaseMs = std::min(100.0, envelopeSpanMs * 0.10);
+        double attackThreshold = envAttackMs / envelopeSpanMs;
+        double releaseThreshold = 1.0 - (envReleaseMs / envelopeSpanMs);
         double envelope = 1.0;
-        if (!skipAttack && progress < attackThreshold) {
-            envelope = progress / attackThreshold;
-        } else if (!skipRelease && progress > releaseThreshold) {
-            envelope = (1.0 - progress) / (1.0 - releaseThreshold);
+        if (graphProgress < attackThreshold) {
+            envelope = graphProgress / attackThreshold;
+        } else if (!graphHasTail && graphProgress > releaseThreshold) {
+            envelope = (1.0 - graphProgress) / (1.0 - releaseThreshold);
         }
 
         // Post-render IR: apply convolution after dynamics so reverb is independent of dynamics style.
@@ -1703,7 +1876,28 @@ bool Track::prerenderNote(const Note &note)
     }
 
     NoteRender tempRender;
-    if (!renderNoteImpl(note, graph, tempRender, m_notes)) return false;
+    const QList<Note> &notes = m_notes;
+    int noteIndex = -1;
+    for (int i = 0; i < notes.size(); ++i) {
+        if (notes[i].getId() == noteId) { noteIndex = i; break; }
+    }
+    const QVector<LegatoChainInfo> chains = computeLegatoChains(notes);
+    const bool isContinuation = noteIndex >= 0 && chains[noteIndex].isContinuation;
+    // Chain geometry so the graph runs on the chain's timeline
+    double chainStartMs = note.getStartTime();
+    double chainSpanMs = note.getDuration();
+    if (noteIndex >= 0) {
+        const int head = chains[noteIndex].chainFirst;
+        const int last = chains[noteIndex].chainLast;
+        if (head >= 0 && head < notes.size() && last >= 0 && last < notes.size()) {
+            chainStartMs = notes[head].getStartTime();
+            chainSpanMs = notes[last].getEndTime() - chainStartMs;
+        }
+    }
+    if (!renderNoteImpl(note, graph, tempRender, notes, isContinuation,
+                        chainStartMs, chainSpanMs)) return false;
+    if (noteIndex >= 0)
+        tempRender.noteHash = effectiveNoteHash(notes, noteIndex, chains);
 
     // Swap the rendered buffer into m_noteRenders under mutex protection
     {
@@ -1765,18 +1959,21 @@ bool Track::prerenderDirtyNotes(double sampleRate)
 
     // Collect dirty notes into render tasks.
     // Hold the mutex while reading m_noteRenders to avoid racing the audio callback.
-    QVector<RenderTask> tasks;
+    const QVector<LegatoChainInfo> chains = computeLegatoChains(snapshotNotes);
+    QVector<char> needsRender(snapshotNotes.size(), 0);
     {
         std::lock_guard<std::mutex> lock(m_playbackMutex);
         for (int i = 0; i < snapshotNotes.size(); ++i) {
             const Note &note = snapshotNotes[i];
             QString noteId = note.getId();
-            uint64_t noteHash = note.computeHash();
+            // The chain-aware hash: editing any member of a legato chain
+            // invalidates every member of it (they share engine state).
+            uint64_t noteHash = effectiveNoteHash(snapshotNotes, i, chains);
 
-            bool needsRender = false;
+            bool needed = false;
 
             if (!m_noteRenders.contains(noteId)) {
-                needsRender = true;
+                needed = true;
             } else {
                 const NoteRender &existing = m_noteRenders[noteId];
                 // Sample-rate aware: a render made at the device rate is not
@@ -1786,25 +1983,27 @@ bool Track::prerenderDirtyNotes(double sampleRate)
                 if (!existing.valid || existing.graphHash != m_graphHash ||
                     existing.noteHash != noteHash ||
                     existing.sampleRate != sampleRate) {
-                    needsRender = true;
+                    needed = true;
                 }
             }
 
             // MIDI-only graphs need no audio render (events are baked at playback)
-            if (needsRender) {
+            if (needed) {
                 SounitGraph *noteGraph = getGraphForVariation(snapshotNotes[i].getVariationIndex());
                 if (noteGraph && noteGraph->hasMidiOut() && !noteGraph->isValid()) {
-                    needsRender = false;
+                    needed = false;
                 }
             }
 
-            if (needsRender) {
-                tasks.append({i, noteId, NoteRender(), false});
-            }
+            needsRender[i] = needed ? 1 : 0;
         }
     }
 
-    qDebug() << "Track" << m_trackId << tasks.size() << "of" << m_notes.size() << "notes need rendering";
+    // One task per stale legato chain: the whole chain re-renders in order.
+    QVector<RenderTask> tasks = buildRenderTasks(snapshotNotes, needsRender, chains);
+
+    qDebug() << "Track" << m_trackId << tasks.size() << "render task(s) covering"
+             << m_notes.size() << "notes";
 
     if (tasks.isEmpty()) {
         emit renderStarted();
@@ -1820,18 +2019,36 @@ bool Track::prerenderDirtyNotes(double sampleRate)
     // Render in parallel using thread pool — each thread gets its own cloned graph
     std::atomic<int> completedCount{0};
 
-    QFuture<void> future = QtConcurrent::map(tasks, [this, &completedCount, &snapshotNotes](RenderTask &task) {
-        if (m_cancelRender.load()) return;
+    QFuture<void> future = QtConcurrent::map(tasks, [this, &completedCount, &snapshotNotes, &chains](RenderTask &task) {
+        if (m_cancelRender.load() || task.noteIndices.isEmpty()) return;
 
-        const Note &note = snapshotNotes[task.noteIndex];
-        SounitGraph *srcGraph = getGraphForVariation(note.getVariationIndex());
+        const Note &firstNote = snapshotNotes[task.noteIndices.first()];
+        SounitGraph *srcGraph = getGraphForVariation(firstNote.getVariationIndex());
         if (!srcGraph || !srcGraph->isValid()) return;
 
         QElapsedTimer timer;
         timer.start();
         SounitGraph *graph = srcGraph->clone();
-        task.success = renderNoteImpl(note, graph, task.result, snapshotNotes);
+        // Members render in order on the same graph: reset(isLegato) preserves
+        // the engine state, so the chain flows as one continuous phrase and
+        // each note still owns its buffer.
+        // The graph runs on the chain's timeline (members are in start order,
+        // so first/last give the span): models that ramp their envelope on
+        // note progress attack once at the phrase start and release once at
+        // its end, however many notes the chain holds.
+        const double chainStartMs = snapshotNotes[task.noteIndices.first()].getStartTime();
+        const double chainSpanMs =
+            snapshotNotes[task.noteIndices.last()].getEndTime() - chainStartMs;
+
+        for (int m = 0; m < task.noteIndices.size(); ++m) {
+            const Note &note = snapshotNotes[task.noteIndices[m]];
+            renderNoteImpl(note, graph, task.results[m], snapshotNotes,
+                           task.continuations[m] != 0, chainStartMs, chainSpanMs);
+            task.results[m].noteHash =
+                effectiveNoteHash(snapshotNotes, task.noteIndices[m], chains);
+        }
         delete graph;
+        task.success = true;
         task.renderMs = timer.nsecsElapsed() / 1000000;
 
         completedCount.fetch_add(1);
@@ -1849,7 +2066,7 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         return false;
     }
 
-    // Diagnostics: per-note render times, total samples, and curve point
+    // Diagnostics: per-task render times, total samples, and curve point
     // counts. Renders scale with curve points (stretch-wide workflow), so
     // keeping these visible makes future slow-render reports quick to triage.
     {
@@ -1867,20 +2084,23 @@ bool Track::prerenderDirtyNotes(double sampleRate)
             totalMs += task.renderMs;
             minMs = std::min(minMs, task.renderMs);
             maxMs = std::max(maxMs, task.renderMs);
-            totalSamples += task.result.samples.size();
-            ++succeeded;
+            for (int m = 0; m < task.noteIndices.size(); ++m) {
+                if (!task.results[m].valid) continue;
+                totalSamples += task.results[m].samples.size();
+                ++succeeded;
 
-            const Note &note = snapshotNotes[task.noteIndex];
-            int pitchPts = note.getPitchCurve().getPoints().size();
-            int dynPts = note.getDynamicsCurve().getPoints().size();
-            int expPts = 0;
-            for (int ci = 1; ci < note.getExpressiveCurveCount(); ++ci) {
-                expPts += note.getExpressiveCurve(ci).getPoints().size();
+                const Note &note = snapshotNotes[task.noteIndices[m]];
+                int pitchPts = note.getPitchCurve().getPoints().size();
+                int dynPts = note.getDynamicsCurve().getPoints().size();
+                int expPts = 0;
+                for (int ci = 1; ci < note.getExpressiveCurveCount(); ++ci) {
+                    expPts += note.getExpressiveCurve(ci).getPoints().size();
+                }
+                maxPitchPts = std::max(maxPitchPts, pitchPts);
+                maxDynPts = std::max(maxDynPts, dynPts);
+                maxExpPts = std::max(maxExpPts, expPts);
+                sumDynPts += dynPts;
             }
-            maxPitchPts = std::max(maxPitchPts, pitchPts);
-            maxDynPts = std::max(maxDynPts, dynPts);
-            maxExpPts = std::max(maxExpPts, expPts);
-            sumDynPts += dynPts;
         }
         qDebug() << "Track" << m_trackId << "render timing:" << succeeded << "notes in" << totalMs << "ms"
                  << "(avg" << (succeeded ? totalMs / succeeded : 0) << "ms, min" << minMs
@@ -1897,8 +2117,10 @@ bool Track::prerenderDirtyNotes(double sampleRate)
     {
         std::lock_guard<std::mutex> lock(m_playbackMutex);
         for (RenderTask &task : tasks) {
-            if (task.success) {
-                m_noteRenders[task.noteId] = std::move(task.result);
+            if (!task.success) continue;
+            for (int m = 0; m < task.noteIndices.size(); ++m) {
+                if (!task.results[m].valid) continue;  // member failed to render
+                m_noteRenders[task.noteIds[m]] = std::move(task.results[m]);
                 renderedCount++;
             }
         }
@@ -1975,16 +2197,20 @@ bool Track::startBackgroundRender(double sampleRate)
     // Collect dirty notes.
     // Hold the mutex while reading m_noteRenders to avoid racing the audio callback.
     m_backgroundTasks.clear();
+    const QVector<LegatoChainInfo> chains = computeLegatoChains(snapshotNotes);
+    QVector<char> needsRender(snapshotNotes.size(), 0);
     {
         std::lock_guard<std::mutex> lock(m_playbackMutex);
         for (int i = 0; i < snapshotNotes.size(); ++i) {
             const Note &note = snapshotNotes[i];
             QString noteId = note.getId();
-            uint64_t noteHash = note.computeHash();
+            // The chain-aware hash: editing any member of a legato chain
+            // invalidates every member of it (they share engine state).
+            uint64_t noteHash = effectiveNoteHash(snapshotNotes, i, chains);
 
-            bool needsRender = false;
+            bool needed = false;
             if (!m_noteRenders.contains(noteId)) {
-                needsRender = true;
+                needed = true;
             } else {
                 const NoteRender &existing = m_noteRenders[noteId];
                 // Sample-rate aware: a render made at the device rate is not
@@ -1994,23 +2220,24 @@ bool Track::startBackgroundRender(double sampleRate)
                 if (!existing.valid || existing.graphHash != m_graphHash ||
                     existing.noteHash != noteHash ||
                     existing.sampleRate != sampleRate) {
-                    needsRender = true;
+                    needed = true;
                 }
             }
 
             // MIDI-only graphs need no audio render (events are baked at playback)
-            if (needsRender) {
+            if (needed) {
                 SounitGraph *noteGraph = getGraphForVariation(snapshotNotes[i].getVariationIndex());
                 if (noteGraph && noteGraph->hasMidiOut() && !noteGraph->isValid()) {
-                    needsRender = false;
+                    needed = false;
                 }
             }
 
-            if (needsRender) {
-                m_backgroundTasks.append({i, noteId, NoteRender(), false});
-            }
+            needsRender[i] = needed ? 1 : 0;
         }
     }
+
+    // One task per stale legato chain: the whole chain re-renders in order.
+    m_backgroundTasks = buildRenderTasks(snapshotNotes, needsRender, chains);
 
     if (m_backgroundTasks.isEmpty()) {
         return false;  // Nothing dirty — no render started, don't increment caller's counter
@@ -2020,16 +2247,34 @@ bool Track::startBackgroundRender(double sampleRate)
     m_rendering.store(true);
     emit renderStarted();
 
-    QFuture<void> future = QtConcurrent::map(m_backgroundTasks, [this, snapshotNotes](RenderTask &task) {
-        if (m_cancelRender.load()) return;
+    QFuture<void> future = QtConcurrent::map(m_backgroundTasks, [this, snapshotNotes, chains](RenderTask &task) {
+        if (m_cancelRender.load() || task.noteIndices.isEmpty()) return;
 
-        const Note &note = snapshotNotes[task.noteIndex];
-        SounitGraph *srcGraph = getGraphForVariation(note.getVariationIndex());
+        const Note &firstNote = snapshotNotes[task.noteIndices.first()];
+        SounitGraph *srcGraph = getGraphForVariation(firstNote.getVariationIndex());
         if (!srcGraph || !srcGraph->isValid()) return;
 
         SounitGraph *graph = srcGraph->clone();
-        task.success = renderNoteImpl(note, graph, task.result, snapshotNotes);
+        // Members render in order on the same graph: reset(isLegato) preserves
+        // the engine state, so the chain flows as one continuous phrase and
+        // each note still owns its buffer.
+        // The graph runs on the chain's timeline (members are in start order,
+        // so first/last give the span): models that ramp their envelope on
+        // note progress attack once at the phrase start and release once at
+        // its end, however many notes the chain holds.
+        const double chainStartMs = snapshotNotes[task.noteIndices.first()].getStartTime();
+        const double chainSpanMs =
+            snapshotNotes[task.noteIndices.last()].getEndTime() - chainStartMs;
+
+        for (int m = 0; m < task.noteIndices.size(); ++m) {
+            const Note &note = snapshotNotes[task.noteIndices[m]];
+            renderNoteImpl(note, graph, task.results[m], snapshotNotes,
+                           task.continuations[m] != 0, chainStartMs, chainSpanMs);
+            task.results[m].noteHash =
+                effectiveNoteHash(snapshotNotes, task.noteIndices[m], chains);
+        }
         delete graph;
+        task.success = true;
     });
 
     m_renderWatcher->setFuture(future);  // Returns immediately
@@ -2050,8 +2295,10 @@ void Track::onRenderWatcherFinished()
     {
         std::lock_guard<std::mutex> lock(m_playbackMutex);
         for (RenderTask &task : m_backgroundTasks) {
-            if (task.success) {
-                m_noteRenders[task.noteId] = std::move(task.result);
+            if (!task.success) continue;
+            for (int m = 0; m < task.noteIndices.size(); ++m) {
+                if (!task.results[m].valid) continue;  // member failed to render
+                m_noteRenders[task.noteIds[m]] = std::move(task.results[m]);
                 renderedCount++;
             }
         }
@@ -2196,7 +2443,13 @@ std::vector<float> Track::getMixedBuffer(double startTimeMs, double durationMs)
     // Fretted note starts per variation. A new fretted pluck damps the whole
     // string (monophonic cut at any pitch).
     QHash<int, std::vector<std::pair<double,double>>> dampStartsByVariation;
-    for (const Note &note : m_notes) {
+    // A legato continuation is not a new strike — it keeps the same string
+    // ringing, so it must not damp the note it continues. Skipping chain
+    // continuations here is what the old single merged note gave for free.
+    const QVector<LegatoChainInfo> chains = computeLegatoChains(m_notes);
+    for (int noteIdx = 0; noteIdx < m_notes.size(); ++noteIdx) {
+        if (chains[noteIdx].isContinuation) continue;
+        const Note &note = m_notes[noteIdx];
         int varIdx = canonicalVarIdx(note.getVariationIndex());
         noteStartsByVariation[varIdx].push_back({note.getStartTime(), note.getPitchHz()});
         auto dIt = dampsByVariation.find(varIdx);

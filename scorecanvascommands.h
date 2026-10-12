@@ -382,7 +382,7 @@ private:
 };
 
 // ============================================================================
-// Link As Legato Command (merge notes into one continuous note)
+// Link As Legato Command (articulation only — notes keep their identity)
 // ============================================================================
 class LinkAsLegatoCommand : public QUndoCommand
 {
@@ -400,19 +400,23 @@ private:
     };
 
     Phrase *m_phrase;
-    QVector<OriginalNote> m_originalNotes;  // All selected notes sorted by start time
-    Note m_mergedNote;                      // The resulting merged note
+    QVector<OriginalNote> m_originalNotes;   // Selected notes as they were
+    QVector<OriginalNote> m_modifiedNotes;   // Same indices, linked versions
     ScoreCanvas *m_canvas;
 };
 
 // ============================================================================
-// Unlink Legato Command (split merged note back into discrete notes)
+// Unlink Legato Command (legacy: split merged note — new: clear articulation)
 // ============================================================================
 class UnlinkLegatoCommand : public QUndoCommand
 {
 public:
     UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &noteIndices,
                         ScoreCanvas *canvas, QUndoCommand *parent = nullptr);
+
+    // True if this note can be unlinked: a legacy merged note (segment split)
+    // or a note linked by the articulation-only "Link as Legato".
+    static bool noteCanUnlink(const Note &note, const QVector<Note> &trackNotes);
 
     void undo() override;
     void redo() override;
@@ -424,8 +428,17 @@ private:
         QVector<Note> splitNotes;
     };
 
+    // A note linked by "Link as Legato" (not a legacy merged note): unlink just
+    // clears the articulation flags and restores the staccato gap in place.
+    struct ClearEntry {
+        int index;
+        Note originalNote;
+        Note clearedNote;
+    };
+
     Phrase *m_phrase;
-    QVector<SplitEntry> m_splits;  // Sorted by descending original index
+    QVector<SplitEntry> m_splits;  // Legacy merged notes, descending index order
+    QVector<ClearEntry> m_clears;  // New-style linked notes, index order
     ScoreCanvas *m_canvas;
 };
 

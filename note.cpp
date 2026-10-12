@@ -392,8 +392,10 @@ QJsonObject Note::toJson() const
     // Serialize vibrato
     json["vibrato"] = vibrato.toJson();
 
-    // Serialize segments if quantized and segments exist
-    if (quantized && !segments.isEmpty()) {
+    // Serialize segments whenever they exist. Gating this on `quantized` used to
+    // drop the segments of legato-merged continuous notes (quantized == false),
+    // which made "Unlink (Staccato)" impossible after a save/reload.
+    if (!segments.isEmpty()) {
         QJsonArray segArray;
         for (const Segment& seg : segments) {
             segArray.append(seg.toJson());

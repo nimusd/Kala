@@ -445,7 +445,11 @@ the project stores absolute WAV paths (moving the files breaks the
 clips); "Clear clip" in the Bake dialog returns a track to live MIDI.
 The 16-bit capture is the one compromise of the waveIn backend.
 
-TODO (not yet scheduled): the help documentation still predates all of
-Phase 9 — bake, freeze, stacking and the clip concept belong in it
-(Nimus: "one of these days we will also have to document all that in
-the help").
+Help documentation — DONE 2026-10-07. New help/vl70m-midi.html covers
+the whole integration (setup, container, parameter rows, curves,
+modifier connections, pitch/timing, bandwidth budget, bake, freeze +
+overdub, known behaviors), wired into the help TOC with section
+children, a "Bake VL70-m Track" entry under Dialogs, and a
+container-to-file map entry so the container's help button lands there.
+settings.html gained a MIDI Setup section; dialogs.html gained a Bake
+dialog section + access-summary row.

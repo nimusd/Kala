@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="style.css">
+<title>VL70-m MIDI Output</title>
+</head>
+<body>
+<h1 id="vl70-m-midi-output">VL70-m MIDI Output</h1>
+<p>Kala can drive external MIDI hardware. The first (and so far only)
+target is the <strong>Yamaha VL70-m</strong>, a monophonic
+physical-modelling synthesizer. The integration turns Kala into the
+instrument's most capable controller it has ever had: instead of two or
+three expression streams from a wind controller, every expressive
+dimension the module offers — growl, throat formant, damping, absorption,
+embouchure, breath noise, and the rest — can be shaped as its own curve
+or driven by a Modifier container, all evolving independently on one
+sustained note.</p>
+<p>The feature also closes the loop back to audio: a track can be
+<em>baked</em> — played once while Kala records the module's audio
+output — and the recording then plays as a normal track, so compositions
+are self-contained and the module is only needed at bake time.</p>
+
+<hr />
+
+<h2 id="what-it-is">What It Is</h2>
+<p>The <strong>VL70-m Out</strong> container sits in Kala's sound-engine
+graph like any other container, but instead of producing audio it emits
+MIDI: notes, pitch bend, and controller streams that play the external
+module. The same Modifier containers and connection combinators that
+drive internal synthesis drive the hardware.</p>
+<ul>
+<li><strong>Bake, then dispatch.</strong> Kala's engine is offline
+elsewhere (notes pre-render to buffers). Hardware cannot be
+pre-rendered, so the engine keeps the same philosophy: a background pass
+walks each note's curves and connections, applies the connection
+combinators, and produces a timestamped list of MIDI messages. A
+lightweight real-time stream plays that list in sync with the transport
+during playback.</li>
+<li><strong>Monophonic, by design.</strong> The VL70-m plays one note at
+a time. Two overlapping notes routed to it are an authoring conflict Kala
+flags (a warning in the log), not something silently resolved.</li>
+<li><strong>The patch owns the CC assignments.</strong> The module
+stores, per voice, which controller number drives which element
+parameter (the <code>CONTROL NO.</code> assignments, edited in VL-Wizard
+or on the module itself). Kala never rewrites those assignments — the
+container is a <em>declaration of the contract</em>: which parameters
+Kala drives, on which CCs, at what resolution. Design your patches (and
+their assignments) in VL-Wizard, then save a Kala sounit named after the
+patch it matches. The name match is a human contract Kala cannot verify.</li>
+</ul>
+
+<h2 id="setup">Setup</h2>
+<h3 id="midi-output-device">MIDI Output Device</h3>
+<p>Open the Preferences tab (<code>Ctrl+3</code>) and find the
+<strong>MIDI Setup</strong> category:</p>
+<ul>
+<li><strong>Output device</strong> — the MIDI port the module is
+connected to (e.g. a USB interface's MIDI out). The selection is saved
+and remembered between sessions. <strong>Refresh</strong> re-scans for
+devices plugged in after the tab was opened.</li>
+<li><strong>Send test note</strong> — fires a short note through the
+selected port to verify the wiring.</li>
+<li><strong>Bandwidth test…</strong> — the measured-bandwidth harness;
+see <a href="#bandwidth-budget">Bandwidth Budget</a>.</li>
+</ul>
+<p>The score window toolbar has its own <strong>MIDI test</strong>
+button that sends the same hello note (breath CC2 + Note On A4,
+500 ms) to the configured port.</p>
+<h3 id="audio-return">Audio Return (for baking)</h3>
+<p>To bake a track to audio, the module's audio output must reach the
+computer's audio interface input (e.g. the UR22). Pick that input in the
+Bake dialog — see <a href="#baking-to-audio">Baking to Audio</a>.</p>
+
+<h2 id="the-container">The VL70-m Out Container</h2>
+<p>Add it from the <strong>Essential (Blue)</strong> menu of the sound
+engine: <strong>VL70-m Out</strong>.</p>
+<h3 id="ports">Ports</h3>
+<ul>
+<li><strong>Inputs:</strong> <code>pitch</code>, plus one port per
+<em>active</em> parameter row (each row's name — e.g.
+<code>embouchure</code>, <code>damping</code>). Toggling rows in the
+inspector adds or removes the matching port circle.</li>
+<li><strong>Output:</strong> <code>midiOut</code> — declarative; it
+carries no audio signal.</li>
+</ul>
+<p>A note plays through the module when its variation's graph contains a
+VL70-m container. A graph with only MIDI-out containers and Modifiers is
+valid (the modifier subgraph still runs); mixed audio+MIDI graphs also
+work, at the same cost as an audio pre-render.</p>
+<h3 id="inspector">Inspector</h3>
+<table>
+<thead>
+<tr><th>Setting</th><th>Range</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>MIDI Channel</td><td>1–16</td><td>1</td><td>The MIDI channel the container transmits on</td></tr>
+<tr><td>Pitch Bend Range</td><td>0–24 semitones</td><td>2</td><td>The bend range Kala assumes when mapping pitch; see below</td></tr>
+<tr><td>MIDI Update Interval</td><td>1–100 ms</td><td>10 ms</td><td>The stream grid for volume (CC7) and pitch bend</td></tr>
+</tbody>
+</table>
+<p>Below these sits the <strong>Parameter Rows</strong> list (one row per
+touchable parameter) and a fixed note: <em>Max polyphony: 1
+(monophonic)</em>.</p>
+<p><strong>Pitch Bend Range</strong> sets the assumed bend sensitivity,
+but Kala does not rely on the static value: per note, a two-pass bake
+measures the note's real pitch excursion over its emission grid and
+sends an RPN 0,0 that covers it (up to the 24-semitone hardware limit),
+so wide glides stay continuous without re-triggering notes. The MIDI
+note number is fixed per note from its start pitch; everything else
+rides the bend wheel. Notes whose excursion exceeds 24 semitones log a
+warning and the bend clips.</p>
+
+<h2 id="parameter-rows">Parameter Rows</h2>
+<p>Each row is the contract for one parameter: which CC it streams on
+(or which NRPN part address), at what resolution, where its resting
+value lives, and whether it returns to rest at note end. Per-row
+inspector controls:</p>
+<ul>
+<li><strong>Active checkbox</strong> — turns the row on (adds its input
+port and its curve name).</li>
+<li><strong>Name</strong> — the parameter (also its input port and its
+expressive curve name).</li>
+<li><strong>CC number</strong> — 1–95, for CC rows. This must match the
+patch's <code>CONTROL NO.</code> assignment on the module.</li>
+<li><strong>Resolution (ms)</strong> — how often the row's stream
+updates while it moves.</li>
+<li><strong>rest</strong> — the neutral value (0–127) sent at play start
+and, with reset @ end on, at note end.</li>
+<li><strong>reset @ end</strong> — return to rest when the note ends.</li>
+<li>NRPN rows show their fixed part-offset address (e.g.
+<code>NRPN 01 20</code>) instead of a CC number.</li>
+</ul>
+<h3 id="no-curve-semantics">No-curve semantics</h3>
+<p>The bake knows the whole piece, so end-resets are delta-skipped when
+the module is already resting:</p>
+<ul>
+<li>An active row <strong>without</strong> a curve sends its rest value
+once at play start, and again at note end if reset @ end is on.</li>
+<li>A row with a curve streams the curve, then sends its rest at note
+end (if reset @ end is on).</li>
+<li>An inactive row sends nothing.</li>
+<li>Stopping playback mid-note still sends the end resets.</li>
+</ul>
+<h3 id="the-rest-value">The rest value</h3>
+<p>The patch's <code>DEPTH</code> and <code>MODE</code> decide where
+"off" lives: symmetric ±DEPTH CENTER BASE patches rest at
+<strong>64</strong>; one-directional patches rest at <strong>0</strong>
+(or 127). Set each row's rest to match the patch — a row whose rest does
+not match the patch's center will linger at the curve's end value.</p>
+<p><strong>reset @ end</strong> defaults on for every row except volume.
+Leaving it on makes the note's release tail play at the neutral value —
+audible for multiplier-type rows, which is usually what you want; turn
+it off if a row should keep its last value through the release.</p>
+<h3 id="row-reference">Row reference</h3>
+<p>Active-by-default rows are marked ✓. The CC defaults are the
+conventional assignments — change them to match your patch.</p>
+<table>
+<thead>
+<tr><th>Row</th><th>Kind</th><th>CC / NRPN</th><th>Rest</th><th>Default ms</th><th>Active ✓</th></tr>
+</thead>
+<tbody>
+<tr><td>volume</td><td>CC (fixed)</td><td>7</td><td>—</td><td>update interval</td><td>✓</td></tr>
+<tr><td>breath</td><td>CC</td><td>2</td><td>64</td><td>10</td><td>✓</td></tr>
+<tr><td>expression</td><td>CC</td><td>11</td><td>127</td><td>10</td><td>✓</td></tr>
+<tr><td>embouchure</td><td>CC</td><td>13</td><td>64</td><td>25</td><td>✓</td></tr>
+<tr><td>breathNoise</td><td>CC</td><td>14</td><td>64</td><td>25</td><td>✓</td></tr>
+<tr><td>pressure</td><td>CC</td><td>15</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>filter</td><td>CC</td><td>16</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>amplitude</td><td>CC</td><td>17</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>tonguing</td><td>CC</td><td>18</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>scream</td><td>CC</td><td>19</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>growl</td><td>CC</td><td>20</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>throatFormant</td><td>CC</td><td>21</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>harmonicEnhancer</td><td>CC</td><td>22</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>damping</td><td>CC</td><td>23</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>absorption</td><td>CC</td><td>24</td><td>64</td><td>25</td><td></td></tr>
+<tr><td>filterCutoff</td><td>NRPN</td><td>01 20</td><td>64</td><td>12</td><td>✓</td></tr>
+<tr><td>filterResonance</td><td>NRPN</td><td>01 21</td><td>64</td><td>12</td><td>✓</td></tr>
+<tr><td>vibratoRate</td><td>NRPN</td><td>01 08</td><td>64</td><td>12</td><td></td></tr>
+<tr><td>vibratoDepth</td><td>NRPN</td><td>01 09</td><td>64</td><td>12</td><td></td></tr>
+<tr><td>filterEgDepth</td><td>NRPN</td><td>01 22</td><td>64</td><td>12</td><td></td></tr>
+<tr><td>egAttack</td><td>NRPN</td><td>01 63</td><td>64</td><td>12</td><td></td></tr>
+<tr><td>egDecay</td><td>NRPN</td><td>01 64</td><td>64</td><td>12</td><td></td></tr>
+<tr><td>egRelease</td><td>NRPN</td><td>01 66</td><td>64</td><td>12</td><td></td></tr>
+</tbody>
+</table>
+<p>The CC rows are the twelve element parameters (physical model
+dimensions). The NRPN rows are part-level offsets — they need no CC
+assignment, cost little MIDI bandwidth, and can all stream at once. The
+default resolutions come from the measured bandwidth budget below.</p>
+<h3 id="volume-row">The volume row</h3>
+<p>Volume (CC7) is special: it carries each note's dynamics curve, so it
+streams on the MIDI update interval grid and never resets at note end.
+It is <strong>toggleable</strong> (default on): with it off, no dynamics
+stream is sent at all, and loudness is expected to come from a breath
+(CC2) or expression (CC11) curve row instead, or from the module's own
+volume setting. CC7 dynamics is amplitude-only — the tone stays uniform
+at every level; a breath row recovers the breathier-tone-at-low-breath
+behaviour, and the two together decouple loudness from tone entirely.</p>
+<p><strong>Note:</strong> each part on the module has
+<code>Rcv</code> toggles (e.g. <code>Rcv EXPRESSION</code>) — a row only
+works if the part receives that controller. Likewise the per-voice
+<code>EXPRESSION MODE</code> (BC/VOLUME) decides what the voice's
+expression follows; even CCs' meanings are patch-level routing.</p>
+
+<h2 id="curves">Curves</h2>
+<p>Every row except volume doubles as an <strong>expressive curve
+name</strong>: draw a curve named <code>embouchure</code> on a note and
+the row streams it. The score canvas's <em>Show curves</em> dropdown
+follows the container's active rows — toggling a row on adds its curve
+name, toggling it off removes it (non-destructively: the drawn curve
+stays on the note and reappears on re-activation). A row whose port has
+an incoming Modifier connection also leaves the selector, since the
+connection wins in the bake and a drawn curve there would be dead.</p>
+
+<h2 id="modifier-connections">Modifier Connections</h2>
+<p>Any Modifier container (Envelope Engine, Physics, Drift, LFO…) can
+connect into a row's input port through the normal connection
+combinators, exactly as it would into an internal parameter:</p>
+<ul>
+<li><strong>Connection wins.</strong> A connected row streams the graph
+value; an unconnected active row keeps the named-curve path.</li>
+<li><strong>Mapping.</strong> Passthrough maps an Envelope's 0–1 output
+to CC 0–127 exactly like the curve path. Modulate pivots at 0.5, which
+sits on the row's rest value of 64.</li>
+<li><strong>Watch the source's range.</strong> Drift's output is a ~1.0
+detuning multiplier, so a Drift→row connection saturates at CC 127
+under passthrough or heavy modulate weight — use small modulate weights
+(~0.05–0.15), or an Envelope/LFO/Physics source, for full-range row
+motion.</li>
+<li><strong>The pitch port is not connectable.</strong> Pitch stays
+note-curve + vibrato driven; a connection to it logs one warning per
+bake.</li>
+</ul>
+<p>Deactivating a row does not prune its canvas connections — a
+revived row silently keeps them (reloading the sounit drops them).</p>
+
+<h2 id="pitch-dynamics-and-timing">Pitch, Dynamics, and Timing</h2>
+<p>At play start, every note whose variation graph contains a VL70-m
+container is baked into a timestamped MIDI event list. During playback a
+Windows <code>midiStreamOut</code> stream plays that list, started at
+the same instant as the audio transport — internal audio and hardware
+stay in sample-accurate agreement over minutes of playback. The stream
+runs on a 1 ms tick, is split into ≤48 KB chunks (the API's per-buffer
+cap), and is torn down with a short grace period after the transport
+ends (All Notes Off, port closed).</p>
+<ul>
+<li><strong>Pitch</strong> — the nearest MIDI note is fixed per note
+from its start pitch; the cents remainder rides the pitch-bend wheel.
+Per-note bend sensitivity (RPN 0,0) is widened to cover the note's
+measured excursion. Vibrato is baked into the bend stream by the same
+code path the internal renderer uses.</li>
+<li><strong>Dynamics</strong> — the note's dynamics curve streams as
+volume (CC7) on the MIDI update interval grid.</li>
+<li><strong>Delta skip</strong> — unchanged values are never re-sent;
+note starts always send fresh values. This keeps the cheap tier
+(2–3 byte messages) well inside what twenty years of wind-controller
+streaming has proven the module can take.</li>
+<li><strong>Overlap</strong> — two notes sounding at once logs a
+conflict warning; the module is monophonic and the last note-on wins.</li>
+</ul>
+
+<h2 id="bandwidth-budget">Bandwidth Budget</h2>
+<p>Controller bandwidth is two-tier: plain CC / pitch bend / aftertouch
+are cheap (2–3 byte messages); NRPN-addressed parameters cost 4–6 bytes
+per update. The scarce resource turns out to be neither: the module's
+physical-model recalculation is what saturates — element-parameter
+updates (the CC rows) are expensive <em>regardless of encoding</em>,
+while part-level NRPN offsets are cheap.</p>
+<h3 id="the-bandwidth-test">The bandwidth test</h3>
+<p><strong>Settings → MIDI Setup → Bandwidth test…</strong> opens the
+harness used to measure all of this (it stops playback first — the
+engine would pollute the measurement). It sustains a note with a
+breath+bend baseline and offers three routes — CC-assigned element
+modulation, NRPN part offsets, and direct SysEx DEPTH streaming — each
+with a stress ladder (1 stream @ 50 ms up to 8 @ 6 ms, 1 ms opt-in), a
+manual mode (streams × interval) for boundary probes, audibility checks
+per parameter, verdict buttons, and bytes-per-second + overrun counters
+per step.</p>
+<h3 id="measured-numbers">Measured numbers</h3>
+<table>
+<thead>
+<tr><th>Route</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td>CC-assigned element modulation</td><td>2 streams @ 25 ms clean; 4 @ 25 ms very jagged; 4 @ 12 ms audible lag; 8 @ 6 ms lag</td></tr>
+<tr><td>NRPN part offsets</td><td>Clean through 4 streams @ 12 ms (~3.0 kB/s payload); beyond that, transport overruns</td></tr>
+<tr><td>Direct SysEx DEPTH</td><td>Clean through 4 @ 12 ms; deeper steps unjudgeable (FIFO smoothing)</td></tr>
+</tbody>
+</table>
+<p>(Measured through a UR22mkII; the DIN leg caps at 3125 bytes/s, so
+steps above the cap measure the interface FIFO, not the module.)</p>
+<h3 id="practical-budget">Practical budget</h3>
+<ul>
+<li>Stack <strong>2–3 element curves</strong> at ≥ 25 ms per stream;
+the row defaults (25 ms) are the proven safe resolution.</li>
+<li><strong>NRPN part curves are free</strong> — up to 4 concurrently
+at 12 ms (again the defaults).</li>
+<li>The <strong>MIDI update interval</strong> (volume + bend grid) can
+stay tight — the cheap tier handles it.</li>
+</ul>
+<p>The bandwidth test assigns CCs via SysEx and leaves the module's
+voice edit buffer dirty — re-select the voice (or power-cycle) after a
+test session to restore the patch.</p>
+
+<h2 id="baking-to-audio">Baking to Audio</h2>
+<p>The module only exists in real time, so the bake pass plays the
+composition once while recording the audio-interface input carrying the
+module. The recording attaches to the track as a <strong>clip</strong>
+and joins the rest of the pre-rendered audio: it plays in sync during
+normal playback, and it is included in offline export. The composition
+becomes self-contained — it plays anywhere, hardware or no hardware.</p>
+<h3 id="the-bake-dialog">The Bake dialog</h3>
+<p>Press <strong>Bake</strong> in the score window toolbar:</p>
+<table>
+<thead>
+<tr><th>Field</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Attach to track</td><td>The VL70-m track the recording belongs to. Defaults to the score's active track when it is a VL70-m track, otherwise the first VL70-m track.</td></tr>
+<tr><td>Clip</td><td>Shows whether the target already has a take; an amber warning says this pass <strong>replaces</strong> that recording. <strong>Clear clip</strong> returns the track to live MIDI.</td></tr>
+<tr><td>Input device</td><td>The audio input carrying the module (e.g. the UR22).</td></tr>
+<tr><td>Input channel</td><td>Stereo, Input 1 (mono), or Input 2 (mono).</td></tr>
+<tr><td>Recording file</td><td>WAV path. Defaults to <code>&lt;project&gt;-bake-&lt;N&gt;.wav</code> with the next free number in the Music folder — every take keeps its own file, nothing is overwritten.</td></tr>
+</tbody>
+</table>
+<p>Recording starts, then the normal playback path runs the transport
+while the capture (16-bit PCM through the same WinMM driver stack as the
+MIDI path) records the input. When playback stops, Kala:</p>
+<ol type="1">
+<li><strong>Aligns</strong> the recording's first sound to the earliest
+VL70-m note-on at/after the transport start (onset detection runs on a
+short-block RMS envelope with a noise-floor threshold, skips the
+stream-open click region, and requires the signal to persist).</li>
+<li><strong>Trims</strong> the pre-roll and the click, and cuts the tail
+at the last signal plus a 500 ms pad.</li>
+<li><strong>Reports the peak in dBFS</strong> with a hint (below
+−20 dB / above −1 dB) so the interface input gain can be dialed in
+without round-tripping through an external editor.</li>
+</ol>
+<p>The clip caches its PCM at the right rate for each consumer — the
+device rate for live playback, the composition rate for export — so a
+bake stays in sync in both.</p>
+
+<h2 id="freeze-clips-and-overdub">Freeze, Clips, and Overdub</h2>
+<ul>
+<li><strong>Freeze.</strong> A track with a clip stops sending MIDI
+during playback — the clip replaces it. The module is now free.</li>
+<li><strong>Bake / VL toggle.</strong> In the mixer column of a baked
+track, a small checkable button switches between the recording
+(<em>Bake</em>, the default) and driving the module live again
+(<em>VL</em>) — an A/B comparison without clearing the clip. In live
+mode the clip is not mixed and the track's MIDI bakes again (the
+monophonic-overlap warning applies if other live MIDI plays at the same
+time).</li>
+<li><strong>Nudge.</strong> Two auto-repeat buttons (◀ ▶) under the
+toggle trim the clip's position in 10 ms steps (positive = later) — the
+fine trim for taste after auto-alignment.</li>
+<li><strong>Overdub stacking.</strong> Bake the next VL70-m track while
+the frozen ones play from their clips; the bake pass exempts its own
+target so the module still sounds for the take. Repeat per track.</li>
+<li><strong>The mono module, polyphonic.</strong> Play the stacked
+clips together — as many VL70-m parts as there are tracks, in sync, and
+all of them in the exported WAV.</li>
+</ul>
+
+<h2 id="known-behaviors">Known Behaviors</h2>
+<ul>
+<li><strong>Baked audio is a snapshot.</strong> Edit the notes or the
+patch after a bake and re-bake to hear it.</li>
+<li><strong>Files.</strong> Each take keeps its own
+<code>&lt;project&gt;-bake-&lt;N&gt;.wav</code>; the project stores
+absolute WAV paths, so moving the files breaks the clips.</li>
+<li><strong>16-bit capture</strong> is the one compromise of the
+WinMM input backend (fine for a mix element).</li>
+<li><strong>Large glides can shift timbre.</strong> Many VL70-m voices
+route pitch bend into embouchure as well as pitch — check the voice's
+comment, counter-drive embouchure with its own row, or edit the voice
+in VL-Wizard.</li>
+<li><strong>Rows need the patch's cooperation.</strong> A CC row only
+works if the patch assigns that <code>CONTROL NO.</code> to the CC you
+chose, the part's <code>Rcv</code> toggle accepts it, and the rest
+value matches the patch's DEPTH + MODE centering.</li>
+<li><strong>Bandwidth-test residue.</strong> The test dialog writes CC
+assignments into the voice edit buffer — re-select the voice or
+power-cycle the module after a test session.</li>
+<li><strong>Deactivated rows keep their connections</strong> on the
+canvas (see <a href="#modifier-connections">Modifier Connections</a>).</li>
+</ul>
+</body>
+</html>

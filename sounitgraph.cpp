@@ -74,6 +74,7 @@ SounitGraph* SounitGraph::clone() const
     copy->signalOutputContainer = signalOutputContainer;
     copy->hasValidSignalOutput = hasValidSignalOutput;
     copy->m_currentIsLegato = m_currentIsLegato;
+    copy->m_chainTimelineProgress = m_chainTimelineProgress;
     copy->m_hasTailProcessor = m_hasTailProcessor;
     copy->m_panContainer = m_panContainer;
     copy->m_midiContainer = m_midiContainer;
@@ -922,11 +923,19 @@ void SounitGraph::reset(bool isLegato)
     for (auto it = processors.begin(); it != processors.end(); ++it) {
         auto &data = it.value();
         data.ksParamsCached = false;  // Re-resolve KS statics + sources per note
+        // A legato transition continues one phrase, so stateful modifiers and
+        // generators keep their state across the boundary — restarting them
+        // mid-phrase re-shapes the sound the way the phrase never did when it
+        // was a single merged note.
         if (data.harmonicGen) {
-            data.harmonicGen->reset();
+            if (!isLegato) {
+                data.harmonicGen->reset();
+            }
         }
         if (data.spectrumToSig) {
-            data.spectrumToSig->reset();
+            if (!isLegato) {
+                data.spectrumToSig->reset();
+            }
         }
         if (data.formantBody) {
             // For legato, don't reset formant filters - let them continue smoothly
@@ -935,13 +944,19 @@ void SounitGraph::reset(bool isLegato)
             }
         }
         if (data.noiseFilter) {
-            data.noiseFilter->reset();
+            if (!isLegato) {
+                data.noiseFilter->reset();
+            }
         }
         if (data.physicsSys) {
-            data.physicsSys->reset();
+            if (!isLegato) {
+                data.physicsSys->reset();
+            }
         }
         if (data.driftEng) {
-            data.driftEng->reset();
+            if (!isLegato) {
+                data.driftEng->reset();
+            }
         }
         if (data.gateProc) {
             data.gateProc->reset();
@@ -963,13 +978,21 @@ void SounitGraph::reset(bool isLegato)
             }
         }
         if (data.lfo) {
-            data.lfo->reset();
+            if (!isLegato) {
+                data.lfo->reset();
+            }
         }
         if (data.freqMapper) {
-            data.freqMapper->reset();
+            if (!isLegato) {
+                data.freqMapper->reset();
+            }
         }
         if (data.wavetableSynth) {
-            data.wavetableSynth->reset();
+            // Documented behavior (help/wavetable-synth.html): phase returns to
+            // 0 at note start, but not for legato transitions.
+            if (!isLegato) {
+                data.wavetableSynth->reset();
+            }
         }
         if (data.bandpassEQ) {
             if (!isLegato) {
@@ -998,16 +1021,17 @@ void SounitGraph::reset(bool isLegato)
             data.fluteModel->reset(isLegato);
         }
         if (data.guitarModel) {
-            // When fretted (stringDamping on), always instanceClear() even on legato —
-            // the string stops resonating when a new note is struck
-            bool fretted = data.effectiveStringDamping >= 0.5;
-            data.guitarModel->reset(fretted ? false : isLegato);
+            // Fretted (stringDamping on) clears the string — but that rule is
+            // about a new *strike* damping the ringing string. A legato
+            // continuation is not a strike (it is a slide/hammer-on on the same
+            // string), so the legato flag wins and the phrase continues. Every
+            // non-legato note still clears, exactly as the fretted rule wants.
+            data.guitarModel->reset(isLegato);
         }
         if (data.oudModel) {
-            // When fretted (stringDamping on), always instanceClear() even on legato —
-            // the strings stop resonating when a new note is struck
-            bool fretted = data.effectiveStringDamping >= 0.5;
-            data.oudModel->reset(fretted ? false : isLegato);
+            // Same as the guitar above: a legato continuation keeps the
+            // strings ringing instead of re-plucking them.
+            data.oudModel->reset(isLegato);
         }
         if (data.pianoModel) {
             data.pianoModel->reset(isLegato);
@@ -1028,13 +1052,19 @@ void SounitGraph::reset(bool isLegato)
             data.saxophoneModel->reset(isLegato);
         }
         if (data.percussionModel) {
-            data.percussionModel->reset();
+            if (!isLegato) {
+                data.percussionModel->reset();
+            }
         }
         if (data.tailProc) {
-            data.tailProc->reset();
+            if (!isLegato) {
+                data.tailProc->reset();
+            }
         }
         if (data.panProc) {
-            data.panProc->reset();
+            if (!isLegato) {
+                data.panProc->reset();
+            }
         }
         // RolloffProcessor and BreathTurbulence have no state to reset
     }
@@ -2235,9 +2265,14 @@ void SounitGraph::executeContainer(ProcessorData &proc, double pitch, double not
                     ? qBound(0.0, scoreVal * valueScale + valueOffset, 1.0)
                     : 0.0;
             } else {
-                // Normal mode: process envelope shape with note progress
+                // Normal mode: process envelope shape with note progress.
+                // On a chain timeline the progress already continues from the
+                // phrase start, so the legato re-map (which jumps to the
+                // post-attack position) would step the envelope at the first
+                // joint — let the envelope run its full shape instead.
                 proc.inactive = false;
-                proc.controlOut = proc.envelopeEng->process(effectiveProgress, m_currentIsLegato);
+                proc.controlOut = proc.envelopeEng->process(
+                    effectiveProgress, m_currentIsLegato && !m_chainTimelineProgress);
             }
         }
 

@@ -3979,7 +3979,7 @@ static QJsonArray compositionSchemas()
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_scale"},
-            {"description", "Sets tuning scale and optional base freq. IDs: 0=JustIntonation,1=Pythagorean,2=EqualTemperament,3=Meantone,4=MaqamRast,5=MaqamBayati,7=MaqamHijaz,10=RagaBhairav,11=RagaYaman,13=RagaBhairavi,16=ChinesePentatonic,17=Hirajoshi,20=WholeTone,30=PersianShur."},
+            {"description", "Sets tuning scale and optional base freq. IDs: 0=JustIntonation,1=Pythagorean,2=EqualTemperament,3=Meantone,4=MaqamRast,5=MaqamBayati,7=MaqamHijaz,10=RagaBhairav,11=RagaYaman,13=RagaBhairavi,16=ChinesePentatonic,17=Hirajoshi,20=WholeTone,30=PersianShur,49-57=5-limit JI maqams (Rast,Bayati,Saba,Hijaz,Nahawand,Kurd,Sikah,Ajam,AtharKurd)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
@@ -4092,7 +4092,7 @@ static QJsonArray compositionSchemas()
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_note_mode"},
-            {"description", "Set note articulation/continuity. legato: link notes (no retrigger, min 2). unlegato: remove links. continuous: extend to next note. discrete: exact duration."},
+            {"description", "Set note articulation/continuity. legato: link notes (no retrigger, min 2) - notes keep their kind (discrete stay discrete, continuous stay continuous), each extended to meet the next. unlegato: remove links and restore staccato gaps. continuous: extend to next note. discrete: exact duration."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{

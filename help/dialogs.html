@@ -1646,6 +1646,36 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="
 <p><strong>Curve type values:</strong> 0 = Linear, 1 = Smooth, 2 =
 Step</p>
 <hr />
+<h2 id="bake-vl70-m-track-dialog">Bake VL70-m Track Dialog</h2>
+<h3 id="how-to-open-10">How to Open</h3>
+<ul>
+<li>Score window toolbar → <strong>Bake</strong></li>
+</ul>
+<h3 id="ui-components-10">UI Components</h3>
+<table>
+<thead>
+<tr><th>Field</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Attach to track</td><td>The VL70-m track the recording belongs to. Defaults to the score's active track when it is a VL70-m track, otherwise the first VL70-m track.</td></tr>
+<tr><td>Clip</td><td>Shows whether the target track already has a take. An amber warning says the new pass <strong>replaces</strong> that recording. <strong>Clear clip</strong> removes the take and returns the track to live MIDI.</td></tr>
+<tr><td>Input device</td><td>The audio input carrying the module's output (e.g. the UR22).</td></tr>
+<tr><td>Input channel</td><td>Stereo, Input 1 (mono), or Input 2 (mono).</td></tr>
+<tr><td>Recording file</td><td>WAV path, defaulting to <code>&lt;project&gt;-bake-&lt;N&gt;.wav</code> with the next free number in the Music folder — each take keeps its own file.</td></tr>
+</tbody>
+</table>
+<h3 id="interaction-flow-10">Interaction Flow</h3>
+<ol type="1">
+<li><strong>Recording starts</strong>, then the composition plays once while the capture (16-bit PCM via WinMM waveIn) records the input carrying the module.</li>
+<li><strong>On stop</strong>, the recording's first sound is auto-aligned to the earliest VL70-m note-on of the span, the pre-roll (including the stream-open click) is trimmed, and the tail is cut at the last signal plus a 500 ms pad.</li>
+<li><strong>The result message</strong> reports the recording's peak in dBFS with a hint (below −20 dB / above −1 dB) for setting the interface input gain.</li>
+<li>The clip attaches to the track and plays in sync during playback and export. A baked track's mixer column offers a <strong>Bake/VL</strong> toggle and a 10 ms-step nudge.</li>
+</ol>
+<p>Full details: <a href="vl70m-midi.html">VL70-m MIDI Output</a>,
+especially <a href="vl70m-midi.html#baking-to-audio">Baking to
+Audio</a> and <a href="vl70m-midi.html#freeze-clips-and-overdub">Freeze,
+Clips, and Overdub</a>.</p>
+<hr />
 <h2 id="dialog-access-summary">Dialog Access Summary</h2>
 <table>
 <thead>
@@ -1704,6 +1734,11 @@ Step</p>
 <tr>
 <td>Envelope Library</td>
 <td>Vibrato Editor &gt; Load from Library…</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Bake VL70-m Track</td>
+<td>Score window toolbar &gt; Bake</td>
 <td>-</td>
 </tr>
 </tbody>

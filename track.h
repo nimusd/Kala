@@ -471,6 +471,39 @@ public:
      */
     void setNoteRender(const QString &noteId, const NoteRender &render);
 
+    // ========== Legato chains ==========
+
+    /**
+     * A legato chain is a run of notes on one variation where each note
+     * continues the previous one (its `legato` flag is set and its start falls
+     * inside the engine's continuation window). The sound engine keeps its
+     * internal state across a chain, so a chain renders in one pass, never
+     * damps itself at the joints, and its members share one cache hash.
+     *
+     * A note with `legato` set but nothing to continue from is NOT a chain
+     * member — it renders as a normal attack.
+     */
+    struct LegatoChainInfo {
+        bool isContinuation = false;  // continues the previous member's state
+        int chainFirst = -1;          // index of the chain's first note (-1 = none)
+        int chainLast = -1;           // index of the chain's last note
+    };
+
+    /**
+     * Chain membership for every note in `notes` (index-parallel result).
+     */
+    static QVector<LegatoChainInfo> computeLegatoChains(const QList<Note> &notes);
+
+    /**
+     * Note hash used for render-cache validation: the note's own hash plus its
+     * chain neighbours' hashes and the relative gaps between members. Editing
+     * or re-linking any member of a chain therefore re-renders the whole chain,
+     * while moving notes (pure time shifts, gaps unchanged) does not.
+     */
+    static uint64_t effectiveNoteHash(const QList<Note> &notes, int index);
+    static uint64_t effectiveNoteHash(const QList<Note> &notes, int index,
+                                      const QVector<LegatoChainInfo> &chains);
+
     /**
      * Get current graph hash (for cache validation)
      * @return Current graph state hash
@@ -816,12 +849,16 @@ private:
 
     // Background (non-blocking) render
     struct RenderTask {
-        int noteIndex;
-        QString noteId;   // stored at task creation so onRenderWatcherFinished
-                          // doesn't read m_notes (which may have changed)
-        NoteRender result;
+        // One legato chain — state carries across its members, so the whole
+        // chain renders in a single pass on one graph. A standalone note is a
+        // chain of one.
+        QVector<int> noteIndices;      // chain members, in start-time order
+        QStringList noteIds;           // stored at task creation so onRenderWatcherFinished
+                                       // doesn't read m_notes (which may have changed)
+        QVector<char> continuations;   // parallel: member continues the previous one
+        QVector<NoteRender> results;   // parallel to noteIndices
         bool success = false;
-        qint64 renderMs = 0;  // per-note render wall time (diagnostics)
+        qint64 renderMs = 0;  // task render wall time (diagnostics)
     };
     QVector<RenderTask> m_backgroundTasks;
     QFutureWatcher<void> *m_renderWatcher = nullptr;
@@ -858,7 +895,16 @@ private:
      * @return true if render succeeded
      */
     bool renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender,
-                        const QList<Note> &allNotes) const;
+                        const QList<Note> &allNotes, bool isContinuation,
+                        double chainStartMs, double chainSpanMs) const;
+
+    /**
+     * One render task per legato chain that has a stale member. The whole chain
+     * is included so the shared engine state is reproduced exactly.
+     */
+    static QVector<RenderTask> buildRenderTasks(const QList<Note> &notes,
+                                                const QVector<char> &needsRender,
+                                                const QVector<LegatoChainInfo> &chains);
 
     /**
      * Build a SounitGraph from serialized JSON data

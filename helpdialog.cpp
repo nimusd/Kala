@@ -117,6 +117,7 @@ void HelpDialog::buildTableOfContents()
     addChild(score, "The Note Blob", "score-canvas.html", "the-note-blob-visualizing-expression");
     addChild(score, "Curves", "score-canvas.html", "the-curve-system-layers-of-expression");
     addChild(score, "Expressive Curves Inspector", "score-canvas.html", "expressive-curves-inspector");
+    addChild(score, "Curve Lanes", "score-canvas.html", "curve-lanes-the-ribbon-around-the-note");
     addChild(score, "Vibrato", "score-canvas.html", "vibrato-a-parameter-not-an-ornament");
     addChild(score, "Segments", "score-canvas.html", "segments-subdividing-continuous-notes");
     addChild(score, "Time and Navigation", "score-canvas.html", "time-and-navigation");
@@ -176,6 +177,20 @@ void HelpDialog::buildTableOfContents()
     addChild(filters, "LP/HP Filter", "lp-hp-filter.html", "");
     addChild(filters, "IR Convolution", "ir-convolution.html", "");
 
+    // VL70-m MIDI Output
+    auto *vl70m = addTopLevel("VL70-m MIDI Output", "vl70m-midi.html");
+    addChild(vl70m, "What It Is", "vl70m-midi.html", "what-it-is");
+    addChild(vl70m, "Setup", "vl70m-midi.html", "setup");
+    addChild(vl70m, "The VL70-m Out Container", "vl70m-midi.html", "the-container");
+    addChild(vl70m, "Parameter Rows", "vl70m-midi.html", "parameter-rows");
+    addChild(vl70m, "Curves", "vl70m-midi.html", "curves");
+    addChild(vl70m, "Modifier Connections", "vl70m-midi.html", "modifier-connections");
+    addChild(vl70m, "Pitch, Dynamics, and Timing", "vl70m-midi.html", "pitch-dynamics-and-timing");
+    addChild(vl70m, "Bandwidth Budget", "vl70m-midi.html", "bandwidth-budget");
+    addChild(vl70m, "Baking to Audio", "vl70m-midi.html", "baking-to-audio");
+    addChild(vl70m, "Freeze, Clips, and Overdub", "vl70m-midi.html", "freeze-clips-and-overdub");
+    addChild(vl70m, "Known Behaviors", "vl70m-midi.html", "known-behaviors");
+
     // Settings
     addTopLevel("Settings", "settings.html");
 
@@ -202,6 +217,7 @@ void HelpDialog::buildTableOfContents()
     addChild(dialogs, "DNA Editor", "dialogs.html", "dna-editor-dialog");
     addChild(dialogs, "Export Audio", "dialogs.html", "export-audio-dialog");
     addChild(dialogs, "Envelope Library", "dialogs.html", "envelope-library-dialog");
+    addChild(dialogs, "Bake VL70-m Track", "vl70m-midi.html", "baking-to-audio");
 
     m_tocTree->expandAll();
 }
@@ -273,6 +289,8 @@ QMap<QString, QString> HelpDialog::containerToFileMap()
         {"Comb Filter",         "comb-filter.html"},
         {"LP/HP Filter",        "lp-hp-filter.html"},
         {"IR Convolution",      "ir-convolution.html"},
+        // MIDI output
+        {"VL70-m",              "vl70m-midi.html"},
     };
     return map;
 }

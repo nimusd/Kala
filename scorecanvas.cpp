@@ -619,6 +619,45 @@ QVector<ScoreCanvas::ScaleLine> ScoreCanvas::generateScaleLinesForScale(const Sc
     return lines;
 }
 
+QVector<ScoreCanvas::ScaleLine> ScoreCanvas::generateQuarterToneGridLines(const Scale &scale, double baseFreq) const
+{
+    QVector<ScaleLine> lines;
+    if (!scale.is24TETMaqam()) return lines;
+
+    // Which 24-TET steps are occupied by scale degrees. Raw ratios are used so
+    // the grid stays fixed even when a degree carries a cent offset.
+    QVector<int> degreeSteps;
+    degreeSteps.reserve(scale.getDegreeCount());
+    for (int d = 0; d < scale.getDegreeCount(); ++d)
+        degreeSteps.append(static_cast<int>(std::round(std::log2(scale.getRawRatio(d)) * 24.0)));
+
+    // Draw the remaining quarter-tone steps as light gray lines, like the
+    // gray non-scale degrees in Equal Temperament.
+    for (int octave = 0; octave <= 9; ++octave) {
+        double octaveBaseFreq = baseFreq * std::pow(2.0, octave);
+
+        for (int step = 0; step < 24; ++step) {
+            if (degreeSteps.contains(step)) continue;
+
+            double freq = octaveBaseFreq * std::pow(2.0, step / 24.0);
+            if (freq >= 20.0 && freq <= 8000.0) {
+                ScaleLine line;
+                line.frequencyHz = freq;
+                line.scaleDegree = 0;  // Not a scale degree
+                // Even steps sit on the 12-TET grid (same gray as ET's
+                // chromatic lines); odd steps are pure quarter-tone
+                // positions, drawn slightly lighter.
+                line.color = (step % 2 == 0) ? QColor(210, 210, 210)
+                                             : QColor(228, 228, 228);
+                line.isThicker = false;
+                line.isAccidental = true;
+                lines.append(line);
+            }
+        }
+    }
+    return lines;
+}
+
 void ScoreCanvas::drawTimeAwareScaleLines(QPainter &painter)
 {
     // Determine visible time range
@@ -676,6 +715,16 @@ void ScoreCanvas::drawTimeAwareScaleLines(QPainter &painter)
 
         // Generate scale lines for this region's scale
         QVector<ScaleLine> regionLines = generateScaleLinesForScale(region.scale, region.baseFreq);
+
+        // 24-TET maqams: draw the off-scale quarter-tone steps as light gray
+        // grid lines first, so the colored scale-degree lines paint on top.
+        QVector<ScaleLine> gridLines = generateQuarterToneGridLines(region.scale, region.baseFreq);
+        for (const ScaleLine &line : gridLines) {
+            int y = frequencyToPixel(line.frequencyHz);
+            if (y >= -10 && y <= height() + 10) {
+                drawScaleLineInRegion(painter, line, y, regionStartX, regionEndX);
+            }
+        }
 
         // Draw each scale line, clipped to this time region
         for (const ScaleLine &line : regionLines) {
@@ -1368,8 +1417,10 @@ void ScoreCanvas::drawNote(QPainter &painter, const Note &note, bool isSelected)
         noteColor.setAlpha(51);
     }
 
-    // Desaturate + lighten color only for explicitly legato-linked notes
-    if (note.isLinkedAsLegato() && note.getSegmentCount() > 1) {
+    // Desaturate + lighten color for legato-linked notes. Linking keeps a
+    // note's kind (discrete stays discrete), so the cue follows the link flag
+    // alone rather than requiring a segmented merged note.
+    if (note.isLinkedAsLegato()) {
         int h, s, v, a;
         noteColor.getHsv(&h, &s, &v, &a);
         int newV = std::min(255, v + static_cast<int>((255 - v) * 0.5));
@@ -5856,17 +5907,18 @@ void ScoreCanvas::showNoteContextMenu(const QPoint &globalPos)
     });
 
     QAction *staccatoAction = menu.addAction("Unlink (Staccato)");
-    // Enable if any selected note is a segmented (merged legato) note
+    // Enable for a legacy merged note (segment split) or for any note linked by
+    // "Link as Legato" (articulation-only — discrete notes stay discrete).
     const QVector<Note> &allNotes = phrase.getNotes();
-    bool hasSegmentedNote = false;
+    bool hasUnlinkableNote = false;
     for (int idx : selectedNoteIndices) {
         if (idx >= 0 && idx < allNotes.size() &&
-            (allNotes[idx].isQuantized() || allNotes[idx].isLinkedAsLegato()) && allNotes[idx].getSegmentCount() > 1) {
-            hasSegmentedNote = true;
+            UnlinkLegatoCommand::noteCanUnlink(allNotes[idx], allNotes)) {
+            hasUnlinkableNote = true;
             break;
         }
     }
-    staccatoAction->setEnabled(hasSegmentedNote);
+    staccatoAction->setEnabled(hasUnlinkableNote);
     connect(staccatoAction, &QAction::triggered, this, [this]() {
         if (!selectedNoteIndices.isEmpty()) {
             undoStack->push(new UnlinkLegatoCommand(&phrase, selectedNoteIndices, this));

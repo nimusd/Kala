@@ -182,7 +182,8 @@ private:
     bool quantized;       // True if continuous note has been snapped to scale
     bool renderDirty;     // True if note needs re-rendering (new notes start dirty)
     bool legato;          // True if note connects smoothly from previous (no re-attack)
-    bool linkedAsLegato;  // True if created by "Link as Legato" (visual flag, not audio)
+    bool linkedAsLegato;  // True if marked by "Link as Legato" (group/visual flag;
+                          // the per-note `legato` flag is what the audio uses)
     Curve pitchCurve;     // Pitch curve over time (Hz values for glissando/portamento)
     Curve dynamicsCurve;  // Dynamics curve over time (0.0-1.0)
     Curve bottomCurve;    // Bottom edge curve (spectrum/timbre placeholder, configurable later)

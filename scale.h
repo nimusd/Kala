@@ -20,6 +20,7 @@ public:
     QString getNoteName(int degree) const;  // Get note name for this degree
     bool getIsAccidental(int degree) const; // True for chromatic degrees not in the diatonic core
     int getTonicIndex() const { return tonicIndex; }  // For ET: which degree is tonic (0-11, -1 = C)
+    bool is24TETMaqam() const;  // True for the maqam scales tuned to the 24-TET quarter-tone grid
 
     // Per-degree cent offsets for microtonal inflection (±50¢ per degree)
     void setCentOffsets(const QVector<double> &offsets);
@@ -90,6 +91,17 @@ public:
     static Scale maqamSikah();
     static Scale maqamAjam();
     static Scale maqamAtharKurd();
+
+    // Maqams in 5-limit just intonation (the pre-24-TET tuning, kept alongside)
+    static Scale maqamRastJI();
+    static Scale maqamBayatiJI();
+    static Scale maqamSabaJI();
+    static Scale maqamHijazJI();
+    static Scale maqamNahawandJI();
+    static Scale maqamKurdJI();
+    static Scale maqamSikahJI();
+    static Scale maqamAjamJI();
+    static Scale maqamAtharKurdJI();
 
     // Persian Dastgah
     static Scale persianShur();

@@ -67,6 +67,9 @@ public:
     QMap<double, QPair<Scale, double>> getScaleChanges() const { return scaleChanges; }
     void generateScaleLines();
     QVector<ScaleLine> generateScaleLinesForScale(const Scale &scale, double baseFreq) const;
+    // Light gray off-scale quarter-tone lines for 24-TET maqams (visual only;
+    // not part of snapping/remapping, which stay on real scale degrees)
+    QVector<ScaleLine> generateQuarterToneGridLines(const Scale &scale, double baseFreq) const;
     const Scale& getCurrentScale() const { return currentScale; }
     double getBaseFrequency() const { return baseFrequency; }
 

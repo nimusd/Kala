@@ -1501,7 +1501,45 @@ void DetachSegmentCommand::redo()
 }
 
 // ============================================================================
-// Link As Legato Command (merge notes into one continuous note)
+// Legato link helpers
+// ============================================================================
+
+// True when `next` is close enough to `prev`'s end to count as a legato
+// continuation. Mirrors Track::renderNoteImpl's "a legato note follows" window
+// so the score-side view of a chain matches what the renderer will do.
+static bool legatoConnects(const Note &prev, const Note &next)
+{
+    const double window = std::max(200.0, prev.getDuration() * 0.1);
+    const double timeDiff = prev.getEndTime() - next.getStartTime();
+    return timeDiff > -50.0 && timeDiff < window;
+}
+
+// A note read by "Unlink (Staccato)": either a note linked by the current
+// articulation-only link (or one of its neighbours), or a legacy merged note.
+static bool isLegacyMergedNote(const Note &note, const QVector<Note> &notes)
+{
+    if (note.getSegmentCount() <= 1) return false;
+    if (!note.isQuantized() && !note.isLinkedAsLegato()) return false;
+
+    // Legacy merges never carry `legato` themselves (LinkAsLegatoCommand set it
+    // false) and have no flagged neighbours. Anything with a legato-flagged
+    // note abutting it came from the articulation-only link, so it must not be
+    // split apart.
+    for (const Note &other : notes) {
+        if (other.getId() == note.getId()) continue;
+        if (!other.isLegato() || !other.isLinkedAsLegato()) continue;
+        if (legatoConnects(note, other) || legatoConnects(other, note)) return false;
+    }
+    return true;
+}
+
+bool UnlinkLegatoCommand::noteCanUnlink(const Note &note, const QVector<Note> &trackNotes)
+{
+    return isLegacyMergedNote(note, trackNotes) || note.isLinkedAsLegato();
+}
+
+// ============================================================================
+// Link As Legato Command (articulation only — never merges or converts notes)
 // ============================================================================
 
 LinkAsLegatoCommand::LinkAsLegatoCommand(Phrase *phrase, const QVector<int> &noteIndices,
@@ -1533,97 +1571,41 @@ LinkAsLegatoCommand::LinkAsLegatoCommand(Phrase *phrase, const QVector<int> &not
 
     if (m_originalNotes.size() < 2) return;
 
-    // Build the merged note from the first note as base
-    const Note &firstNote = m_originalNotes.first().note;
-    const Note &lastNote = m_originalNotes.last().note;
-
-    double totalStart = firstNote.getStartTime();
-    double totalEnd = lastNote.getStartTime() + lastNote.getDuration();
-    double totalDuration = totalEnd - totalStart;
-
-    m_mergedNote = firstNote;  // Copy first note as base (preserves track, variation, vibrato, id)
-    m_mergedNote.setDuration(totalDuration);
-    m_mergedNote.setLegato(false);
-    m_mergedNote.setLinkedAsLegato(true);
-
-    // If any original note is continuous (has a pitch curve), the merged note must NOT
-    // be quantized — otherwise it would snap to scale and lose free pitch movement.
-    // For all-discrete merges, quantized=true keeps the stepped scale behavior.
-    bool anyContinuous = false;
-    for (const auto &orig : m_originalNotes) {
-        if (orig.note.hasPitchCurve()) { anyContinuous = true; break; }
-    }
-    m_mergedNote.setQuantized(!anyContinuous);
-
-    // Build tiling boundaries: each note's region extends to the next note's start
-    // so there are no gaps (which would cause pitch interpolation / portamento)
-    QVector<double> regionStart(m_originalNotes.size());
-    QVector<double> regionEnd(m_originalNotes.size());
+    // Build the linked versions. Every note keeps its identity, kind, pitch,
+    // curve, variation and dynamics — only articulation changes:
+    //  - each note is extended (never shortened) to reach the next one's start,
+    //    so the phrase has no gaps and no re-attack;
+    //  - `linkedAsLegato` marks the group (visual + unlink state);
+    //  - `legato` marks the notes that continue from the previous one, which is
+    //    what the sound engine reads to skip attack/release.
     for (int i = 0; i < m_originalNotes.size(); ++i) {
-        regionStart[i] = m_originalNotes[i].note.getStartTime();
+        const Note &orig = m_originalNotes[i].note;
+
+        OriginalNote mod;
+        mod.index = m_originalNotes[i].index;
+        mod.note = orig;
+
         if (i < m_originalNotes.size() - 1) {
-            // Extend to meet the next note's start
-            regionEnd[i] = m_originalNotes[i + 1].note.getStartTime();
-        } else {
-            // Last note keeps its own end
-            regionEnd[i] = m_originalNotes[i].note.getStartTime()
-                         + m_originalNotes[i].note.getDuration();
+            const double nextStart = m_originalNotes[i + 1].note.getStartTime();
+            const double endTime = std::max(orig.getEndTime(), nextStart);
+            mod.note.setDuration(endTime - orig.getStartTime());
         }
+
+        // A track or variation change means the graph changes: there is no
+        // state to carry over, so that boundary re-articulates.
+        const bool sameGraphAsPrev = i > 0
+            && orig.getTrackIndex() == m_originalNotes[i - 1].note.getTrackIndex()
+            && orig.getVariationIndex() == m_originalNotes[i - 1].note.getVariationIndex();
+
+        mod.note.setLegato(sameGraphAsPrev);
+        mod.note.setLinkedAsLegato(true);
+        // Render invalidation itself rides on the chain-aware note hash
+        // (Track::effectiveNoteHash), which covers flags, durations and the
+        // gaps between chain members.
+        mod.note.setRenderDirty(true);
+
+        m_modifiedNotes.append(mod);
     }
-
-    // Build pitch curve: remap continuous notes' full curves; flat steps for discrete notes
-    Curve pitchCurve;
-    for (int i = 0; i < m_originalNotes.size(); ++i) {
-        double normStart = (regionStart[i] - totalStart) / totalDuration;
-        double normEnd   = (regionEnd[i]   - totalStart) / totalDuration;
-        double normSpan  = normEnd - normStart;
-
-        const Note &srcNote = m_originalNotes[i].note;
-        const auto &srcPoints = srcNote.getPitchCurve().getPoints();
-
-        if (srcNote.hasPitchCurve() && !srcPoints.isEmpty()) {
-            // Continuous note: remap its full pitch curve into the merged note's time space
-            for (const auto &pt : srcPoints) {
-                pitchCurve.addPoint(normStart + pt.time * normSpan, pt.value, pt.pressure);
-            }
-        } else {
-            // Discrete note (or continuous with empty curve): flat step at midpoint pitch
-            double pitch = srcNote.getPitchAt(0.5);
-            pitchCurve.addPoint(normStart, pitch);
-            pitchCurve.addPoint(normEnd, pitch);
-        }
-    }
-    m_mergedNote.setPitchCurve(pitchCurve);
-    m_mergedNote.setPitchHz(firstNote.getPitchAt(0.5));  // Base pitch fallback
-
-    // Dynamics: use only the first note's curve, stretched across the full merged
-    // duration (m_mergedNote = firstNote already copied it, normalized 0-1).
-    // Per-note dynamics changes can be applied afterward via the envelope editor.
-
-    // Build segments
-    m_mergedNote.clearSegments();
-    if (anyContinuous) {
-        // Continuous merge: place one boundary segment per original note so that
-        // "Unlink (Staccato)" splits back into the same number of notes, not into
-        // dozens of tiny scale-step fragments.
-        QVector<Segment> &segs = m_mergedNote.getSegments();
-        for (int i = 0; i < m_originalNotes.size(); ++i) {
-            double normStart = (regionStart[i] - totalStart) / totalDuration;
-            double normEnd   = (regionEnd[i]   - totalStart) / totalDuration;
-            Segment seg;
-            seg.startTime      = normStart;
-            seg.endTime        = normEnd;
-            seg.pitchHz        = m_originalNotes[i].note.getPitchAt(0.5);
-            seg.variationIndex = m_originalNotes[i].note.getVariationIndex();
-            seg.useNoteVibrato = true;
-            segs.append(seg);
-        }
-    } else {
-        // Discrete merge: detect scale-stepped segments from the flat pitch curve
-        m_mergedNote.detectSegments();
-    }
-
-    m_mergedNote.setRenderDirty(true);
 }
 
 void LinkAsLegatoCommand::undo()
@@ -1632,35 +1614,15 @@ void LinkAsLegatoCommand::undo()
 
     if (m_originalNotes.size() < 2) return;
 
-    // Build sorted index list: m_originalNotes is sorted by start time,
-    // not by index — we need ascending index order for re-insertion.
-    QVector<int> sortedIndices;
-    sortedIndices.reserve(m_originalNotes.size());
-    for (const auto &orig : m_originalNotes)
-        sortedIndices.append(orig.index);
-    std::sort(sortedIndices.begin(), sortedIndices.end());
-
-    // Remove the merged note
-    int mergedIdx = sortedIndices.first();
-    if (mergedIdx >= 0 && mergedIdx < notes.size()) {
-        notes.removeAt(mergedIdx);
-    }
-
-    // Re-insert all original notes in ascending index order
-    for (int idx : sortedIndices) {
-        int ins = qMin(idx, notes.size());
-        // Find the OriginalNote with this index
-        for (const auto &orig : m_originalNotes) {
-            if (orig.index == idx) {
-                notes.insert(ins, orig.note);
-                break;
-            }
-        }
+    // Nothing was added, removed or reordered — restore in place.
+    for (const OriginalNote &orig : m_originalNotes) {
+        if (orig.index >= 0 && orig.index < notes.size())
+            notes[orig.index] = orig.note;
     }
 
     m_canvas->update();
     emit m_canvas->notesChanged();
-    qDebug() << "Undo: Restored" << m_originalNotes.size() << "notes from legato merge";
+    qDebug() << "Undo: Unlinked" << m_originalNotes.size() << "legato notes";
 }
 
 void LinkAsLegatoCommand::redo()
@@ -1669,36 +1631,20 @@ void LinkAsLegatoCommand::redo()
 
     if (m_originalNotes.size() < 2) return;
 
-    // m_originalNotes is sorted by start time for the pitch-curve builder.
-    // Removal must be in descending INDEX order — otherwise earlier
-    // removals shift later indices and we delete the wrong notes.
-    QVector<int> sortedIndices;
-    sortedIndices.reserve(m_originalNotes.size());
-    for (const auto &orig : m_originalNotes)
-        sortedIndices.append(orig.index);
-    std::sort(sortedIndices.begin(), sortedIndices.end(), std::greater<int>());
-
-    for (int idx : sortedIndices) {
-        if (idx >= 0 && idx < notes.size()) {
-            notes.removeAt(idx);
-        }
+    for (const OriginalNote &mod : m_modifiedNotes) {
+        if (mod.index >= 0 && mod.index < notes.size())
+            notes[mod.index] = mod.note;
     }
 
-    // Insert the merged note at the lowest original index
-    int insertIdx = qMin(sortedIndices.last(), notes.size());
-    notes.insert(insertIdx, m_mergedNote);
-
-    // Update selection to the merged note only — the old selectedNoteIndices
-    // are now stale and would point to unrelated notes that shifted into those slots.
-    m_canvas->selectNotes({insertIdx});
-
+    // The selection is untouched: no index changed, so the linked notes stay
+    // selected (multi-note curve edits keep working on the group).
     m_canvas->update();
     emit m_canvas->notesChanged();
-    qDebug() << "Redo: Merged" << m_originalNotes.size() << "notes into legato";
+    qDebug() << "Redo: Linked" << m_modifiedNotes.size() << "notes as legato";
 }
 
 // ============================================================================
-// Unlink Legato Command (split merged note back into discrete notes)
+// Unlink Legato Command (legacy: split merged note — new: clear articulation)
 // ============================================================================
 
 UnlinkLegatoCommand::UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &noteIndices,
@@ -1711,15 +1657,19 @@ UnlinkLegatoCommand::UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &not
 
     const QVector<Note> &notes = m_phrase->getNotes();
 
-    // Collect splittable notes (segmented), sorted by descending index for safe removal
-    QVector<int> validIndices;
+    // Split legacy merged notes apart; notes linked by the articulation-only
+    // link just get their flags cleared and the staccato gap restored in place
+    // (their kind, pitch, curve and variation are never touched).
+    QVector<int> validIndices;   // legacy merges, descending index
+    QVector<int> clearIndices;   // linked notes, any order
     for (int idx : noteIndices) {
-        if (idx >= 0 && idx < notes.size()) {
-            const Note &note = notes[idx];
-            if ((note.isQuantized() || note.isLinkedAsLegato()) && note.getSegmentCount() > 1) {
-                validIndices.append(idx);
-            }
-        }
+        if (idx < 0 || idx >= notes.size()) continue;
+        const Note &note = notes[idx];
+        if (!UnlinkLegatoCommand::noteCanUnlink(note, notes)) continue;
+        if (isLegacyMergedNote(note, notes))
+            validIndices.append(idx);
+        else
+            clearIndices.append(idx);
     }
     std::sort(validIndices.begin(), validIndices.end(), std::greater<int>());
 
@@ -1831,19 +1781,73 @@ UnlinkLegatoCommand::UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &not
 
         m_splits.append(entry);
     }
+
+    // Build clear entries: articulation-only unlink. Sorted by start time so
+    // the staccato gap can look at the next linked note.
+    std::sort(clearIndices.begin(), clearIndices.end(), [&notes](int a, int b) {
+        return notes[a].getStartTime() < notes[b].getStartTime();
+    });
+
+    QSet<int> alreadyCleared;
+    for (int idx : clearIndices) alreadyCleared.insert(idx);
+
+    for (int i = 0; i < clearIndices.size(); ++i) {
+        const int idx = clearIndices[i];
+        const Note &note = notes[idx];
+
+        ClearEntry entry;
+        entry.index = idx;
+        entry.originalNote = note;
+        entry.clearedNote = note;
+        entry.clearedNote.setLinkedAsLegato(false);
+        entry.clearedNote.setLegato(false);
+        entry.clearedNote.setRenderDirty(true);
+
+        // Staccato gap: shorten this note where it runs straight into the next
+        // linked note, so the pair re-articulates. Same rule (and same 50 ms
+        // floor) the legacy split applies — here it shortens in place instead
+        // of slicing a pitch curve, leaving the note's kind untouched.
+        if (i + 1 < clearIndices.size()) {
+            const Note &next = notes[clearIndices[i + 1]];
+            if (note.getEndTime() >= next.getStartTime() - 1.0) {
+                const double gapMs = std::clamp(note.getDuration() * 0.08, 15.0, 200.0);
+                const double shortened = note.getDuration() - gapMs;
+                if (shortened >= 50.0)
+                    entry.clearedNote.setDuration(shortened);
+            }
+        }
+        m_clears.append(entry);
+
+        // The following note was continuing from this one; with the link gone
+        // it must attack again. Duration, kind and link flag are untouched —
+        // if it is part of the same selection it already has its own entry.
+        for (int j = 0; j < notes.size(); ++j) {
+            if (j == idx || alreadyCleared.contains(j)) continue;
+            const Note &other = notes[j];
+            if (!other.isLegato() || !other.isLinkedAsLegato()) continue;
+            if (!legatoConnects(note, other)) continue;
+
+            ClearEntry cont;
+            cont.index = j;
+            cont.originalNote = other;
+            cont.clearedNote = other;
+            cont.clearedNote.setLegato(false);
+            cont.clearedNote.setRenderDirty(true);
+            m_clears.append(cont);
+            alreadyCleared.insert(j);
+            break;
+        }
+    }
 }
 
 void UnlinkLegatoCommand::undo()
 {
     QVector<Note> &notes = m_phrase->getNotes();
 
-    // Reverse of redo: remove split notes, re-insert originals
-    // m_splits is sorted by descending original index
-    // redo() processes in that order (remove original, insert splits)
-    // undo() reverses: remove splits, insert original — in ascending index order
-    for (int i = m_splits.size() - 1; i >= 0; --i) {
-        const SplitEntry &entry = m_splits[i];
-
+    // Reverse of redo, in the same order: re-insert the legacy merged notes
+    // first (each entry's net shift stays at or above its own index, so
+    // descending order is safe), then restore the cleared notes in place.
+    for (const SplitEntry &entry : m_splits) {
         // Remove the split notes at this position
         int removeIdx = entry.originalIndex;
         for (int s = 0; s < entry.splitNotes.size() && removeIdx < notes.size(); ++s) {
@@ -1855,14 +1859,28 @@ void UnlinkLegatoCommand::undo()
         notes.insert(insertIdx, entry.originalNote);
     }
 
+    for (const ClearEntry &entry : m_clears) {
+        if (entry.index >= 0 && entry.index < notes.size())
+            notes[entry.index] = entry.originalNote;
+    }
+
     m_canvas->update();
     emit m_canvas->notesChanged();
-    qDebug() << "Undo: Restored" << m_splits.size() << "merged note(s) from staccato split";
+    qDebug() << "Undo: Restored" << m_splits.size() << "merged note(s),"
+             << m_clears.size() << "linked note(s) from staccato split";
 }
 
 void UnlinkLegatoCommand::redo()
 {
     QVector<Note> &notes = m_phrase->getNotes();
+
+    // Clear the articulation-only links first: those are in-place writes and
+    // leave every index untouched, so the split entries below can still trust
+    // the indices they were built from.
+    for (const ClearEntry &entry : m_clears) {
+        if (entry.index >= 0 && entry.index < notes.size())
+            notes[entry.index] = entry.clearedNote;
+    }
 
     // Process in descending index order (m_splits is already sorted this way)
     for (const SplitEntry &entry : m_splits) {
@@ -1880,7 +1898,8 @@ void UnlinkLegatoCommand::redo()
 
     m_canvas->update();
     emit m_canvas->notesChanged();
-    qDebug() << "Redo: Split" << m_splits.size() << "merged note(s) into discrete staccato notes";
+    qDebug() << "Redo: Split" << m_splits.size() << "merged note(s), cleared"
+             << m_clears.size() << "linked note(s)";
 }
 
 // ============================================================================

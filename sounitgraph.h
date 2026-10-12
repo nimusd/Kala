@@ -83,6 +83,14 @@ public:
     // isLegato = true to preserve state for legato transition (don't reset K-S etc.)
     void reset(bool isLegato = false);
 
+    /**
+     * Tell the graph that `noteProgress` is a legato chain's timeline rather
+     * than a fresh note's own 0-1 (see Track::renderNoteImpl). Progress-driven
+     * envelopes then follow the progress as-is instead of re-mapping it to a
+     * mid-note start position — the progress already carries the continuation.
+     */
+    void setChainTimelineProgress(bool on) { m_chainTimelineProgress = on; }
+
     // Check if graph is valid and can produce audio
     bool isValid() const { return hasValidSignalOutput; }
 
@@ -281,6 +289,7 @@ private:
     Container *signalOutputContainer = nullptr;  // Final output (pre-IR when post-render IR is active)
     bool hasValidSignalOutput = false;
     bool m_currentIsLegato = false;  // Current note's legato state (for executeContainer)
+    bool m_chainTimelineProgress = false;  // noteProgress is a legato chain's timeline, not a fresh note's
     bool m_tailMode = false;         // True during tail: signal sources output 0, processors drain
     bool m_hasTailProcessor = false; // True if a TailProcessor exists; sources keep running in tail mode
     bool m_needsIRPreroll = false;   // True after reset() when any IR Conv has irInConnected

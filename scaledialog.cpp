@@ -54,7 +54,15 @@ static QString getScaleDescription(int scaleId)
 
     case 4:
         return "<b>Maqam Rast</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
-               "Foundational maqam, similar to the major scale. Basis for many other maqams.<br><br>"
+               "Foundational maqam, similar to the major scale. Basis for many other maqams. "
+               "Half-flat 3rd and 7th (350&cent; and 1050&cent;).<br><br>"
+               "<b>Notes:</b> C &middot; D &middot; E&#9837;+ &middot; F &middot; G &middot; A &middot; B&#9837;+<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 4 &middot; 7 &middot; 10 &middot; 14 &middot; 18 &middot; 21 (24ths of an octave)";
+
+    case 49:
+        return "<b>Maqam Rast (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Rast with pure 5-limit ratios; "
+               "the half-flat degrees are approximated by natural pitches.<br><br>"
                "<b>Notes:</b> C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B<br>"
                "<b>Ratios:</b> 1/1 &middot; 9/8 &middot; 5/4 &middot; 4/3 &middot; 3/2 &middot; 27/16 &middot; 15/8";
 
@@ -62,19 +70,39 @@ static QString getScaleDescription(int scaleId)
         return "<b>Maqam Bayati</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
                "Popular maqam featuring characteristic quarter-tone inflections "
                "on the 2nd and 6th degrees.<br><br>"
-               "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837; &middot; F &middot; G &middot; A&#9837;+ &middot; B&#9837;<br>"
+               "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B&#9837;<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 3 &middot; 6 &middot; 10 &middot; 14 &middot; 16 &middot; 20 (24ths of an octave)";
+
+    case 50:
+        return "<b>Maqam Bayati (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Bayati: half-flat 2nd approximated "
+               "by 16/15, 6th degree by 8/5.<br><br>"
+               "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B&#9837;<br>"
                "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 6/5 &middot; 4/3 &middot; 3/2 &middot; 8/5 &middot; 9/5";
 
     case 6:
-        return "<b>Maqam Saba</b> &mdash; 8 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
-               "Complex 8-note scale containing many microtones. "
+        return "<b>Maqam Saba</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Complex maqam with many microtones. "
                "Expresses sadness and deep longing.<br><br>"
-               "<b>Notes:</b> C &middot; D&#9837; &middot; E&#9837; &middot; E &middot; F&#9839; &middot; A&#9837; &middot; B&#9837; &middot; C&#9839;<br>"
-               "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 6/5 &middot; 27/20 &middot; 45/32 &middot; 8/5 &middot; 9/5 &middot; 15/8";
+               "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837; &middot; E &middot; G&#9837; &middot; A&#9837; &middot; B&#9837;<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 3 &middot; 6 &middot; 8 &middot; 12 &middot; 16 &middot; 20 (24ths of an octave)";
+
+    case 51:
+        return "<b>Maqam Saba (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Saba; the tritone is a pure 45/32.<br><br>"
+               "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837; &middot; E &middot; G&#9837; &middot; A&#9837; &middot; B&#9837;<br>"
+               "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 6/5 &middot; 5/4 &middot; 45/32 &middot; 8/5 &middot; 9/5";
 
     case 7:
         return "<b>Maqam Hijaz</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
                "Dramatic maqam with a characteristic augmented 2nd between D&#9837; and E.<br><br>"
+               "<b>Notes:</b> C &middot; D&#9837; &middot; E &middot; F &middot; G &middot; A&#9837; &middot; B&#9837;<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 2 &middot; 8 &middot; 10 &middot; 14 &middot; 16 &middot; 20 (24ths of an octave)";
+
+    case 52:
+        return "<b>Maqam Hijaz (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Hijaz. "
+               "Keeps the old major 7th (B at 15/8) &mdash; the 24-TET version ends on B&#9837;.<br><br>"
                "<b>Notes:</b> C &middot; D&#9837; &middot; E &middot; F &middot; G &middot; A&#9837; &middot; B<br>"
                "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 5/4 &middot; 4/3 &middot; 3/2 &middot; 8/5 &middot; 15/8";
 
@@ -82,11 +110,23 @@ static QString getScaleDescription(int scaleId)
         return "<b>Maqam Nahawand</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
                "Often called the &ldquo;minor maqam.&rdquo; Very similar to the natural minor scale.<br><br>"
                "<b>Notes:</b> C &middot; D &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 4 &middot; 6 &middot; 10 &middot; 14 &middot; 16 &middot; 22 (24ths of an octave)";
+
+    case 53:
+        return "<b>Maqam Nahawand (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Nahawand &mdash; natural minor in 5-limit JI.<br><br>"
+               "<b>Notes:</b> C &middot; D &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B<br>"
                "<b>Ratios:</b> 1/1 &middot; 9/8 &middot; 6/5 &middot; 4/3 &middot; 3/2 &middot; 8/5 &middot; 15/8";
 
     case 9:
         return "<b>Maqam Kurd</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
                "Similar to the Phrygian mode. Melancholic character.<br><br>"
+               "<b>Notes:</b> C &middot; D&#9837; &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B&#9837;<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 2 &middot; 6 &middot; 10 &middot; 14 &middot; 16 &middot; 20 (24ths of an octave)";
+
+    case 54:
+        return "<b>Maqam Kurd (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Kurd &mdash; Phrygian character with pure ratios.<br><br>"
                "<b>Notes:</b> C &middot; D&#9837; &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B&#9837;<br>"
                "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 6/5 &middot; 4/3 &middot; 3/2 &middot; 8/5 &middot; 9/5";
 
@@ -223,13 +263,19 @@ static QString getScaleDescription(int scaleId)
                "<b>Notes:</b> Sa &middot; Re&#9837; &middot; Ga &middot; Ma&#9839; &middot; Pa &middot; Dha&#9837; &middot; Ni<br>"
                "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 5/4 &middot; 45/32 &middot; 3/2 &middot; 8/5 &middot; 15/8";
 
-    // ---- Maqam (additional) ----
+    // ---- Maqam (continued) ----
 
     case 27:
         return "<b>Maqam Sikah</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
-               "Built on a neutral 3rd. Uses 3/4-tone (~150 cent) steps; "
-               "12/11 ratio approximates the characteristic microtonal interval. "
+               "Built on the half-flat 3rd degree (350&cent;, the &ldquo;sikah&rdquo; note). "
                "Expressive, melancholic character.<br><br>"
+               "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837;+ &middot; F+ &middot; G &middot; A&#9837;+ &middot; B&#9837;+<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 3 &middot; 7 &middot; 11 &middot; 14 &middot; 17 &middot; 21 (24ths of an octave)";
+
+    case 55:
+        return "<b>Maqam Sikah (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Sikah; 12/11 (~151&cent;) approximates the "
+               "3/4-tone step and the neutral degrees fall back to plain E&#9837;/F/A&#9837;/B&#9837;.<br><br>"
                "<b>Notes:</b> C &middot; D&#9837;+ &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B&#9837;<br>"
                "<b>Ratios:</b> 1/1 &middot; 12/11 &middot; 6/5 &middot; 4/3 &middot; 3/2 &middot; 8/5 &middot; 9/5";
 
@@ -238,12 +284,25 @@ static QString getScaleDescription(int scaleId)
                "Major tetrachord character with a minor 7th (B&#9837;). "
                "Bright, joyful sound. Common in Egyptian and Arab classical music.<br><br>"
                "<b>Notes:</b> C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B&#9837;<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 4 &middot; 8 &middot; 10 &middot; 14 &middot; 18 &middot; 20 (24ths of an octave)";
+
+    case 56:
+        return "<b>Maqam Ajam (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Ajam &mdash; mixolydian character with pure ratios.<br><br>"
+               "<b>Notes:</b> C &middot; D &middot; E &middot; F &middot; G &middot; A &middot; B&#9837;<br>"
                "<b>Ratios:</b> 1/1 &middot; 9/8 &middot; 5/4 &middot; 4/3 &middot; 3/2 &middot; 5/3 &middot; 9/5";
 
     case 29:
         return "<b>Maqam Athar Kurd</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
                "Kurd lower tetrachord (C D&#9837; E&#9837; F) + Athar upper tetrachord (G A&#9837; B C). "
                "Defining augmented 2nd between A&#9837; and B. Dark, mysterious character.<br><br>"
+               "<b>Notes:</b> C &middot; D&#9837; &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B<br>"
+               "<b>Steps:</b> 24-TET quarter tones: 0 &middot; 2 &middot; 6 &middot; 10 &middot; 14 &middot; 16 &middot; 22 (24ths of an octave)";
+
+    case 57:
+        return "<b>Maqam Athar Kurd (5-Limit JI)</b> &mdash; 7 notes &mdash; Maqam (Arabic/Turkish)<br><br>"
+               "Just-intonation version of Maqam Athar Kurd with the augmented 2nd "
+               "as a pure 15/8 above A&#9837;.<br><br>"
                "<b>Notes:</b> C &middot; D&#9837; &middot; E&#9837; &middot; F &middot; G &middot; A&#9837; &middot; B<br>"
                "<b>Ratios:</b> 1/1 &middot; 16/15 &middot; 6/5 &middot; 4/3 &middot; 3/2 &middot; 8/5 &middot; 15/8";
 

@@ -58,6 +58,26 @@ bool Scale::getIsAccidental(int degree) const
     return false;
 }
 
+bool Scale::is24TETMaqam() const
+{
+    // The 9 maqam scales whose degrees sit on the 24-TET quarter-tone grid.
+    // (The "(5-Limit JI)" maqam variants, 49-57, are NOT on the grid.)
+    switch (scaleId) {
+        case 4:   // Maqam Rast
+        case 5:   // Maqam Bayati
+        case 6:   // Maqam Saba
+        case 7:   // Maqam Hijaz
+        case 8:   // Maqam Nahawand
+        case 9:   // Maqam Kurd
+        case 27:  // Maqam Sikah
+        case 28:  // Maqam Ajam
+        case 29:  // Maqam Athar Kurd
+            return true;
+        default:
+            return false;
+    }
+}
+
 void Scale::setCentOffsets(const QVector<double> &offsets)
 {
     centOffsets = offsets;
@@ -195,6 +215,23 @@ Scale Scale::maqamRast()
     return Scale("Maqam Rast", 4, ratios, names);
 }
 
+Scale Scale::maqamRastJI()
+{
+    // Maqam Rast, 5-limit just intonation (the pre-24-TET tuning)
+    // Half-flat degrees are approximated by natural pitches (E at 5/4, B at 15/8)
+    QVector<double> ratios = {
+        1.0,            // C
+        9.0/8.0,        // D
+        5.0/4.0,        // E (pure major third stands in for the half-flat 3rd)
+        4.0/3.0,        // F
+        3.0/2.0,        // G (Nawa)
+        27.0/16.0,      // A
+        15.0/8.0        // B (stands in for the half-flat 7th)
+    };
+    QVector<QString> names = {"C", "D", "E", "F", "G", "A", "B"};
+    return Scale("Maqam Rast (5-Limit JI)", 49, ratios, names);
+}
+
 Scale Scale::maqamBayati()
 {
     // Maqam Bayati: D E♭+ F G A B♭ C D
@@ -211,6 +248,23 @@ Scale Scale::maqamBayati()
     };
     QVector<QString> names = {"C", "Db+", "Eb", "F", "G", "Ab", "Bb"};
     return Scale("Maqam Bayati", 5, ratios, names);
+}
+
+Scale Scale::maqamBayatiJI()
+{
+    // Maqam Bayati, 5-limit just intonation (the pre-24-TET tuning)
+    // Signature: half-flat 2nd (16/15) and full-flat 6th (8/5)
+    QVector<double> ratios = {
+        1.0,            // C
+        16.0/15.0,      // Db+ (JI approximation of the half-flat 2nd)
+        6.0/5.0,        // Eb
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        8.0/5.0,        // Ab
+        9.0/5.0         // Bb
+    };
+    QVector<QString> names = {"C", "Db+", "Eb", "F", "G", "Ab", "Bb"};
+    return Scale("Maqam Bayati (5-Limit JI)", 50, ratios, names);
 }
 
 Scale Scale::maqamSaba()
@@ -231,6 +285,23 @@ Scale Scale::maqamSaba()
     return Scale("Maqam Saba", 6, ratios, names);
 }
 
+Scale Scale::maqamSabaJI()
+{
+    // Maqam Saba, 5-limit just intonation — same 7 degrees as the 24-TET version
+    // (the old pre-24-TET Saba had an extra 8th degree; that was fixed)
+    QVector<double> ratios = {
+        1.0,            // C
+        16.0/15.0,      // Db+ (JI approximation of the half-flat 2nd)
+        6.0/5.0,        // Eb
+        5.0/4.0,        // E
+        45.0/32.0,      // Gb (JI augmented fourth)
+        8.0/5.0,        // Ab
+        9.0/5.0         // Bb
+    };
+    QVector<QString> names = {"C", "Db+", "Eb", "E", "Gb", "Ab", "Bb"};
+    return Scale("Maqam Saba (5-Limit JI)", 51, ratios, names);
+}
+
 Scale Scale::maqamHijaz()
 {
     // Maqam Hijaz: D E♭ F# G A B♭ C D
@@ -247,6 +318,23 @@ Scale Scale::maqamHijaz()
     };
     QVector<QString> names = {"C", "Db", "E", "F", "G", "Ab", "Bb"};
     return Scale("Maqam Hijaz", 7, ratios, names);
+}
+
+Scale Scale::maqamHijazJI()
+{
+    // Maqam Hijaz, 5-limit just intonation (the pre-24-TET tuning)
+    // Keeps the old major 7th (B at 15/8); the 24-TET version ends on Bb
+    QVector<double> ratios = {
+        1.0,            // C
+        16.0/15.0,      // Db
+        5.0/4.0,        // E (augmented 2nd above Db)
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        8.0/5.0,        // Ab
+        15.0/8.0        // B
+    };
+    QVector<QString> names = {"C", "Db", "E", "F", "G", "Ab", "B"};
+    return Scale("Maqam Hijaz (5-Limit JI)", 52, ratios, names);
 }
 
 Scale Scale::maqamNahawand()
@@ -266,6 +354,23 @@ Scale Scale::maqamNahawand()
     return Scale("Maqam Nahawand", 8, ratios, names);
 }
 
+Scale Scale::maqamNahawandJI()
+{
+    // Maqam Nahawand, 5-limit just intonation (the pre-24-TET tuning)
+    // Equivalent to natural minor in JI
+    QVector<double> ratios = {
+        1.0,            // C
+        9.0/8.0,        // D
+        6.0/5.0,        // Eb
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        8.0/5.0,        // Ab
+        15.0/8.0        // B
+    };
+    QVector<QString> names = {"C", "D", "Eb", "F", "G", "Ab", "B"};
+    return Scale("Maqam Nahawand (5-Limit JI)", 53, ratios, names);
+}
+
 Scale Scale::maqamKurd()
 {
     // Maqam Kurd: C D♭ E♭ F G A♭ B♭ C
@@ -281,6 +386,23 @@ Scale Scale::maqamKurd()
     };
     QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "Bb"};
     return Scale("Maqam Kurd", 9, ratios, names);
+}
+
+Scale Scale::maqamKurdJI()
+{
+    // Maqam Kurd, 5-limit just intonation (the pre-24-TET tuning)
+    // Similar to Phrygian mode
+    QVector<double> ratios = {
+        1.0,            // C
+        16.0/15.0,      // Db
+        6.0/5.0,        // Eb
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        8.0/5.0,        // Ab
+        9.0/5.0         // Bb
+    };
+    QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "Bb"};
+    return Scale("Maqam Kurd (5-Limit JI)", 54, ratios, names);
 }
 
 // ============================================================================
@@ -608,6 +730,24 @@ Scale Scale::maqamSikah()
     return Scale("Maqam Sikah", 27, ratios, names);
 }
 
+Scale Scale::maqamSikahJI()
+{
+    // Maqam Sikah, 5-limit just intonation (the pre-24-TET tuning)
+    // 12/11 (~151 cents) approximates the characteristic 3/4-tone step;
+    // the neutral degrees fall back to plain Eb/F/Ab/Bb
+    QVector<double> ratios = {
+        1.0,            // C
+        12.0/11.0,      // Db+ (~150 cents, 3/4-tone step)
+        6.0/5.0,        // Eb
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        8.0/5.0,        // Ab
+        9.0/5.0         // Bb
+    };
+    QVector<QString> names = {"C", "Db+", "Eb", "F", "G", "Ab", "Bb"};
+    return Scale("Maqam Sikah (5-Limit JI)", 55, ratios, names);
+}
+
 Scale Scale::maqamAjam()
 {
     // Maqam Ajam: major tetrachord character with minor 7th
@@ -625,6 +765,23 @@ Scale Scale::maqamAjam()
     return Scale("Maqam Ajam", 28, ratios, names);
 }
 
+Scale Scale::maqamAjamJI()
+{
+    // Maqam Ajam, 5-limit just intonation (the pre-24-TET tuning)
+    // Major tetrachord character with minor 7th
+    QVector<double> ratios = {
+        1.0,            // C
+        9.0/8.0,        // D
+        5.0/4.0,        // E
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        5.0/3.0,        // A
+        9.0/5.0         // Bb
+    };
+    QVector<QString> names = {"C", "D", "E", "F", "G", "A", "Bb"};
+    return Scale("Maqam Ajam (5-Limit JI)", 56, ratios, names);
+}
+
 Scale Scale::maqamAtharKurd()
 {
     // Maqam Athar Kurd: Kurd lower tetrachord + Athar upper tetrachord
@@ -640,6 +797,23 @@ Scale Scale::maqamAtharKurd()
     };
     QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "B"};
     return Scale("Maqam Athar Kurd", 29, ratios, names);
+}
+
+Scale Scale::maqamAtharKurdJI()
+{
+    // Maqam Athar Kurd, 5-limit just intonation (the pre-24-TET tuning)
+    // Kurd lower tetrachord + Athar upper tetrachord; augmented 2nd between Ab and B
+    QVector<double> ratios = {
+        1.0,            // C
+        16.0/15.0,      // Db
+        6.0/5.0,        // Eb
+        4.0/3.0,        // F
+        3.0/2.0,        // G
+        8.0/5.0,        // Ab
+        15.0/8.0        // B (augmented 2nd above Ab)
+    };
+    QVector<QString> names = {"C", "Db", "Eb", "F", "G", "Ab", "B"};
+    return Scale("Maqam Athar Kurd (5-Limit JI)", 57, ratios, names);
 }
 
 // ============================================================================
@@ -1007,13 +1181,25 @@ QVector<Scale> Scale::getAllScales()
     scales.append(equalTemperament());
     scales.append(quarterCommaMeantone());
 
-    // Maqam
+    // Maqam (each 24-TET scale followed by its 5-limit JI version)
     scales.append(maqamRast());
+    scales.append(maqamRastJI());
     scales.append(maqamBayati());
+    scales.append(maqamBayatiJI());
     scales.append(maqamSaba());
+    scales.append(maqamSabaJI());
     scales.append(maqamHijaz());
+    scales.append(maqamHijazJI());
     scales.append(maqamNahawand());
+    scales.append(maqamNahawandJI());
     scales.append(maqamKurd());
+    scales.append(maqamKurdJI());
+    scales.append(maqamSikah());
+    scales.append(maqamSikahJI());
+    scales.append(maqamAjam());
+    scales.append(maqamAjamJI());
+    scales.append(maqamAtharKurd());
+    scales.append(maqamAtharKurdJI());
 
     // Ragas
     scales.append(ragaBhairav());
@@ -1043,11 +1229,6 @@ QVector<Scale> Scale::getAllScales()
     scales.append(ragaKhamaj());
     scales.append(ragaMarwa());
     scales.append(ragaPurvi());
-
-    // Maqam (additional)
-    scales.append(maqamSikah());
-    scales.append(maqamAjam());
-    scales.append(maqamAtharKurd());
 
     // Persian Dastgah
     scales.append(persianShur());
@@ -1152,6 +1333,17 @@ Scale Scale::getScaleById(int id)
         case 46: return modeMixolydianB6();
         case 47: return modeLocrianSharp2();
         case 48: return modeAltered();
+
+        // Maqams in 5-limit just intonation
+        case 49: return maqamRastJI();
+        case 50: return maqamBayatiJI();
+        case 51: return maqamSabaJI();
+        case 52: return maqamHijazJI();
+        case 53: return maqamNahawandJI();
+        case 54: return maqamKurdJI();
+        case 55: return maqamSikahJI();
+        case 56: return maqamAjamJI();
+        case 57: return maqamAtharKurdJI();
 
         default:
             return justIntonation();  // Default fallback

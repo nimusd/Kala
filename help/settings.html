@@ -376,6 +376,26 @@
 </tbody>
 </table>
 
+<h2 id="midi-setup">MIDI Setup</h2>
+<p>The <strong>MIDI Setup</strong> category configures MIDI output for
+external hardware (currently the Yamaha VL70-m). See
+<a href="vl70m-midi.html">VL70-m MIDI Output</a> for the full
+integration.</p>
+<ul>
+<li><strong>Output device</strong> — the MIDI port the module is
+connected to. The selection is persisted via QSettings and remembered
+between sessions. <strong>Refresh</strong> re-scans for devices plugged
+in after the tab was opened.</li>
+<li><strong>Send test note</strong> — fires a short hello note
+(breath CC2 + Note On A4) through the configured port to verify the
+wiring. The same check is available as the <strong>MIDI test</strong>
+button in the score window toolbar.</li>
+<li><strong>Bandwidth test…</strong> — opens the measured-bandwidth
+harness that pushes CC / NRPN / SysEx streams at the module to find how
+many simultaneous streams it can take (playback is stopped first, so
+the engine does not pollute the measurement).</li>
+</ul>
+
 <h2 id="implementation-details">Implementation Details</h2>
 <h3 id="parameter-updating-flow">Parameter Updating Flow</h3>
 <ol type="1">

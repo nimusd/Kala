@@ -663,11 +663,16 @@ Uses `Easing::Type` enum (0=Linear … 28=Wobble) and `AnchorMode` (0=None, 1=Fi
 
 #### `link_legato`
 Parameters: `noteIds` (string array, required, ≥ 2).
-Pushes `LinkAsLegatoCommand`. Notes sustain into each other without envelope retrigger.
+Pushes `LinkAsLegatoCommand`. Articulation only: every note keeps its identity and kind
+(discrete stays discrete, continuous stays continuous — pitch, curve, variation and
+dynamics untouched) and is extended to meet the next note. The sound engine skips the
+attack on every note after the first, so the phrase sustains without retriggering.
 
 #### `unlink_legato`
 Parameters: `noteIds` (optional).
-Pushes `UnlinkLegatoCommand`. Restores independent envelope retriggering per note.
+Pushes `UnlinkLegatoCommand`. Clears the link and restores the staccato gap (shortens each
+note that runs into the next one) without changing note kind. Legacy merged notes from
+older projects are still split apart by segment.
 
 #### `quantize_to_scale`
 Parameters: `noteIds` (optional).

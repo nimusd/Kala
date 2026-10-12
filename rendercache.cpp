@@ -210,9 +210,16 @@ int RenderCache::loadFromFile(const QString &filePath, const QList<Track*> &trac
             continue;
         }
 
-        // Validate note hash
-        const Note *note = notesByTrack[trackId][noteId];
-        uint64_t currentNoteHash = note->computeHash();
+        // Validate note hash. This is the chain-aware hash the renderer stores:
+        // a legato chain shares one render state, so editing any member
+        // invalidates every member.
+        const QList<Note> &trackNotes = track->getNotes();
+        int noteIndex = -1;
+        for (int i = 0; i < trackNotes.size(); ++i) {
+            if (trackNotes[i].getId() == noteId) { noteIndex = i; break; }
+        }
+        uint64_t currentNoteHash = noteIndex >= 0
+            ? Track::effectiveNoteHash(trackNotes, noteIndex) : 0;
         if (storedNoteHash != currentNoteHash) {
             qDebug() << "RenderCache: Note hash mismatch for note" << noteId
                      << "(stored:" << storedNoteHash << ", current:" << currentNoteHash << ")";
