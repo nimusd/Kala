@@ -2,6 +2,8 @@
 /build/
 build/
 .qtc_clangd/
+# Qt Creator user settings — machine-local, rewritten every session
+.qtcreator/CMakeLists.txt.user*
 dist/
 debug/
 release/
