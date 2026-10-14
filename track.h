@@ -495,6 +495,18 @@ public:
     static QVector<LegatoChainInfo> computeLegatoChains(const QList<Note> &notes);
 
     /**
+     * Build the interpolated default legato curve for a phrase: samples each
+     * member's own dynamics curve just past its attack (25% in) plus the
+     * phrase's very start and end, joined into one continuous arc. This is
+     * what a phrase with no stored legato curve renders with, and what the
+     * legato curve dialog opens on, so the composer's overall arc survives
+     * linking while per-note attack transients do not leak into the joints.
+     * `memberIndices` index into `notes`, in start order.
+     */
+    static Curve defaultLegatoCurve(const QList<Note> &notes,
+                                    const QVector<int> &memberIndices);
+
+    /**
      * Note hash used for render-cache validation: the note's own hash plus its
      * chain neighbours' hashes and the relative gaps between members. Editing
      * or re-linking any member of a chain therefore re-renders the whole chain,
@@ -892,11 +904,24 @@ private:
      * @param note The note to render
      * @param graph Pre-cloned graph instance (caller owns)
      * @param outRender Output render buffer
+     * @param isContinuation True when a chain predecessor's state carries in
+     * @param legatoContinues True when a legato continuation follows this note
+     *        in its chain (the release/tail is deferred to the chain's last
+     *        member). Reported from the chain info so it mirrors
+     *        computeLegatoChains exactly.
+     * @param chainStartMs Start of the note's legato chain (its own start when
+     *        standalone); drives the chain-timeline progress
+     * @param chainSpanMs Length of the chain in ms (the note's duration when
+     *        standalone)
+     * @param legatoCurve The phrase-wide dynamics curve, evaluated at chain
+     *        progress in place of the note's own dynamics, or nullptr when
+     *        the note is not part of a multi-note phrase
      * @return true if render succeeded
      */
     bool renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender,
-                        const QList<Note> &allNotes, bool isContinuation,
-                        double chainStartMs, double chainSpanMs) const;
+                        bool isContinuation, bool legatoContinues,
+                        double chainStartMs, double chainSpanMs,
+                        const Curve *legatoCurve) const;
 
     /**
      * One render task per legato chain that has a stale member. The whole chain

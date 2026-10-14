@@ -610,6 +610,8 @@ bool Canvas::addExpressiveCurveName(const QString &name)
     QString trimmed = name.trimmed();
     if (trimmed.isEmpty()) return false;
     if (trimmed.compare(QStringLiteral("Dynamics"), Qt::CaseInsensitive) == 0) return false;
+    // "Legato" is reserved for the phrase-wide legato curve's stored editor shape.
+    if (trimmed.compare(QStringLiteral("Legato"), Qt::CaseInsensitive) == 0) return false;
     if (expressiveCurveNames.contains(trimmed)) return false;
     expressiveCurveNames.append(trimmed);
     emit expressiveCurveNamesChanged();

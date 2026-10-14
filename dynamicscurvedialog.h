@@ -7,6 +7,7 @@
 #include "envelopecurvecanvas.h"
 
 class QComboBox;
+class QGroupBox;
 class QLabel;
 class QPushButton;
 class QSlider;
@@ -41,6 +42,11 @@ public:
     // Pre-load an existing curve into the editor (switches preset to "Custom")
     void setInitialCurve(const QVector<EnvelopePoint> &points);
 
+    // Configure as the legato-phrase curve editor: the curve spans a whole
+    // legato phrase, so the per-note toggle (meaningless here) is hidden and
+    // the canvas marks the note boundaries. `noteBoundaries` are normalized
+    // 0..1 phrase positions of the note starts/ends.
+    void setLegatoMode(const QVector<double> &noteBoundaries);
 
     // Draw the note's other curves dimmed behind the editable one.
     void setGhostCurves(const QVector<EnvelopeCurveCanvas::Ghost> &ghosts);
@@ -58,6 +64,7 @@ private:
     // UI components
     QComboBox *presetCombo;
     EnvelopeCurveCanvas *curveCanvas;
+    QGroupBox *curveGroup = nullptr;
     QLabel *selectionLabel;
     QSlider *weightSlider;
     QLabel *weightValueLabel;

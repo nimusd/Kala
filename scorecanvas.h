@@ -184,6 +184,15 @@ public:
     // Dynamics curve dialog
     void showDynamicsCurveDialog();
     void showScaleDynamicsDialog();
+
+    // Legato phrases respond to ONE curve spanning the phrase, so when the
+    // whole selection sits inside a single legato phrase the dynamics-curve
+    // entry points open the legato curve editor instead of the per-note one.
+    // Both resolve the phrase exactly as the renderer does (Track::
+    // computeLegatoChains on the note's own track).
+    QVector<int> legatoPhraseForNote(int noteIndex);   // member indices, start order
+    QVector<int> legatoPhraseForSelection();           // empty when mixed/not a phrase
+    void editLegatoCurve(const QVector<int> &phraseMembers);
     void showExpressiveCurveApplyDialog();
     void showEqCurveDialog();
 
@@ -419,6 +428,30 @@ private:
     int  m_editLaneIndex = -1;       // which lane of it
     // Cleared at the start of every paint pass; keyed by variation index.
     mutable QHash<int, CurveLanes::Context> m_laneContextCache;
+
+    // ---- Legato phrase display ----
+    // The phrase-wide legato curve each linked note's body displays (its
+    // slice of it), so what you see is what the renderer plays. Rebuilt for
+    // every paint pass (and at interaction starts), keyed by note id.
+    struct LegatoSlice {
+        Curve curve;          // the phrase's effective curve (stored, else derived)
+        double offset = 0.0;  // note's start in phrase time (0..1)
+        double scale = 1.0;   // note's duration in phrase time
+    };
+    QHash<QString, LegatoSlice> m_legatoSliceCache;
+    void rebuildLegatoSliceCache();
+
+    // Body-top curve value used for drawing and hit-testing: the active curve
+    // at the note's own time, except that a linked note showing Dynamics
+    // displays its slice of the phrase-wide legato curve.
+    double bodyCurveValueAt(const Note &note, double t) const;
+    // The blob-height convention shared by drawNote, drawSelectionRectangle,
+    // getNoteRect and findNoteAtPosition (21 samples, max).
+    double bodyCurveMax(const Note &note) const;
+    // True when the note's top-edge (dynamics) dots would edit the dormant
+    // per-note curve of a linked note: the body shows the phrase curve and
+    // the per-note dynamics is not heard, so those dots are hidden.
+    bool topCurveDotsInactive(const Note &note) const;
 
     // Slide mode: time-only dragging (Y axis locked)
     bool slideMode = false;

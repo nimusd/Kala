@@ -244,6 +244,35 @@ private:
 };
 
 // ============================================================================
+// Apply Legato Curve Command (phrase-wide dynamics curve)
+// ============================================================================
+class ApplyLegatoCurveCommand : public QUndoCommand
+{
+public:
+    // `memberIndices` is the WHOLE legato phrase (every note the curve spans),
+    // not just the selection: the curve is replicated on all members, like the
+    // legato flags themselves. Start order.
+    ApplyLegatoCurveCommand(Phrase *phrase,
+                            const QVector<int> &memberIndices,
+                            const QVector<EnvelopePoint> &curve,
+                            double weight,
+                            ScoreCanvas *canvas,
+                            QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    Phrase *m_phrase;
+    QVector<int> m_noteIndices;
+    QVector<EnvelopePoint> m_curve;
+    double m_weight;  // 0.0-2.0, where 1.0 is neutral
+    QVector<Curve> m_oldLegatoCurves;  // For undo (empty = no stored curve)
+    QVector<QVector<EnvelopePoint>> m_oldEnvelopeControlPoints;  // For undo
+    ScoreCanvas *m_canvas;
+};
+
+// ============================================================================
 // Paste Notes Command
 // ============================================================================
 class PasteNotesCommand : public QUndoCommand

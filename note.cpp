@@ -322,6 +322,19 @@ uint64_t Note::computeHash() const
     hash ^= static_cast<uint64_t>(legato ? 1 : 0);
     hash *= prime;
 
+    // Hash the phrase-wide legato curve. While this note is part of a legato
+    // phrase this curve replaces the note's own dynamics in the render, so a
+    // shape change must invalidate the cache (chain-wide, via
+    // Track::effectiveNoteHash folding every member's hash). The point count
+    // covers presence: empty (no stored curve) vs. stored.
+    const auto& legatoPoints = legatoCurve.getPoints();
+    hash ^= static_cast<uint64_t>(legatoPoints.size());
+    hash *= prime;
+    for (const auto& point : legatoPoints) {
+        mixDouble(point.time);
+        mixDouble(point.value);
+    }
+
     // Hash additional named expressive curves. These feed Envelope Engines with
     // followDynamics=on via scoreCurveName matching, so they must invalidate the
     // render cache when changed. Omitting them here silently reused stale audio
@@ -388,6 +401,12 @@ QJsonObject Note::toJson() const
     json["pitchCurve"] = pitchCurve.toJson();
     json["dynamicsCurve"] = dynamicsCurve.toJson();
     json["bottomCurve"] = bottomCurve.toJson();
+
+    // Phrase-wide legato curve, present only once a phrase's shape has been
+    // stored (absent = the renderer derives the interpolated default).
+    if (!legatoCurve.isEmpty()) {
+        json["legatoCurve"] = legatoCurve.toJson();
+    }
 
     // Serialize vibrato
     json["vibrato"] = vibrato.toJson();
@@ -456,6 +475,11 @@ Note Note::fromJson(const QJsonObject &json)
     note.pitchCurve = Curve::fromJson(json["pitchCurve"].toObject());
     note.dynamicsCurve = Curve::fromJson(json["dynamicsCurve"].toObject());
     note.bottomCurve = Curve::fromJson(json["bottomCurve"].toObject());
+
+    // Phrase-wide legato curve (backward-compatible: absent in older projects)
+    if (json.contains("legatoCurve")) {
+        note.legatoCurve = Curve::fromJson(json["legatoCurve"].toObject());
+    }
 
     // Deserialize vibrato
     if (json.contains("vibrato")) {

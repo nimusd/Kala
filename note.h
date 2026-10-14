@@ -163,6 +163,21 @@ public:
     bool isLinkedAsLegato() const { return linkedAsLegato; }
     void setLinkedAsLegato(bool l) { linkedAsLegato = l; }
 
+    // Phrase-wide legato curve: ONE dynamics curve spanning a whole legato
+    // phrase, so per-note dynamics shapes cannot re-articulate the sound at
+    // the joints (a per-note swell used to read as a fresh attack). Stored
+    // (copied) on every member of the phrase; 0.0-1.0 across the PHRASE's
+    // time span, not the note's. Empty when the note is not in a linked
+    // phrase or the phrase has no stored shape yet - the renderer then
+    // derives an interpolated default from the members' own curves
+    // (Track::defaultLegatoCurve).
+    bool hasLegatoCurve() const { return !legatoCurve.isEmpty(); }
+    const Curve& getLegatoCurve() const { return legatoCurve; }
+    Curve& getLegatoCurve() { return legatoCurve; }
+    double getLegatoAt(double normalizedTime) const { return legatoCurve.valueAt(normalizedTime); }
+    void setLegatoCurve(const Curve &curve) { legatoCurve = curve; }
+    void clearLegatoCurve() { legatoCurve.clearPoints(); }
+
     // Segment management (for quantized continuous notes)
     const QVector<Segment>& getSegments() const { return segments; }
     QVector<Segment>& getSegments() { return segments; }
@@ -187,6 +202,7 @@ private:
     Curve pitchCurve;     // Pitch curve over time (Hz values for glissando/portamento)
     Curve dynamicsCurve;  // Dynamics curve over time (0.0-1.0)
     Curve bottomCurve;    // Bottom edge curve (spectrum/timbre placeholder, configurable later)
+    Curve legatoCurve;    // Phrase-wide dynamics curve (empty = none); see hasLegatoCurve()
     Vibrato vibrato;      // Per-note vibrato settings
     QVector<Segment> segments;  // Per-segment properties (populated when quantized)
 

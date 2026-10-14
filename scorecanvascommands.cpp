@@ -1,5 +1,6 @@
 #include "scorecanvascommands.h"
 #include "scorecanvas.h"
+#include "track.h"
 #include <QDebug>
 #include <cmath>
 
@@ -723,6 +724,147 @@ void ApplyDynamicsCurveCommand::redo()
     emit m_canvas->notesChanged();
     qDebug() << "Redo: Applied dynamics curve (weight=" << m_weight
              << ", perNote=" << m_perNote << ") to" << m_noteIndices.size() << "notes";
+}
+
+// ============================================================================
+// Apply Legato Curve Command
+// ============================================================================
+
+ApplyLegatoCurveCommand::ApplyLegatoCurveCommand(Phrase *phrase,
+                                                 const QVector<int> &memberIndices,
+                                                 const QVector<EnvelopePoint> &curve,
+                                                 double weight,
+                                                 ScoreCanvas *canvas,
+                                                 QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_phrase(phrase)
+    , m_noteIndices(memberIndices)
+    , m_curve(curve)
+    , m_weight(weight)
+    , m_canvas(canvas)
+{
+    setText("Apply Legato Curve");
+
+    // Store original phrase curves and envelope control points for undo
+    QVector<Note> &notes = m_phrase->getNotes();
+    for (int idx : m_noteIndices) {
+        if (idx >= 0 && idx < notes.size()) {
+            m_oldLegatoCurves.append(notes[idx].getLegatoCurve());
+            m_oldEnvelopeControlPoints.append(
+                notes[idx].getEnvelopeControlPoints(QStringLiteral("Legato")));
+        }
+    }
+}
+
+void ApplyLegatoCurveCommand::undo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    for (int i = 0; i < m_noteIndices.size() && i < m_oldLegatoCurves.size(); ++i) {
+        int idx = m_noteIndices[i];
+        if (idx < 0 || idx >= notes.size()) continue;
+        notes[idx].setLegatoCurve(m_oldLegatoCurves[i]);  // empty = no stored curve
+        if (i < m_oldEnvelopeControlPoints.size() && !m_oldEnvelopeControlPoints[i].isEmpty())
+            notes[idx].setEnvelopeControlPoints(QStringLiteral("Legato"),
+                                                m_oldEnvelopeControlPoints[i]);
+        else
+            notes[idx].removeEnvelopeControlPoints(QStringLiteral("Legato"));
+        notes[idx].setRenderDirty(true);
+    }
+
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "Undo: Restored legato curves for" << m_noteIndices.size() << "notes";
+}
+
+void ApplyLegatoCurveCommand::redo()
+{
+    QVector<Note> &notes = m_phrase->getNotes();
+
+    if (m_noteIndices.isEmpty() || m_curve.isEmpty()) return;
+
+    // Evaluate the applied envelope at normalized phrase time t ∈ [0, 1].
+    // Matches EnvelopeCurveCanvas::evaluateCurve exactly:
+    //   curveType 0 = linear, 1 = cosine smooth, 2 = step
+    auto evaluateCurve = [this](double t) -> double {
+        if (m_curve.isEmpty()) return 1.0;
+        if (m_curve.size() == 1) return m_curve[0].value;
+        if (t <= m_curve.first().time) return m_curve.first().value;
+        if (t >= m_curve.last().time)  return m_curve.last().value;
+        for (int i = 0; i < m_curve.size() - 1; ++i) {
+            if (t >= m_curve[i].time && t <= m_curve[i + 1].time) {
+                double segT = (t - m_curve[i].time) / (m_curve[i + 1].time - m_curve[i].time);
+                if (m_curve[i].curveType == 1) {
+                    double smoothT = (1.0 - std::cos(segT * M_PI)) * 0.5;
+                    return m_curve[i].value + smoothT * (m_curve[i + 1].value - m_curve[i].value);
+                } else if (m_curve[i].curveType == 2) {
+                    return m_curve[i].value;
+                } else {
+                    return m_curve[i].value + segT * (m_curve[i + 1].value - m_curve[i].value);
+                }
+            }
+        }
+        return m_curve.last().value;
+    };
+
+    // Existing phrase shape: the stored legato curve when the phrase has one
+    // (any member; the renderer uses the first with a stored curve), else the
+    // interpolated default the dialog opened on. Blending against it keeps the
+    // weight slider meaningful and makes weight=1 idempotent.
+    Curve existing;
+    for (int idx : m_noteIndices) {
+        if (idx >= 0 && idx < notes.size() && notes[idx].hasLegatoCurve()) {
+            existing = notes[idx].getLegatoCurve();
+            break;
+        }
+    }
+    if (existing.isEmpty())
+        existing = Track::defaultLegatoCurve(notes, m_noteIndices);
+
+    // Flat-curve detection, same semantics as the per-note dynamics dialog: a
+    // phrase sitting at one level scales the applied envelope by that level
+    // rather than jumping to absolute values.
+    bool isFlat = true;
+    double baseline = 0.0;
+    {
+        const int N = 5;
+        double minVal = 1.0, maxVal = 0.0, sum = 0.0;
+        for (int i = 0; i <= N; ++i) {
+            double v = existing.isEmpty() ? 0.5 : existing.valueAt(static_cast<double>(i) / N);
+            minVal = qMin(minVal, v);
+            maxVal = qMax(maxVal, v);
+            sum += v;
+        }
+        isFlat = (maxVal - minVal) <= 0.05;
+        baseline = sum / (N + 1);
+    }
+
+    // The curve spans the whole phrase: sample once over 0-1 and store the
+    // identical curve on every member (replicated, like the legato flags).
+    // 20+1 points so smooth (cosine) segments in the applied envelope survive
+    // the Curve's linear interpolation.
+    const int SAMPLE_COUNT = 20;
+    Curve newCurve;
+    for (int s = 0; s <= SAMPLE_COUNT; ++s) {
+        const double t = static_cast<double>(s) / SAMPLE_COUNT;
+        const double existingVal = existing.isEmpty() ? 0.5 : existing.valueAt(t);
+        const double envVal = evaluateCurve(t);
+        const double target = isFlat ? baseline * envVal : envVal;
+        const double newVal = existingVal + (target - existingVal) * m_weight;
+        newCurve.addPoint(t, qBound(0.0, newVal, 1.0), 1.0);
+    }
+
+    for (int idx : m_noteIndices) {
+        if (idx < 0 || idx >= notes.size()) continue;
+        notes[idx].setLegatoCurve(newCurve);
+        notes[idx].setEnvelopeControlPoints(QStringLiteral("Legato"), m_curve);
+        notes[idx].setRenderDirty(true);
+    }
+
+    m_canvas->update();
+    emit m_canvas->notesChanged();
+    qDebug() << "Redo: Applied legato curve (weight=" << m_weight << ") to"
+             << m_noteIndices.size() << "notes";
 }
 
 // ============================================================================
@@ -1801,6 +1943,10 @@ UnlinkLegatoCommand::UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &not
         entry.clearedNote = note;
         entry.clearedNote.setLinkedAsLegato(false);
         entry.clearedNote.setLegato(false);
+        // The phrase is gone, so its curve goes with it (undo restores it);
+        // each note's own dynamics curve was kept dormant and takes over again.
+        entry.clearedNote.clearLegatoCurve();
+        entry.clearedNote.removeEnvelopeControlPoints(QStringLiteral("Legato"));
         entry.clearedNote.setRenderDirty(true);
 
         // Staccato gap: shorten this note where it runs straight into the next
@@ -1832,6 +1978,8 @@ UnlinkLegatoCommand::UnlinkLegatoCommand(Phrase *phrase, const QVector<int> &not
             cont.originalNote = other;
             cont.clearedNote = other;
             cont.clearedNote.setLegato(false);
+            cont.clearedNote.clearLegatoCurve();
+            cont.clearedNote.removeEnvelopeControlPoints(QStringLiteral("Legato"));
             cont.clearedNote.setRenderDirty(true);
             m_clears.append(cont);
             alreadyCleared.insert(j);
@@ -3617,6 +3765,10 @@ RetrogradeNotesCommand::RetrogradeNotesCommand(Phrase *phrase, const QVector<Not
         retNote.getDynamicsCurve() = reverseCurve(note.getDynamicsCurve());
         if (note.hasPitchCurve()) {
             retNote.getPitchCurve() = reverseCurve(note.getPitchCurve());
+        }
+        // Phrase-wide legato curve, when the note carries one
+        if (note.hasLegatoCurve()) {
+            retNote.setLegatoCurve(reverseCurve(note.getLegatoCurve()));
         }
         // Reverse additional expressive curves (index 0 is dynamics, already handled)
         for (int i = 1; i < retNote.getExpressiveCurveCount(); ++i) {

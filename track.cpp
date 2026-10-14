@@ -1486,6 +1486,70 @@ static bool legatoConnects(const Note &prev, const Note &next)
     return timeDiff > -50.0 && timeDiff < window;
 }
 
+Curve Track::defaultLegatoCurve(const QList<Note> &notes, const QVector<int> &memberIndices)
+{
+    Curve curve;
+    if (memberIndices.isEmpty()) return curve;
+
+    const Note &first = notes[memberIndices.first()];
+    const double chainStart = first.getStartTime();
+    const double chainSpan = notes[memberIndices.last()].getEndTime() - chainStart;
+
+    if (memberIndices.size() == 1 || chainSpan <= 0.0) {
+        return Curve(qBound(0.0, first.getDynamicsAt(0.25), 1.0));
+    }
+
+    // The phrase's very start and end, plus one sample per member taken just
+    // past its attack (25% in) so a per-note attack transient cannot leak into
+    // the joint it would otherwise create.
+    QVector<QPair<double, double>> samples;
+    samples.reserve(memberIndices.size() + 2);
+    samples.append(qMakePair(0.0, first.getDynamicsAt(0.0)));
+    for (int idx : memberIndices) {
+        const Note &n = notes[idx];
+        const double t = (n.getStartTime() - chainStart + 0.25 * n.getDuration()) / chainSpan;
+        samples.append(qMakePair(t, n.getDynamicsAt(0.25)));
+    }
+    samples.append(qMakePair(1.0, notes[memberIndices.last()].getDynamicsAt(1.0)));
+
+    std::sort(samples.begin(), samples.end(),
+              [](const QPair<double, double> &a, const QPair<double, double> &b) {
+                  return a.first < b.first;
+              });
+
+    // Coincident times (very short members) collapse to the later sample; the
+    // curve's linear interpolation must never divide by a zero segment.
+    QVector<Curve::Point> pts;
+    pts.reserve(samples.size());
+    for (const QPair<double, double> &s : samples) {
+        const double t = qBound(0.0, s.first, 1.0);
+        if (!pts.isEmpty() && t <= pts.last().time + 1e-9) {
+            pts.last().value = s.second;
+            continue;
+        }
+        pts.append(Curve::Point(t, s.second, 1.0));
+    }
+    for (const Curve::Point &p : pts) curve.addPoint(p);
+    return curve;
+}
+
+// The phrase curve a legato chain renders with: the first member (start order)
+// that carries a stored legato curve wins; otherwise the interpolated default
+// is derived from the members' own dynamics curves. `fallback` must outlive
+// the returned pointer. Returns nullptr for a chain of one (not a phrase).
+static const Curve *effectiveLegatoCurve(const QList<Note> &notes,
+                                         const QVector<int> &members,
+                                         Curve &fallback)
+{
+    if (members.size() < 2) return nullptr;
+    for (int idx : members) {
+        if (idx >= 0 && idx < notes.size() && notes[idx].hasLegatoCurve())
+            return &notes[idx].getLegatoCurve();
+    }
+    fallback = Track::defaultLegatoCurve(notes, members);
+    return &fallback;
+}
+
 QVector<Track::LegatoChainInfo> Track::computeLegatoChains(const QList<Note> &notes)
 {
     const int n = notes.size();
@@ -1624,11 +1688,10 @@ QVector<Track::RenderTask> Track::buildRenderTasks(const QList<Note> &notes,
 }
 
 bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &outRender,
-                            const QList<Note> &allNotes, bool isContinuation,
-                            double chainStartMs, double chainSpanMs) const
+                            bool isContinuation, bool legatoContinues,
+                            double chainStartMs, double chainSpanMs,
+                            const Curve *legatoCurve) const
 {
-    QString noteId = note.getId();
-
     // Calculate note duration in samples
     size_t noteSamples = static_cast<size_t>((note.getDuration() / 1000.0) * m_sampleRate);
     if (noteSamples == 0) {
@@ -1677,19 +1740,11 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
         ? (note.getDuration() / chainSpanMs) : 1.0;
     const double envelopeSpanMs = haveChainSpan ? chainSpanMs : note.getDuration();
 
-    // Check if a legato note follows this one (to skip release)
-    bool hasLegatoFollowing = false;
-    double noteEndTime = note.getStartTime() + note.getDuration();
-    for (const Note &otherNote : allNotes) {
-        if (otherNote.getId() != noteId && otherNote.isLegato()) {
-            double overlapTolerance = std::max(200.0, note.getDuration() * 0.1);
-            double timeDiff = noteEndTime - otherNote.getStartTime();
-            if (timeDiff > -50.0 && timeDiff < overlapTolerance) {
-                hasLegatoFollowing = true;
-                break;
-            }
-        }
-    }
+    // Whether a legato continuation follows this note (skip release/tail).
+    // Reported by the caller from the chain info, so it mirrors
+    // Track::computeLegatoChains exactly — the old per-note scan here could
+    // find a flagged note on another variation and suppress the tail wrongly.
+    const bool hasLegatoFollowing = legatoContinues;
 
     // Skip release envelope when graph has a tail — the reverb/decay handles the fade naturally
     bool graphHasTail = graph->hasTail();
@@ -1726,7 +1781,12 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
         const double graphProgress = std::clamp(chainOffset + progress * chainScale, 0.0, 1.0);
 
         double pitch = note.getPitchAt(progress);
-        double dynamics = note.getDynamicsAt(progress);
+        // Phrase-wide legato curve: while this note is part of a legato phrase,
+        // ONE curve spanning the phrase drives dynamics (evaluated at chain
+        // progress), so a per-note swell cannot read as a fresh attack at a
+        // joint. Standalone notes keep their own dynamics curve.
+        double dynamics = legatoCurve ? legatoCurve->valueAt(graphProgress)
+                                      : note.getDynamicsAt(progress);
 
         // Apply vibrato if active (shared helper so the MIDI bake produces
         // the same continuous vibrato as the audio renderer)
@@ -1780,7 +1840,8 @@ bool Track::renderNoteImpl(const Note &note, SounitGraph *graph, NoteRender &out
     // Skip tail for legato transitions (next note continues the sound)
     if (!hasLegatoFollowing && graphHasTail) {
         double lastPitch = note.getPitchAt(1.0);
-        double lastDynamics = note.getDynamicsAt(1.0);
+        double lastDynamics = legatoCurve ? legatoCurve->valueAt(1.0)
+                                          : note.getDynamicsAt(1.0);
         float lastPan = graphHasPan ? static_cast<float>(graph->getPanValue()) : 0.0f;
         size_t silenceRun = 0;
 
@@ -1886,16 +1947,26 @@ bool Track::prerenderNote(const Note &note)
     // Chain geometry so the graph runs on the chain's timeline
     double chainStartMs = note.getStartTime();
     double chainSpanMs = note.getDuration();
-    if (noteIndex >= 0) {
+    QVector<int> chainMembers;   // start order, for the phrase curve
+    if (noteIndex >= 0 && chains[noteIndex].chainFirst >= 0) {
         const int head = chains[noteIndex].chainFirst;
         const int last = chains[noteIndex].chainLast;
         if (head >= 0 && head < notes.size() && last >= 0 && last < notes.size()) {
             chainStartMs = notes[head].getStartTime();
             chainSpanMs = notes[last].getEndTime() - chainStartMs;
         }
+        for (int i = 0; i < notes.size(); ++i)
+            if (chains[i].chainFirst == head) chainMembers.append(i);
+        std::sort(chainMembers.begin(), chainMembers.end(), [&notes](int a, int b) {
+            return notes[a].getStartTime() < notes[b].getStartTime();
+        });
     }
-    if (!renderNoteImpl(note, graph, tempRender, notes, isContinuation,
-                        chainStartMs, chainSpanMs)) return false;
+    Curve legatoFallback;
+    const Curve *legatoCurve =
+        effectiveLegatoCurve(notes, chainMembers, legatoFallback);
+    const bool legatoContinues = noteIndex >= 0 && chains[noteIndex].chainLast != noteIndex;
+    if (!renderNoteImpl(note, graph, tempRender, isContinuation, legatoContinues,
+                        chainStartMs, chainSpanMs, legatoCurve)) return false;
     if (noteIndex >= 0)
         tempRender.noteHash = effectiveNoteHash(notes, noteIndex, chains);
 
@@ -2040,12 +2111,24 @@ bool Track::prerenderDirtyNotes(double sampleRate)
         const double chainSpanMs =
             snapshotNotes[task.noteIndices.last()].getEndTime() - chainStartMs;
 
+        // The phrase curve for this chain (nullptr for a standalone note):
+        // a stored legato curve wins, else the interpolated default derived
+        // from the members' own shapes.
+        Curve legatoFallback;
+        const Curve *legatoCurve =
+            effectiveLegatoCurve(snapshotNotes, task.noteIndices, legatoFallback);
+
         for (int m = 0; m < task.noteIndices.size(); ++m) {
-            const Note &note = snapshotNotes[task.noteIndices[m]];
-            renderNoteImpl(note, graph, task.results[m], snapshotNotes,
-                           task.continuations[m] != 0, chainStartMs, chainSpanMs);
+            const int noteIdx = task.noteIndices[m];
+            const Note &note = snapshotNotes[noteIdx];
+            // A continuation following this member defers the release to the
+            // chain's last member (mirrors computeLegatoChains).
+            const bool legatoContinues = chains[noteIdx].chainLast != noteIdx;
+            renderNoteImpl(note, graph, task.results[m],
+                           task.continuations[m] != 0, legatoContinues,
+                           chainStartMs, chainSpanMs, legatoCurve);
             task.results[m].noteHash =
-                effectiveNoteHash(snapshotNotes, task.noteIndices[m], chains);
+                effectiveNoteHash(snapshotNotes, noteIdx, chains);
         }
         delete graph;
         task.success = true;
@@ -2266,12 +2349,24 @@ bool Track::startBackgroundRender(double sampleRate)
         const double chainSpanMs =
             snapshotNotes[task.noteIndices.last()].getEndTime() - chainStartMs;
 
+        // The phrase curve for this chain (nullptr for a standalone note):
+        // a stored legato curve wins, else the interpolated default derived
+        // from the members' own shapes.
+        Curve legatoFallback;
+        const Curve *legatoCurve =
+            effectiveLegatoCurve(snapshotNotes, task.noteIndices, legatoFallback);
+
         for (int m = 0; m < task.noteIndices.size(); ++m) {
-            const Note &note = snapshotNotes[task.noteIndices[m]];
-            renderNoteImpl(note, graph, task.results[m], snapshotNotes,
-                           task.continuations[m] != 0, chainStartMs, chainSpanMs);
+            const int noteIdx = task.noteIndices[m];
+            const Note &note = snapshotNotes[noteIdx];
+            // A continuation following this member defers the release to the
+            // chain's last member (mirrors computeLegatoChains).
+            const bool legatoContinues = chains[noteIdx].chainLast != noteIdx;
+            renderNoteImpl(note, graph, task.results[m],
+                           task.continuations[m] != 0, legatoContinues,
+                           chainStartMs, chainSpanMs, legatoCurve);
             task.results[m].noteHash =
-                effectiveNoteHash(snapshotNotes, task.noteIndices[m], chains);
+                effectiveNoteHash(snapshotNotes, noteIdx, chains);
         }
         delete graph;
         task.success = true;

@@ -905,6 +905,22 @@ Size:</strong> 450 x 400 <strong>Modal:</strong> Yes
 <h3 id="how-to-open-6">How to Open</h3>
 <p>Triggered from the Composition tab when applying a dynamics curve to
 selected notes.</p>
+<h3 id="legato-curve-variant">Legato Curve Variant</h3>
+<p>When the selection sits entirely inside one legato phrase, the same dialog
+opens as the <strong>Legato Curve</strong> editor instead. It spans the whole
+phrase rather than the notes individually:</p>
+<ul>
+<li>Window title reads “Legato Curve” and the curve group is titled “Legato
+Curve (whole phrase)”.</li>
+<li>The Per note toggle is hidden (a phrase curve has no per-note mode).</li>
+<li>The canvas paints alternating background bands and dashed joint lines at
+the note boundaries, so each note's slice of the phrase is visible while
+shaping.</li>
+<li>The editor opens pre-loaded with the phrase's stored shape (or the
+interpolated default for a newly linked phrase) and reopens exactly as last
+applied.</li>
+<li>Presets, Weight and Save/Load work as described below.</li>
+</ul>
 <h3 id="ui-components-6">UI Components</h3>
 <table>
 <colgroup>

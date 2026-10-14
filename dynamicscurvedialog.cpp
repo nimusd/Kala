@@ -67,7 +67,7 @@ void DynamicsCurveDialog::setupUi()
     connect(saveButton, &QPushButton::clicked, this, &DynamicsCurveDialog::onSaveClicked);
 
     // Curve editor group
-    QGroupBox *curveGroup = new QGroupBox("Dynamics Curve", this);
+    curveGroup = new QGroupBox("Dynamics Curve", this);
     QVBoxLayout *curveLayout = new QVBoxLayout(curveGroup);
     curveLayout->setContentsMargins(8, 8, 8, 8);
 
@@ -286,6 +286,26 @@ void DynamicsCurveDialog::setInitialCurve(const QVector<EnvelopePoint> &points)
         presetCombo->blockSignals(true);
         presetCombo->setCurrentIndex(customIndex);
         presetCombo->blockSignals(false);
+    }
+}
+
+void DynamicsCurveDialog::setLegatoMode(const QVector<double> &noteBoundaries)
+{
+    // The curve spans the whole phrase, so per-note semantics do not apply.
+    if (perNoteToggle) perNoteToggle->setVisible(false);
+
+    if (curveGroup) curveGroup->setTitle("Legato Curve (whole phrase)");
+    if (curveCanvas) curveCanvas->setTimeMarkers(noteBoundaries);
+
+    if (selectionLabel) {
+        QString timeStr;
+        if (m_timeSpanMs >= 1000) {
+            timeStr = QString::number(m_timeSpanMs / 1000.0, 'f', 1) + "s";
+        } else {
+            timeStr = QString::number(m_timeSpanMs, 'f', 0) + "ms";
+        }
+        selectionLabel->setText(
+            QString("Legato phrase: %1 notes, %2 span").arg(m_noteCount).arg(timeStr));
     }
 }
 

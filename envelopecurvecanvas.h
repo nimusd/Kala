@@ -35,6 +35,12 @@ public:
     };
     void setGhostCurves(const QVector<Ghost> &ghosts);
 
+    // Normalized (0..1) positions of the note boundaries for a phrase-spanning
+    // curve (the legato curve). When set, the background paints alternating
+    // subtle bands so each note's slice of the phrase is visible while shaping.
+    // Purely visual - never hit-tested, never edited.
+    void setTimeMarkers(const QVector<double> &boundaries);
+
     // Reset to default
     void reset();
 
@@ -50,6 +56,7 @@ protected:
 private:
     QVector<EnvelopePoint> points;
     QVector<Ghost> ghostCurves;
+    QVector<double> timeMarkers;   // normalized note boundaries for phrase curves
     int selectedPointIndex;
     int hoveredPointIndex;
     bool isDragging;
@@ -68,6 +75,7 @@ private:
     double evaluateCurve(double time) const;
     
     // Drawing helpers
+    void drawTimeBands(QPainter &painter);
     void drawGrid(QPainter &painter);
     void drawGhosts(QPainter &painter);
     void drawCurve(QPainter &painter);

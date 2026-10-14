@@ -385,6 +385,10 @@ void ScoreCanvas::paintEvent(QPaintEvent *event)
     // one walks the canvas's child widgets, far too costly per note.
     m_laneContextCache.clear();
 
+    // Legato phrase curves, likewise per pass: linked notes display their
+    // slice of the phrase-wide curve their bodies are rendered with.
+    rebuildLegatoSliceCache();
+
     // Draw background
     painter.fillRect(rect(), Qt::white);
 
@@ -1360,21 +1364,15 @@ void ScoreCanvas::drawNote(QPainter &painter, const Note &note, bool isSelected)
     // Skip if note is completely off-screen
     if (x + width < 0 || x > this->width()) return;
 
-    // Helper: query the active expressive curve value (fallback to dynamics if note lacks it)
+    // Helper: the body-top value (active curve at the note's own time; a linked
+    // note showing Dynamics displays its slice of the phrase-wide legato curve).
     auto getActiveCurveValue = [this](const Note &n, double t) -> double {
-        int idx = resolveActiveCurveIndex(n);
-        if (idx <= 0)
-            return n.getDynamicsAt(t);
-        return n.getExpressiveCurve(idx).valueAt(t);
+        return bodyCurveValueAt(n, t);
     };
 
-    // Find maximum active curve value for blob height
-    double maxDynamics = 0.0;
-    for (int i = 0; i <= 20; ++i) {  // Sample curve at multiple points
-        double t = i / 20.0;
-        double value = getActiveCurveValue(note, t);
-        if (value > maxDynamics) maxDynamics = value;
-    }
+    // Blob height from the maximum body-top value (same convention as the
+    // selection rect / hit-testing helpers)
+    double maxDynamics = bodyCurveMax(note);
 
     // Note blob height based on maximum dynamics in curve
     int blobHeight = static_cast<int>(20 + maxDynamics * 60);  // 20-80 pixels (increased range)
@@ -1713,6 +1711,10 @@ bool ScoreCanvas::handleLanePress(const QPoint &pos)
 
 void ScoreCanvas::mousePressEvent(QMouseEvent *event)
 {
+    // Hit-testing below reads the legato slice cache; make sure it is current
+    // even if no paint pass ran since the last note change.
+    rebuildLegatoSliceCache();
+
     if (event->button() == Qt::LeftButton) {
         // Handle segment editing mode first
         if (segmentEditingMode && segmentEditingNoteIndex >= 0) {
@@ -2862,16 +2864,8 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
     int x = timeToPixel(note.getStartTime());
     int width = timeToPixel(note.getEndTime()) - x;
 
-    // Find maximum active curve value for blob height (same as drawNote)
-    double maxDynamics = 0.0;
-    for (int i = 0; i <= 20; ++i) {
-        double t = i / 20.0;
-        int idx = resolveActiveCurveIndex(note);
-        double value = (idx <= 0)
-            ? note.getDynamicsAt(t)
-            : note.getExpressiveCurve(idx).valueAt(t);
-        if (value > maxDynamics) maxDynamics = value;
-    }
+    // Maximum body-top value for blob height (same as drawNote)
+    double maxDynamics = bodyCurveMax(note);
 
     int blobHeight = static_cast<int>(20 + maxDynamics * 60);  // Match drawNote calculation
 
@@ -2950,10 +2944,17 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
     int numDots = calculateCurveDotCount(note);
     int numSegments = numDots + 1;  // e.g., 4 dots = 5 segments
 
+    // In a legato phrase the note's own dynamics is dormant (the body shows
+    // the phrase curve), so its top-edge dots are hidden rather than editing
+    // an inaudible curve. Phrase shaping lives in the legato curve dialog.
+    const bool showTopDots = !topCurveDotsInactive(note);
+
     // Top edge dots (adaptive count for shaping amplitude curve)
-    for (int i = 1; i <= numDots; ++i) {
-        int dotX = selectionRect.left() + (selectionRect.width() * i / numSegments);
-        painter.drawEllipse(dotX - dotSize/2, selectionRect.top() - dotSize/2, dotSize, dotSize);
+    if (showTopDots) {
+        for (int i = 1; i <= numDots; ++i) {
+            int dotX = selectionRect.left() + (selectionRect.width() * i / numSegments);
+            painter.drawEllipse(dotX - dotSize/2, selectionRect.top() - dotSize/2, dotSize, dotSize);
+        }
     }
 
     // Bottom edge dots (adaptive count for shaping pitch curve)
@@ -2966,6 +2967,7 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
     int leftX = selectionRect.left();
     for (int i = 1; i <= 3; ++i) {
         int dotY = selectionRect.top() + (selectionRect.height() * i / 4);
+        if (i == 1 && !showTopDots) continue;   // dormant dynamics: no start dot
         if (i == 2) {
             // Middle dot is square (resize handle)
             painter.setBrush(QColor(255, 200, 100));  // Orange for resize
@@ -2980,6 +2982,7 @@ void ScoreCanvas::drawSelectionRectangle(QPainter &painter, const Note &note)
     int rightX = selectionRect.right();
     for (int i = 1; i <= 3; ++i) {
         int dotY = selectionRect.top() + (selectionRect.height() * i / 4);
+        if (i == 1 && !showTopDots) continue;   // dormant dynamics: no end dot
         if (i == 2) {
             // Middle dot is square (resize handle)
             painter.setBrush(QColor(255, 200, 100));  // Orange for resize
@@ -3013,16 +3016,8 @@ int ScoreCanvas::findNoteAtPosition(const QPoint &pos) const
         int x = timeToPixel(note.getStartTime());
         int width = timeToPixel(note.getEndTime()) - x;
 
-        // Find maximum active curve value for blob height
-        double maxDynamics = 0.0;
-        for (int j = 0; j <= 20; ++j) {
-            double t = j / 20.0;
-            int activeIdx = resolveActiveCurveIndex(note);
-            double value = (activeIdx <= 0)
-                ? note.getDynamicsAt(t)
-                : note.getExpressiveCurve(activeIdx).valueAt(t);
-            if (value > maxDynamics) maxDynamics = value;
-        }
+        // Maximum body-top value for blob height
+        double maxDynamics = bodyCurveMax(note);
 
         int blobHeight = static_cast<int>(20 + maxDynamics * 60);
 
@@ -3180,16 +3175,8 @@ QRect ScoreCanvas::getNoteRect(const Note &note) const
     int x = timeToPixel(note.getStartTime());
     int width = timeToPixel(note.getEndTime()) - x;
 
-    // Find maximum active curve value for blob height
-    double maxDynamics = 0.0;
-    for (int i = 0; i <= 20; ++i) {
-        double t = i / 20.0;
-        int activeIdx = resolveActiveCurveIndex(note);
-        double value = (activeIdx <= 0)
-            ? note.getDynamicsAt(t)
-            : note.getExpressiveCurve(activeIdx).valueAt(t);
-        if (value > maxDynamics) maxDynamics = value;
-    }
+    // Maximum body-top value for blob height
+    double maxDynamics = bodyCurveMax(note);
 
     int blobHeight = static_cast<int>(20 + maxDynamics * 60);
 
@@ -3263,6 +3250,101 @@ const CurveLanes::Context &ScoreCanvas::laneContextFor(int variationIndex) const
 void ScoreCanvas::invalidateLaneCache()
 {
     m_laneContextCache.clear();
+}
+
+// ============================================================================
+// Legato phrase display (the body shows the phrase curve the renderer plays)
+// ============================================================================
+
+void ScoreCanvas::rebuildLegatoSliceCache()
+{
+    m_legatoSliceCache.clear();
+
+    // Chain detection is per track (the renderer only ever sees one track's
+    // notes), so group the phrase's notes by track first.
+    const QVector<Note> &notes = phrase.getNotes();
+    QHash<int, QVector<int>> indicesByTrack;
+    for (int i = 0; i < notes.size(); ++i)
+        indicesByTrack[notes[i].getTrackIndex()].append(i);
+
+    for (auto it = indicesByTrack.constBegin(); it != indicesByTrack.constEnd(); ++it) {
+        const QVector<int> &trackIndices = it.value();
+        if (trackIndices.size() < 2) continue;
+
+        QList<Note> filtered;
+        filtered.reserve(trackIndices.size());
+        for (int idx : trackIndices) filtered.append(notes[idx]);
+
+        const QVector<Track::LegatoChainInfo> chains = Track::computeLegatoChains(filtered);
+
+        for (int pos = 0; pos < trackIndices.size(); ++pos) {
+            // Process each chain once, at its head; a chain of one is not a
+            // phrase (its note keeps its own live dynamics).
+            if (chains[pos].chainFirst != pos || chains[pos].chainLast == pos) continue;
+
+            QVector<int> members;   // start order
+            for (int j = 0; j < trackIndices.size(); ++j)
+                if (chains[j].chainFirst == pos) members.append(trackIndices[j]);
+            std::sort(members.begin(), members.end(), [&notes](int a, int b) {
+                return notes[a].getStartTime() < notes[b].getStartTime();
+            });
+            if (members.size() < 2) continue;
+
+            // Same priority as the renderer: the first member with a stored
+            // curve wins, else the interpolated default.
+            Curve derived;
+            const Curve *phraseCurve = nullptr;
+            for (int idx : members) {
+                if (notes[idx].hasLegatoCurve()) {
+                    phraseCurve = &notes[idx].getLegatoCurve();
+                    break;
+                }
+            }
+            if (!phraseCurve) {
+                derived = Track::defaultLegatoCurve(notes, members);
+                phraseCurve = &derived;
+            }
+
+            const double chainStart = notes[members.first()].getStartTime();
+            const double chainSpan = notes[members.last()].getEndTime() - chainStart;
+            if (chainSpan <= 0.0) continue;
+
+            for (int idx : members) {
+                LegatoSlice slice;
+                slice.curve  = *phraseCurve;
+                slice.offset = (notes[idx].getStartTime() - chainStart) / chainSpan;
+                slice.scale  = notes[idx].getDuration() / chainSpan;
+                m_legatoSliceCache.insert(notes[idx].getId(), slice);
+            }
+        }
+    }
+}
+
+double ScoreCanvas::bodyCurveValueAt(const Note &note, double t) const
+{
+    const int idx = resolveActiveCurveIndex(note);
+    if (idx > 0)
+        return note.getExpressiveCurve(idx).valueAt(t);
+
+    auto it = m_legatoSliceCache.constFind(note.getId());
+    if (it != m_legatoSliceCache.constEnd())
+        return it->curve.valueAt(it->offset + t * it->scale);
+
+    return note.getDynamicsAt(t);
+}
+
+double ScoreCanvas::bodyCurveMax(const Note &note) const
+{
+    double maxVal = 0.0;
+    for (int i = 0; i <= 20; ++i)
+        maxVal = std::max(maxVal, bodyCurveValueAt(note, i / 20.0));
+    return maxVal;
+}
+
+bool ScoreCanvas::topCurveDotsInactive(const Note &note) const
+{
+    return resolveActiveCurveIndex(note) <= 0
+        && m_legatoSliceCache.contains(note.getId());
 }
 
 void ScoreCanvas::setLanesAbove(int count)
@@ -4101,17 +4183,22 @@ ScoreCanvas::DragMode ScoreCanvas::detectDragMode(const QPoint &pos, const Note 
     int numDots = calculateCurveDotCount(note);
     int numSegments = numDots + 1;  // e.g., 4 dots = 5 segments
 
-    // Check top edge dots (for editing dynamics curve)
+    // Check top edge dots (for editing dynamics curve). Hidden on notes in a
+    // legato phrase: their per-note dynamics is dormant (the body shows the
+    // phrase curve), so the dots would silently edit an inaudible curve.
+    const bool topDotsActive = !topCurveDotsInactive(note);
     int topY = noteRect.top();
-    for (int i = 1; i <= numDots; ++i) {
-        int dotX = noteRect.left() + (noteRect.width() * i / numSegments);
-        QRect dotRect(dotX - clickTolerance/2, topY - clickTolerance/2,
-                     clickTolerance, clickTolerance);
-        if (dotRect.contains(pos)) {
-            // Store which dot was clicked (will be used in press event)
-            const_cast<ScoreCanvas*>(this)->editingDotIndex = i - 1;  // 0-based index
-            const_cast<ScoreCanvas*>(this)->editingDotTimePos = static_cast<double>(i) / numSegments;  // Normalized time
-            return EditingTopCurve;
+    if (topDotsActive) {
+        for (int i = 1; i <= numDots; ++i) {
+            int dotX = noteRect.left() + (noteRect.width() * i / numSegments);
+            QRect dotRect(dotX - clickTolerance/2, topY - clickTolerance/2,
+                         clickTolerance, clickTolerance);
+            if (dotRect.contains(pos)) {
+                // Store which dot was clicked (will be used in press event)
+                const_cast<ScoreCanvas*>(this)->editingDotIndex = i - 1;  // 0-based index
+                const_cast<ScoreCanvas*>(this)->editingDotTimePos = static_cast<double>(i) / numSegments;  // Normalized time
+                return EditingTopCurve;
+            }
         }
     }
 
@@ -4133,7 +4220,7 @@ ScoreCanvas::DragMode ScoreCanvas::detectDragMode(const QPoint &pos, const Note 
     int leftDotY = noteRect.top() + (noteRect.height() / 4);
     QRect leftDotRect(leftX - clickTolerance/2, leftDotY - clickTolerance/2,
                      clickTolerance, clickTolerance);
-    if (leftDotRect.contains(pos)) {
+    if (topDotsActive && leftDotRect.contains(pos)) {
         const_cast<ScoreCanvas*>(this)->editingDotTimePos = 0.0;  // Start of curve
         return EditingTopCurveStart;
     }
@@ -4143,7 +4230,7 @@ ScoreCanvas::DragMode ScoreCanvas::detectDragMode(const QPoint &pos, const Note 
     int rightDotY = noteRect.top() + (noteRect.height() / 4);
     QRect rightDotRect(rightX - clickTolerance/2, rightDotY - clickTolerance/2,
                       clickTolerance, clickTolerance);
-    if (rightDotRect.contains(pos)) {
+    if (topDotsActive && rightDotRect.contains(pos)) {
         const_cast<ScoreCanvas*>(this)->editingDotTimePos = 1.0;  // End of curve
         return EditingTopCurveEnd;
     }
@@ -4228,6 +4315,10 @@ void ScoreCanvas::tabletEvent(QTabletEvent *event)
     case QEvent::TabletPress: {
         // Ensure widget has keyboard focus for Delete key and other shortcuts
         setFocus();
+
+        // Hit-testing below reads the legato slice cache; make sure it is
+        // current even if no paint pass ran since the last note change.
+        rebuildLegatoSliceCache();
 
         // Handle right-click from pen barrel button
         // Don't handle it here - ignore the tablet event and let it fall through
@@ -5991,10 +6082,141 @@ void ScoreCanvas::applyVariationToSelection(int variationIndex)
     update();
 }
 
+// ============================================================================
+// Legato phrase curve (one dynamics curve spanning a whole linked phrase)
+// ============================================================================
+
+// Convert a Note's sampled Curve into envelope editor points (fallback when a
+// curve has no stored editor shape).
+static QVector<EnvelopePoint> curveToEditorPoints(const Curve &curve)
+{
+    QVector<EnvelopePoint> points;
+    for (const Curve::Point &pt : curve.getPoints()) {
+        points.append(EnvelopePoint(pt.time, pt.value, 0));
+    }
+    if (points.isEmpty()) {
+        points.append(EnvelopePoint(0.0, 0.5, 0));
+        points.append(EnvelopePoint(1.0, 0.5, 0));
+    }
+    return points;
+}
+
+QVector<int> ScoreCanvas::legatoPhraseForNote(int noteIndex)
+{
+    const QVector<Note> &notes = phrase.getNotes();
+    if (noteIndex < 0 || noteIndex >= notes.size()) return {};
+
+    // Chain detection runs per track (the renderer only ever sees one track's
+    // notes), so filter the phrase to the note's own track first. This also
+    // mirrors the renderer's variation-keyed predecessor rule.
+    const int trackIndex = notes[noteIndex].getTrackIndex();
+    QVector<int> trackNotes;   // indices into `notes`
+    for (int i = 0; i < notes.size(); ++i)
+        if (notes[i].getTrackIndex() == trackIndex) trackNotes.append(i);
+
+    QList<Note> filtered;
+    filtered.reserve(trackNotes.size());
+    for (int idx : trackNotes) filtered.append(notes[idx]);
+
+    const QVector<Track::LegatoChainInfo> chains = Track::computeLegatoChains(filtered);
+
+    const int pos = trackNotes.indexOf(noteIndex);
+    if (pos < 0) return {};
+    if (chains[pos].chainFirst == chains[pos].chainLast) return {};  // chain of one
+
+    QVector<int> members;
+    for (int i = 0; i < trackNotes.size(); ++i)
+        if (chains[i].chainFirst == chains[pos].chainFirst) members.append(trackNotes[i]);
+
+    // Start order (the order chain info, render tasks and the phrase curve use)
+    std::sort(members.begin(), members.end(), [&notes](int a, int b) {
+        return notes[a].getStartTime() < notes[b].getStartTime();
+    });
+    return members;
+}
+
+QVector<int> ScoreCanvas::legatoPhraseForSelection()
+{
+    if (selectedNoteIndices.isEmpty()) return {};
+
+    const QVector<int> members = legatoPhraseForNote(selectedNoteIndices.first());
+    if (members.size() < 2) return {};
+
+    // Only when the WHOLE selection sits inside this one phrase; a mixed or
+    // multi-phrase selection keeps the per-note dialog.
+    for (int idx : selectedNoteIndices)
+        if (!members.contains(idx)) return {};
+
+    return members;
+}
+
+void ScoreCanvas::editLegatoCurve(const QVector<int> &phraseMembers)
+{
+    if (phraseMembers.size() < 2) return;
+
+    const QVector<Note> &notes = phrase.getNotes();
+    const int firstIdx = phraseMembers.first();
+    const int lastIdx  = phraseMembers.last();
+    if (firstIdx < 0 || firstIdx >= notes.size() ||
+        lastIdx < 0 || lastIdx >= notes.size()) return;
+
+    const double startTime = notes[firstIdx].getStartTime();
+    const double span      = notes[lastIdx].getEndTime() - startTime;
+
+    // Note boundaries normalized to the phrase: one tint band per note.
+    QVector<double> boundaries;
+    if (span > 0.0) {
+        boundaries.append(0.0);
+        for (int i = 1; i < phraseMembers.size(); ++i)
+            boundaries.append((notes[phraseMembers[i]].getStartTime() - startTime) / span);
+        boundaries.append(1.0);
+    }
+
+    // Initial shape, in the same priority order the renderer uses: the
+    // phrase's stored editor points, else its stored curve, else the
+    // interpolated default the sound currently uses. The dialog round-trips
+    // whatever is applied.
+    QVector<EnvelopePoint> initialPoints;
+    const Note *source = nullptr;
+    for (int idx : phraseMembers) {
+        if (idx >= 0 && idx < notes.size() && notes[idx].hasLegatoCurve()) {
+            source = &notes[idx];
+            break;
+        }
+    }
+    if (source && source->hasEnvelopeControlPoints(QStringLiteral("Legato")))
+        initialPoints = source->getEnvelopeControlPoints(QStringLiteral("Legato"));
+    else if (source)
+        initialPoints = curveToEditorPoints(source->getLegatoCurve());
+    else
+        initialPoints = curveToEditorPoints(Track::defaultLegatoCurve(notes, phraseMembers));
+
+    DynamicsCurveDialog dialog(phraseMembers.size(), span, this);
+    dialog.setWindowTitle("Legato Curve");
+    dialog.setLegatoMode(boundaries);
+    dialog.setInitialCurve(initialPoints);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        undoStack->push(new ApplyLegatoCurveCommand(
+            &phrase, phraseMembers, dialog.getCurve(), dialog.getWeight(), this));
+        qDebug() << "ScoreCanvas: Applied legato curve to" << phraseMembers.size()
+                 << "notes of the phrase";
+    }
+}
+
 void ScoreCanvas::showDynamicsCurveDialog()
 {
     if (selectedNoteIndices.isEmpty()) {
         qDebug() << "ScoreCanvas::showDynamicsCurveDialog - No notes selected";
+        return;
+    }
+
+    // A legato phrase responds to ONE curve spanning the phrase: when the
+    // whole selection sits inside a single phrase, that curve is what the
+    // "dynamics curve" means - the per-note curves are dormant while linked.
+    const QVector<int> phraseMembers = legatoPhraseForSelection();
+    if (phraseMembers.size() >= 2) {
+        editLegatoCurve(phraseMembers);
         return;
     }
 
@@ -6418,6 +6640,15 @@ void ScoreCanvas::editNoteCurve(int noteIndex)
     }
 
     if (activeCurveIndex == 0) {
+        // A legato phrase's dynamics live on the phrase curve (the per-note
+        // curves are dormant while linked): route there when the whole
+        // selection sits inside one phrase.
+        const QVector<int> phraseMembers = legatoPhraseForSelection();
+        if (phraseMembers.size() >= 2) {
+            editLegatoCurve(phraseMembers);
+            return;
+        }
+
         // ---- Edit dynamics curve ----
         DynamicsCurveDialog dialog(selectedNoteIndices.size(), duration, this);
         dialog.setWindowTitle("Edit Dynamics Curve");

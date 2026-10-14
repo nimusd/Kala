@@ -737,6 +737,44 @@
       can therefore still be transposed, dragged and curve-edited note by note.
       "Unlink (Staccato)" clears the link and shortens each note back away from
       the next one, so the group re-articulates.</p>
+    <h3 id="the-legato-curve">The Legato Curve</h3>
+    <p>A legato phrase responds to <strong>one dynamics curve spanning the whole
+      phrase</strong> — the <em>legato curve</em>. Without it, every note's own
+      dynamics shape would still drive its slice of the continuous sound, so a
+      per-note swell or peak could read as a fresh attack even though no attack
+      is played.</p>
+    <p>Right-click any note of a phrase and choose <em>Apply Dynamics Curve…</em>
+      — for a linked phrase this opens the Legato Curve dialog instead of the
+      per-note one (double-clicking a note's body works the same way). The
+      dialog is the familiar envelope editor: presets, Weight, and Save/Load of
+      <code>.env.json</code> files. The horizontal axis spans the phrase, and
+      the note boundaries are marked with a subtle alternating background and
+      dashed joint lines, so you can see exactly which note each part of the
+      curve covers. The phrase's stored shape reopens exactly as you left it.</p>
+    <p>When notes are first linked, the legato curve starts as a smooth
+      interpolation of the notes' existing dynamics (sampled just past each
+      note's attack), so linking does not change the phrase's overall arc — it
+      only removes the per-note discontinuities. Phrases from projects saved
+      before this feature behave the same way until you edit them.</p>
+    <p>While a phrase is linked, the individual notes' dynamics curves are
+      kept but dormant: the legato curve is what you hear, and each note's body
+      draws its own portion of it — the canvas shows exactly the shape being
+      played. The top-edge curve dots are hidden on linked notes, since the
+      per-note dynamics they would edit is inaudible; the bottom-edge pitch
+      dots keep working normally. "Unlink (Staccato)" restores each note's own
+      dynamics exactly as they were and discards the phrase's legato curve
+      (undo brings both back).</p>
+    <h3 id="resizing-a-phrase">Resizing a Phrase</h3>
+    <p><em>Scale Timing…</em> (right-click menu) is the way to compress or
+      expand a legato phrase without breaking it. Select the whole phrase and
+      rescale by any factor: every note and every joint scales together, the
+      links survive, and the legato curve stretches to the new span. Selecting
+      only the tail of the phrase works the same way. With a leading or middle
+      partial selection, the joints inside it — and the one leading into it —
+      stay intact, but the joint <em>after</em> the selection does not move
+      with it, so a gap (or a large overlap) can open there and the phrase
+      re-articulates at that joint; re-link afterwards, or select the whole
+      phrase.</p>
     <h2 id="time-and-navigation">Time and Navigation</h2>
     <h3 id="the-timeline">The Timeline</h3>
     <p><img src="data:image/png;base64,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"
@@ -846,7 +884,10 @@
           <td>Apply Dynamics Curve…</td>
           <td>Opens a dialog for shaping the dynamics (amplitude) of the
             selected notes using a curve you design or choose from presets.
-            Works on a single note or any number of notes. <br>
+            Works on a single note or any number of notes. When the selection
+            sits entirely inside one legato phrase, this opens the Legato Curve
+            dialog instead and shapes the phrase as a whole (see <a
+            href="#the-legato-curve">The Legato Curve</a>). <br>
             <br>
             <strong>Curve editor</strong> — Click to add control points, drag to
             move them, right-click or drag off-canvas to delete. Ctrl-click a
@@ -927,7 +968,9 @@
           <td>Proportionally scales the start times and durations of the
             selected notes by a factor you specify. Useful for fitting a phrase
             into a different time span or adjusting local tempo without changing
-            the global tempo map.</td>
+            the global tempo map. On a legato phrase this resizes the phrase
+            while keeping it linked — see <a href="#resizing-a-phrase">Resizing
+            a Phrase</a>.</td>
         </tr>
       </tbody>
     </table>

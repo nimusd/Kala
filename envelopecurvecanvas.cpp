@@ -1,6 +1,7 @@
 #include "envelopecurvecanvas.h"
 #include <QPainter>
 #include <QMouseEvent>
+#include <algorithm>
 #include <cmath>
 
 EnvelopeCurveCanvas::EnvelopeCurveCanvas(QWidget *parent)
@@ -49,6 +50,9 @@ void EnvelopeCurveCanvas::paintEvent(QPaintEvent *event)
     // Fill background
     painter.fillRect(rect(), QColor(30, 30, 30));
 
+    // Note-boundary bands (phrase curves) sit under the grid
+    drawTimeBands(painter);
+
     // Draw grid, context curves, then the editable curve on top
     drawGrid(painter);
     drawGhosts(painter);
@@ -60,6 +64,42 @@ void EnvelopeCurveCanvas::setGhostCurves(const QVector<Ghost> &ghosts)
 {
     ghostCurves = ghosts;
     update();
+}
+
+void EnvelopeCurveCanvas::setTimeMarkers(const QVector<double> &boundaries)
+{
+    timeMarkers = boundaries;
+    std::sort(timeMarkers.begin(), timeMarkers.end());
+    update();
+}
+
+void EnvelopeCurveCanvas::drawTimeBands(QPainter &painter)
+{
+    if (timeMarkers.size() < 2) return;
+
+    painter.save();
+
+    // Alternating tint per note region, so each note of the phrase reads as
+    // its own slice of the horizontal line.
+    for (int i = 0; i + 1 < timeMarkers.size(); ++i) {
+        if (i % 2 == 0) continue;   // band between boundary i and i+1
+        const double t0 = std::clamp(timeMarkers[i], 0.0, 1.0);
+        const double t1 = std::clamp(timeMarkers[i + 1], 0.0, 1.0);
+        if (t1 <= t0) continue;
+        const QPointF tl = curveToScreen(t0, 1.0);
+        const QPointF br = curveToScreen(t1, 0.0);
+        painter.fillRect(QRectF(tl, br), QColor(255, 255, 255, 16));
+    }
+
+    // Plain white lines at the interior joints - maximum contrast against the
+    // dark canvas and the grid
+    painter.setPen(QPen(QColor(255, 255, 255), 1));
+    for (int i = 1; i + 1 < timeMarkers.size(); ++i) {
+        const double t = std::clamp(timeMarkers[i], 0.0, 1.0);
+        painter.drawLine(curveToScreen(t, 1.0), curveToScreen(t, 0.0));
+    }
+
+    painter.restore();
 }
 
 void EnvelopeCurveCanvas::drawGhosts(QPainter &painter)
