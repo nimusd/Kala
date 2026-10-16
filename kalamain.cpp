@@ -5172,8 +5172,20 @@ void KalaMain::onExportAudio()
         projectName = "Untitled";
     }
 
+    // Where the notation stops, across all tracks. Same source as the export
+    // length computed after the pre-render below (getRenderedEndTimeMs), just
+    // earlier — so the dialog can show the length before the user commits.
+    // Values can grow slightly by the time the file is written (release tails
+    // only exist once the notes are rendered).
+    double notationEndMs = 0.0;
+    for (int i = 0; i < trackManager->getTrackCount(); ++i) {
+        Track *track = trackManager->getTrack(i);
+        if (track) notationEndMs = std::max(notationEndMs, track->getRenderedEndTimeMs());
+    }
+
     // Show export dialog
-    ExportAudioDialog dialog(projectName, trackManager->getTrackCount(), sampleRate, this);
+    ExportAudioDialog dialog(projectName, trackManager->getTrackCount(), sampleRate,
+                             lengthMs, notationEndMs, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

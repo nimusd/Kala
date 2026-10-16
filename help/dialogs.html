@@ -1310,7 +1310,7 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="
 <hr />
 <h2 id="export-audio-dialog">9. Export Audio Dialog</h2>
 <p><strong>Window Title:</strong> Export Audio <strong>Size:</strong>
-500 x 300 <strong>Modal:</strong> Yes <strong>Source:</strong>
+500 x 360 <strong>Modal:</strong> Yes <strong>Source:</strong>
 <code>exportaudiodialog.h</code>, <code>exportaudiodialog.cpp</code></p>
 <h3 id="how-to-open-8">How to Open</h3>
 <p>Accessible via <strong>File &gt; Export Audio</strong> (keyboard
@@ -1373,6 +1373,17 @@ to user’s Music folder + project name + <code>.wav</code>.</td>
 <td><strong>Settings</strong> group</td>
 <td>QGroupBox</td>
 <td>Read-only information about export format.</td>
+</tr>
+<tr>
+<td>Length</td>
+<td>QLabel</td>
+<td>How long the exported file will be, with a note explaining which rule
+decided it. The export uses the longer of the project length (Project
+Settings &gt; Audio Settings &gt; Duration) and the point where the notation
+stops. If the notation ends first, the file is padded to the project length
+with silence; if the notation runs past it, the export follows the notation.
+Release tails can extend the file slightly beyond the number shown, since
+they only exist once the notes are rendered.</td>
 </tr>
 <tr>
 <td>Sample Rate</td>

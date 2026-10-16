@@ -17,15 +17,37 @@
 ExportAudioDialog::ExportAudioDialog(const QString &projectName,
                                      int trackCount,
                                      unsigned int sampleRate,
+                                     double declaredLengthMs,
+                                     double notationEndMs,
                                      QWidget *parent)
     : QDialog(parent)
     , m_projectName(projectName)
     , m_trackCount(trackCount)
     , m_sampleRate(sampleRate)
+    , m_declaredLengthMs(declaredLengthMs)
+    , m_notationEndMs(notationEndMs)
 {
     setupUI();
     setWindowTitle("Export Audio");
-    resize(500, 300);
+    resize(500, 360);
+}
+
+// "1:30" / "12:04" / "1:02:30" — file length, not the ms-precision form used
+// by the composition settings dialog.
+static QString formatLength(double ms)
+{
+    const int totalSeconds = static_cast<int>(ms / 1000.0 + 0.5);
+    const int hours   = totalSeconds / 3600;
+    const int minutes = (totalSeconds % 3600) / 60;
+    const int seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return QString("%1:%2:%3").arg(hours)
+            .arg(minutes, 2, 10, QChar('0'))
+            .arg(seconds, 2, 10, QChar('0'));
+    }
+    return QString("%1:%2").arg(minutes)
+        .arg(seconds, 2, 10, QChar('0'));
 }
 
 void ExportAudioDialog::setupUI()
@@ -82,6 +104,35 @@ void ExportAudioDialog::setupUI()
     labelBitDepth = new QLabel("24-bit", this);
     labelChannels = new QLabel("Stereo", this);
 
+    // Length — the same max() rule the exporter uses (see KalaMain::onExportAudio),
+    // spelled out so the piece's declared length is never a surprise.
+    labelLength = new QLabel(this);
+    labelLengthNote = new QLabel(this);
+    labelLengthNote->setWordWrap(true);
+    labelLengthNote->setStyleSheet("color: gray;");
+
+    const bool notationWins = m_notationEndMs > m_declaredLengthMs;
+    if (m_notationEndMs <= 0.0) {
+        labelLength->setText(formatLength(m_declaredLengthMs));
+        labelLengthNote->setText(
+            "Project length (Project Settings → Audio Settings). No notes yet, "
+            "so the whole file is silence.");
+    } else if (notationWins) {
+        labelLength->setText(formatLength(m_notationEndMs));
+        labelLengthNote->setText(
+            QString("The notation ends at %1 — past the %2 project length, so the export "
+                    "runs to the end of the notation (plus release tails).")
+                .arg(formatLength(m_notationEndMs), formatLength(m_declaredLengthMs)));
+    } else {
+        labelLength->setText(formatLength(m_declaredLengthMs));
+        labelLengthNote->setText(
+            QString("Project length (Project Settings → Audio Settings). The notation ends "
+                    "at %1 — the rest of the file is silence. Release tails may extend it slightly.")
+                .arg(formatLength(m_notationEndMs)));
+    }
+
+    settingsLayout->addRow("Length:", labelLength);
+    settingsLayout->addRow("", labelLengthNote);
     settingsLayout->addRow("Sample Rate:", labelSampleRate);
     settingsLayout->addRow("Bit Depth:", labelBitDepth);
     settingsLayout->addRow("Channels:", labelChannels);

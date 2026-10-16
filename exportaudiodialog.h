@@ -2,6 +2,7 @@
 #define EXPORTAUDIODIALOG_H
 
 #include <QDialog>
+#include <QString>
 
 class QRadioButton;
 class QLineEdit;
@@ -34,11 +35,17 @@ public:
      * @param projectName Current project name (used for default filename)
      * @param trackCount Number of tracks in the composition
      * @param sampleRate Audio sample rate from AudioEngine
+     * @param declaredLengthMs Composition length from the project settings
+     *        (Project Settings > Audio Settings > Duration)
+     * @param notationEndMs Where the notation stops, across all tracks.
+     *        Export length is max() of this and declaredLengthMs
      * @param parent Parent widget
      */
     explicit ExportAudioDialog(const QString &projectName,
                                int trackCount,
                                unsigned int sampleRate,
+                               double declaredLengthMs,
+                               double notationEndMs,
                                QWidget *parent = nullptr);
 
     /**
@@ -68,11 +75,15 @@ private:
     QLabel *labelSampleRate;
     QLabel *labelBitDepth;
     QLabel *labelChannels;
+    QLabel *labelLength;
+    QLabel *labelLengthNote;
 
     // Data
     QString m_projectName;
     int m_trackCount;
     unsigned int m_sampleRate;
+    double m_declaredLengthMs;
+    double m_notationEndMs;
 };
 
 #endif // EXPORTAUDIODIALOG_H
