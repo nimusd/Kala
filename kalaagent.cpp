@@ -144,6 +144,12 @@ void KalaAgent::onResponseReceived(const QJsonObject &response,
     const QJsonObject message = choice["message"].toObject();
     const QString finishReason = choice["finish_reason"].toString();
 
+    // NOTE: every append below stores the assistant message object VERBATIM, and
+    // that is deliberate — do not rebuild it from role/content/tool_calls.
+    // DeepSeek in thinking mode rejects a tool round that omits the previous
+    // turn's reasoning_content: "The `reasoning_content` in the thinking mode
+    // must be passed back to the API" (HTTP 400, verified 2026-10-15). Passing
+    // `tool_calls` through unchanged matters for the same reason.
     if (finishReason == "tool_calls" && roundsLeft > 0) {
         // Append the assistant's tool-call message to history and execute
         m_messages.append(message);

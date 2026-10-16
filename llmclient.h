@@ -34,6 +34,16 @@ private:
     QJsonObject buildOpenAIRequest(const QJsonArray &messages,
                                    const QJsonArray &tools) const;
 
+    // True when the configured model is a Qwen — the only family that honours
+    // the `/no_think` soft switch. Other models get no tag (it would just be
+    // prompt noise), and Ollama's native API uses `think: false` instead.
+    bool isQwenModel() const;
+
+    // True when the configured model is a DeepSeek. Their thinking mode is ON
+    // by default; `reasoning_effort: "none"` turns it off, and sending that key
+    // to any other provider is an error — hence the model check.
+    bool isDeepSeekModel() const;
+
     // Append `/no_think` to the last user message so Qwen3 skips reasoning.
     QJsonArray  withNoThinkTag(const QJsonArray &messages) const;
 

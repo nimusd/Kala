@@ -82,7 +82,10 @@ QJsonObject LLMClient::buildOpenAIRequest(const QJsonArray &messages,
     body["model"]       = m_config.model;
     body["max_tokens"]  = m_config.maxTokens;
     body["temperature"] = m_config.temperature;
-    body["messages"]    = withNoThinkTag(messages);
+    body["messages"]    = isQwenModel() ? withNoThinkTag(messages) : messages;
+    // DeepSeek thinks by default; only the off-switch needs sending.
+    if (!m_config.thinking && isDeepSeekModel())
+        body["reasoning_effort"] = QStringLiteral("none");
     if (!tools.isEmpty()) {
         body["tools"]        = tools;
         body["tool_choice"]  = QStringLiteral("auto");
@@ -90,10 +93,22 @@ QJsonObject LLMClient::buildOpenAIRequest(const QJsonArray &messages,
     return body;
 }
 
+bool LLMClient::isDeepSeekModel() const
+{
+    return m_config.model.contains(QStringLiteral("deepseek"), Qt::CaseInsensitive);
+}
+
+// `/no_think` is a Qwen3-only soft switch. It is appended only when the
+// configured model is a Qwen; DeepSeek, Claude, GPT and friends never see it.
+bool LLMClient::isQwenModel() const
+{
+    return m_config.model.contains(QStringLiteral("qwen"), Qt::CaseInsensitive);
+}
+
 // Qwen3 honours the `/no_think` soft switch at the end of the latest user
 // turn (system-prompt placement is inconsistent across builds, and the
 // Ollama /v1 endpoint doesn't forward the native `think: false` param).
-// Appending it here keeps reasoning disabled for all outbound requests.
+// Appending it here keeps reasoning disabled for Qwen requests.
 QJsonArray LLMClient::withNoThinkTag(const QJsonArray &messages) const
 {
     QJsonArray out = messages;

@@ -626,7 +626,8 @@ KalaMain::KalaMain(QWidget *parent)
         m_llmConfig.baseUrl   = s.value("llm/baseUrl",  "http://localhost:11434/v1").toString();
         m_llmConfig.apiKey    = s.value("llm/apiKey",   "ollama").toString();
         m_llmConfig.model     = s.value("llm/model",    "qwen3-coder:30b").toString();
-        m_llmConfig.maxTokens = s.value("llm/maxTokens", 4096).toInt();
+        m_llmConfig.maxTokens = s.value("llm/maxTokens", 16384).toInt();
+        m_llmConfig.thinking  = s.value("llm/thinking", true).toBool();
 
         // Auto-promote legacy OpenAICompatible config to Ollama when the URL
         // points at a local Ollama server. Users with existing settings get
@@ -8686,7 +8687,8 @@ void KalaMain::populateSettingsTab()
     providerCombo->addItem("Groq",                   2);
     providerCombo->addItem("OpenRouter",             3);
     providerCombo->addItem("Anthropic Claude",       4);
-    providerCombo->addItem("Custom",                 5);
+    providerCombo->addItem("DeepSeek",               5);
+    providerCombo->addItem("Custom",                 6);
     // Select current
     {
         QSettings s;
@@ -8701,8 +8703,10 @@ void KalaMain::populateSettingsTab()
             providerCombo->setCurrentIndex(3);
         else if (savedUrl.contains("anthropic.com"))
             providerCombo->setCurrentIndex(4);
-        else
+        else if (savedUrl.contains("deepseek.com"))
             providerCombo->setCurrentIndex(5);
+        else
+            providerCombo->setCurrentIndex(6);
     }
     aiLayout->addRow("Provider:", providerCombo);
 
@@ -8725,6 +8729,26 @@ void KalaMain::populateSettingsTab()
     modelEdit->setPlaceholderText("e.g. qwen3-coder:30b or claude-sonnet-4-6");
     aiLayout->addRow("Model:", modelEdit);
 
+    // Max output tokens (per reply — NOT the context window)
+    QSpinBox *maxTokensSpin = new QSpinBox();
+    maxTokensSpin->setRange(256, 384000);
+    maxTokensSpin->setSingleStep(1024);
+    maxTokensSpin->setValue(m_llmConfig.maxTokens);
+    maxTokensSpin->setToolTip(
+        "Maximum tokens in one reply (the output cap, not the context window).\n"
+        "DeepSeek: up to 384000.  Claude: 64000.  Many local models: 8192.\n"
+        "Set too high for your provider, and the API rejects the request.");
+    aiLayout->addRow("Max Tokens:", maxTokensSpin);
+
+    // Thinking mode (DeepSeek only — other providers ignore the field)
+    QCheckBox *thinkingCheck = new QCheckBox("Thinking mode");
+    thinkingCheck->setChecked(m_llmConfig.thinking);
+    thinkingCheck->setToolTip(
+        "DeepSeek only. On (default) leaves the model's thinking mode alone.\n"
+        "Off sends reasoning_effort:\"none\" — faster, cheaper replies with no\n"
+        "chain of thought. Other providers ignore this setting.");
+    aiLayout->addRow("", thinkingCheck);
+
     // Provider presets — auto-fill URL when provider changes
     connect(providerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [urlEdit, modelEdit](int idx) {
@@ -8738,6 +8762,8 @@ void KalaMain::populateSettingsTab()
                     modelEdit->setPlaceholderText("anthropic/claude-sonnet-4-6"); break;
             case 4: urlEdit->setText("https://api.anthropic.com");
                     modelEdit->setPlaceholderText("claude-sonnet-4-6");    break;
+            case 5: urlEdit->setText("https://api.deepseek.com/v1");
+                    modelEdit->setPlaceholderText("deepseek-flash");       break;
             default: break;
         }
     });
@@ -8745,14 +8771,16 @@ void KalaMain::populateSettingsTab()
     // Apply button
     QPushButton *applyAiBtn = new QPushButton("Apply");
     applyAiBtn->setFixedWidth(80);
-    connect(applyAiBtn, &QPushButton::clicked, this, [this, providerCombo, urlEdit, keyEdit, modelEdit]() {
+    connect(applyAiBtn, &QPushButton::clicked, this, [this, providerCombo, urlEdit, keyEdit, modelEdit, maxTokensSpin, thinkingCheck]() {
         const int idx = providerCombo->currentIndex();
         if (idx == 4)       m_llmConfig.provider = LLMProvider::Anthropic;
         else if (idx == 0)  m_llmConfig.provider = LLMProvider::Ollama;
         else                m_llmConfig.provider = LLMProvider::OpenAICompatible;
-        m_llmConfig.baseUrl  = urlEdit->text().trimmed();
-        m_llmConfig.apiKey   = keyEdit->text().trimmed();
-        m_llmConfig.model    = modelEdit->text().trimmed();
+        m_llmConfig.baseUrl   = urlEdit->text().trimmed();
+        m_llmConfig.apiKey    = keyEdit->text().trimmed();
+        m_llmConfig.model     = modelEdit->text().trimmed();
+        m_llmConfig.maxTokens = maxTokensSpin->value();
+        m_llmConfig.thinking  = thinkingCheck->isChecked();
 
         // Persist
         QSettings s;
@@ -8760,6 +8788,8 @@ void KalaMain::populateSettingsTab()
         s.setValue("llm/baseUrl",    m_llmConfig.baseUrl);
         s.setValue("llm/apiKey",     m_llmConfig.apiKey);
         s.setValue("llm/model",      m_llmConfig.model);
+        s.setValue("llm/maxTokens",  m_llmConfig.maxTokens);
+        s.setValue("llm/thinking",   m_llmConfig.thinking);
 
         // Push to live agent
         if (m_kalaAgent) m_kalaAgent->setConfig(m_llmConfig);
