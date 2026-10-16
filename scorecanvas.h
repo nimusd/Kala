@@ -488,6 +488,13 @@ private:
     // Helper methods
     int frequencyToPixel(double hz) const;
     QColor getScaleDegreeColor(int degree) const;
+    // Colour + thickness for one degree of `scale`. Shared by
+    // generateScaleLines() (the time-0 grid) and generateScaleLinesForScale()
+    // so the two can never drift apart. Covers the Whole Tone scale, an Equal
+    // Temperament rotated to a key, and any other scale carrying a reference
+    // degree (tonicIndex, 0-based into that scale's own table).
+    struct DegreeStyle { QColor color; bool thicker; };
+    DegreeStyle degreeStyleFor(const Scale &scale, int degree) const;
     void drawScaleLine(QPainter &painter, const ScaleLine &line, int y);
     void drawScaleLineInRegion(QPainter &painter, const ScaleLine &line, int y, int startX, int endX);
     void drawTimeAwareScaleLines(QPainter &painter);

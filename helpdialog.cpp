@@ -200,6 +200,7 @@ void HelpDialog::buildTableOfContents()
     addChild(companion, "Build Sounits",       "companion.html", "build-sounits");
     addChild(companion, "Browse the Library",  "companion.html", "browse-the-library");
     addChild(companion, "Write Music",         "companion.html", "write-music");
+    addChild(companion, "Keys, Tonics & Structure", "companion.html", "keys-tonics-structure");
     addChild(companion, "Shape Phrases",       "companion.html", "shape-phrases");
     addChild(companion, "Tips",                "companion.html", "tips");
     addChild(companion, "Limitations",         "companion.html", "limitations");

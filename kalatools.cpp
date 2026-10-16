@@ -132,6 +132,7 @@ QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &
         || (toolName == "select_notes" && action == "current")
         || (toolName == "engine_settings" && action == "get")
         || (toolName == "time_signature" && action == "get")
+        || (toolName == "modulation" && action == "list")
         || (toolName == "track" && action == "list")
         || (toolName == "variation" && action == "list");
     if (!isReadOnly) {
@@ -148,6 +149,7 @@ QJsonObject KalaTools::dispatchTool(const QString &toolName, const QJsonObject &
     if (toolName == "variation")             return toolVariation(args);
     if (toolName == "edit_graph")            return toolEditGraph(args);
     if (toolName == "time_signature")        return toolTimeSig(args);
+    if (toolName == "modulation")            return toolModulation(args);
     if (toolName == "engine_settings")       return toolEngineSettings(args);
     if (toolName == "inspect_notes")         return toolInspectNotes(args);
     if (toolName == "select_notes")          return toolSelectNotes(args);
@@ -1090,6 +1092,113 @@ static ScoreCanvas *getScoreCanvas(ScoreCanvasWindow *w) {
     return w ? w->getScoreCanvas() : nullptr;
 }
 
+// Note name → tonic index (0=C … 11=B). Accepts sharps/flats (also ♯/♭), any
+// case, and an optional "major"/"maj" suffix ("F#", "Gb", "bb", "D major").
+// Returns -1 and sets *err when the name cannot be read as a key.
+static int tonicIndexForKeyName(const QString &raw, QString *err)
+{
+    const QString s = raw.trimmed().toLower();
+    if (s.isEmpty()) { if (err) *err = "empty key name."; return -1; }
+
+    // Minor keys have no representation — the rotation colours the MAJOR scale
+    // of the tonic. Say so rather than colouring the wrong scale silently.
+    if (s.contains("min") || s.endsWith('m')) {
+        if (err) *err = "minor keys are not representable — a key colours the major "
+                        "scale of its tonic. Use the note name alone (\"D\") if the "
+                        "tonic line is all you need moved.";
+        return -1;
+    }
+
+    const QString token = s.section(' ', 0, 0);
+    static const QString letters = "cdefgab";
+    const int letterIndex = letters.indexOf(token.at(0));
+    if (letterIndex < 0) { if (err) *err = "not a note name (A–G)."; return -1; }
+
+    static const int letterSemitones[7] = { 0, 2, 4, 5, 7, 9, 11 };  // C D E F G A B
+    int semitone = letterSemitones[letterIndex];
+    for (int i = 1; i < token.size(); ++i) {
+        const QChar c = token.at(i);
+        if (c == '#' || c == QChar(0x266F))      semitone += 1;
+        else if (c == 'b' || c == QChar(0x266D)) semitone -= 1;
+        else { if (err) *err = QString("unexpected character '%1'.").arg(c); return -1; }
+    }
+    return ((semitone % 12) + 12) % 12;
+}
+
+// Tonic index → the sharp name Kala's ET scale carries ("C", "C#", … "B").
+// Sharp-only because the scale's own name table is (Bb's line reads A#).
+static QString keyNameForTonicIndex(int tonicIndex)
+{
+    static const char *names[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+    if (tonicIndex < 0 || tonicIndex > 11) return QString();
+    return QString::fromLatin1(names[tonicIndex]);
+}
+
+// The key of a scale, or an empty string when it isn't a rotated ET (a maqam,
+// raga or JI scale has no "key" — its reference is reported as tonicDegree).
+static QString keyOfScale(const Scale &scale)
+{
+    if (scale.getScaleId() != 2) return QString();
+    return keyNameForTonicIndex(scale.getTonicIndex());
+}
+
+// The scale's reference degree as the agent sees it (1-based), or 0 when the
+// scale carries none. Every scale counts from its own table: ET's 1-based
+// degree is its key index + 1, but ET reports a key name instead.
+static int tonicDegreeOfScale(const Scale &scale)
+{
+    const int t = scale.getTonicIndex();
+    return (t >= 0 && t < scale.getDegreeCount()) ? t + 1 : 0;
+}
+
+// Resolve a scale by name: exact case-insensitive match first ("Dorian" beats
+// "Dorian b2"), then a unique case-insensitive substring ("Homayun" → "Persian
+// Homayun"). Ambiguous or unknown → false + *err, the ambiguity listing the
+// candidates so the agent can ask which tuning was meant.
+static bool resolveScaleByName(const QString &raw, Scale *out, QString *err)
+{
+    const QString name = raw.trimmed().toLower();
+    if (name.isEmpty()) { if (err) *err = "empty scale name."; return false; }
+
+    const auto all = Scale::getAllScales();
+    for (const Scale &s : all) {
+        if (s.getName().toLower() == name) { *out = s; return true; }
+    }
+
+    QVector<Scale> hits;
+    for (const Scale &s : all) {
+        if (s.getName().toLower().contains(name)) hits.append(s);
+    }
+    if (hits.isEmpty()) {
+        if (err) *err = QString("Scale not found: '%1'.").arg(raw);
+        return false;
+    }
+    if (hits.size() > 1) {
+        QStringList names;
+        const int shown = qMin(hits.size(), 8);
+        for (int i = 0; i < shown; ++i)
+            names << QString("%1 (id %2)").arg(hits[i].getName()).arg(hits[i].getScaleId());
+        if (hits.size() > shown) names << "…";
+        if (err) *err = QString("'%1' matches %2 scales: %3. Give the full name or a scaleId.")
+                            .arg(raw).arg(hits.size()).arg(names.join(", "));
+        return false;
+    }
+    *out = hits.first();
+    return true;
+}
+
+// Scale for replies: the display name already carries the key ("Equal
+// Temperament (F)") or reference degree ("Just Intonation (G)"); non-ET
+// references get the degree spelled out too, since it is what the map reports.
+static QString describeScale(const Scale &scale)
+{
+    QString s = scale.getDisplayName();
+    const int degree = tonicDegreeOfScale(scale);
+    if (degree > 0 && scale.getScaleId() != 2)
+        s += QString(" — tonic degree %1 of %2").arg(degree).arg(scale.getDegreeCount());
+    return s;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool: get_composition_state
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1128,6 +1237,35 @@ QJsonObject KalaTools::toolGetCompositionState(const QJsonObject &args)
     result["notes"]       = noteArr;
     result["scale"]       = sc->getCurrentScale().getName();
     result["baseFreqHz"]  = sc->getBaseFrequency();
+
+    // Modulation map: the opening key/reference (time 0) plus every marker, so
+    // the agent can answer "what key is this bar" and verify its own work.
+    // "key" appears only on Equal-Temperament entries; any other scale reports
+    // its reference as "tonicDegree" (1-based) when it carries one.
+    {
+        const QString defaultKey = keyOfScale(sc->getCurrentScale());
+        if (!defaultKey.isEmpty()) result["defaultKey"] = defaultKey;
+        else {
+            const int degree = tonicDegreeOfScale(sc->getCurrentScale());
+            if (degree > 0) result["defaultTonicDegree"] = degree;
+        }
+
+        QJsonArray mods;
+        const auto markers = sc->getScaleChanges();
+        for (auto it = markers.constBegin(); it != markers.constEnd(); ++it) {
+            const Scale &s = it.value().first;
+            QJsonObject m{ {"timeMs", it.key()}, {"scale", s.getName()},
+                           {"baseFreqHz", it.value().second} };
+            const QString key = keyOfScale(s);
+            if (!key.isEmpty()) m["key"] = key;
+            else {
+                const int degree = tonicDegreeOfScale(s);
+                if (degree > 0) m["tonicDegree"] = degree;
+            }
+            mods.append(m);
+        }
+        result["scaleChanges"] = mods;
+    }
     result["tempo"]       = sc->getDefaultTempo();
     result["timeSigNum"]  = sc->getDefaultTimeSigNum();
     result["timeSigDenom"]= sc->getDefaultTimeSigDenom();
@@ -1314,6 +1452,545 @@ QJsonObject KalaTools::toolSetScale(const QJsonObject &args)
     return ok(QString("Scale set to '%1' (base %.1f Hz).")
               .arg(newScale.getName())
               .arg(sc->getBaseFrequency()));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modulation tools (key / reference moves and scale markers)
+//
+// The score canvas is a frequency grid: the active scale's degrees are drawn
+// from a base frequency. A key change in Equal Temperament — and now a TONIC
+// (reference) move in any scale — is a tonic rotation: Scale::withTonic() keeps
+// every ratio and the base frequency untouched, so the lines do not move at all
+// and only the colours rotate.
+// That invariant is the whole point of this tool: a reference move must never be
+// expressed by moving baseFreqHz, because AddScaleChangeCommand retunes every
+// discrete note in the affected stretch when the base frequency changes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Resolve what a modulation should apply — from a key name (ET reference move),
+// an explicit scaleId / scale / scaleName, or a bare tonicDegree (move the
+// reference inside the scale already in effect). The base frequency in effect is
+// inherited unless baseFreqHz is given, exactly as the Scale dialog pre-fills
+// it. A reference move never touches ratios or the base frequency, so nothing
+// retunes. False + *err on invalid/ambiguous args.
+static bool resolveModulationTuning(const QJsonObject &args, double baseFreqInEffect,
+                                    const Scale &scaleInEffect,
+                                    Scale *outScale, double *outBaseFreq, QString *err)
+{
+    const bool hasKey   = args.contains("key");
+    const bool hasScale = args.contains("scaleId") || args.contains("scale") || args.contains("scaleName");
+    const bool hasTonic = args.contains("tonicDegree");
+
+    if (hasKey && (hasScale || hasTonic)) {
+        *err = "give either 'key' (Equal-Temperament key) or a scale / 'tonicDegree', "
+               "not both — a key already names the tonic.";
+        return false;
+    }
+
+    const double baseFreq = args.contains("baseFreqHz") ? args["baseFreqHz"].toDouble() : baseFreqInEffect;
+
+    if (hasKey) {
+        QString keyErr;
+        const int tonic = tonicIndexForKeyName(args["key"].toString(), &keyErr);
+        if (tonic < 0) {
+            *err = QString("Invalid key '%1': %2").arg(args["key"].toString(), keyErr);
+            return false;
+        }
+        *outScale    = Scale::equalTemperamentWithTonic(tonic);
+        *outBaseFreq = baseFreq;
+        return true;
+    }
+
+    Scale newScale;
+    if (args.contains("scaleId")) {
+        const int id = args["scaleId"].toInt();
+        newScale = Scale::getScaleById(id);
+        if (newScale.getScaleId() != id) { *err = QString("No scale with id %1.").arg(id); return false; }
+    } else if (hasScale) {
+        const QString raw = args.contains("scaleName") ? args["scaleName"].toString()
+                                                       : args["scale"].toString();
+        QString nameErr;
+        if (!resolveScaleByName(raw, &newScale, &nameErr)) { *err = nameErr; return false; }
+    } else if (hasTonic) {
+        // A bare tonicDegree moves the reference inside the scale in effect.
+        newScale = scaleInEffect;
+    } else {
+        *err = "'key', 'scaleId', 'scale'/'scaleName' or 'tonicDegree' is required.";
+        return false;
+    }
+
+    if (hasTonic) {
+        const int degree = args["tonicDegree"].toInt();
+        if (degree < 1 || degree > newScale.getDegreeCount()) {
+            *err = QString("tonicDegree %1 is out of range for '%2' (%3 degrees).")
+                       .arg(degree).arg(newScale.getName()).arg(newScale.getDegreeCount());
+            return false;
+        }
+        newScale = newScale.withTonic(degree - 1);
+    }
+
+    *outScale    = newScale;
+    *outBaseFreq = baseFreq;
+    return true;
+}
+
+QJsonObject KalaTools::toolModulation(const QJsonObject &args)
+{
+    const QString action = args["action"].toString();
+    if (action == "list")        return toolGetModulations();
+    if (action == "set")         return toolSetDefaultModulation(args);
+    if (action == "add")         return toolAddModulation(args);
+    if (action == "remove")      return toolRemoveModulation(args);
+    if (action == "clear")       return toolClearModulations();
+    if (action == "progression") return toolApplyKeyProgression(args);
+    if (action == "structure")   return toolApplyScaleStructure(args);
+    return error("modulation: unknown action '" + action
+                 + "'. Use list|set|add|remove|clear|progression|structure.");
+}
+
+// The opening marker (time 0) plus every position marker, in time order.
+QJsonObject KalaTools::toolGetModulations()
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    auto entry = [](double timeMs, const Scale &scale, double baseFreqHz, bool isDefault) {
+        QJsonObject o{ {"timeMs", timeMs}, {"scale", scale.getName()},
+                       {"scaleId", scale.getScaleId()},
+                       {"baseFreqHz", baseFreqHz}, {"isDefault", isDefault} };
+        const QString key = keyOfScale(scale);
+        if (!key.isEmpty()) o["key"] = key;
+        else {
+            const int degree = tonicDegreeOfScale(scale);
+            if (degree > 0) o["tonicDegree"] = degree;
+        }
+        return o;
+    };
+
+    QJsonArray changes;
+    changes.append(entry(0.0, sc->getCurrentScale(), sc->getBaseFrequency(), true));
+    const auto markers = sc->getScaleChanges();
+    for (auto it = markers.constBegin(); it != markers.constEnd(); ++it)
+        changes.append(entry(it.key(), it.value().first, it.value().second, false));
+
+    return QJsonObject{ {"result", QJsonObject{ {"count", changes.size()}, {"changes", changes} }} };
+}
+
+// action "set" — the opening tuning/key (time 0), where no marker exists.
+QJsonObject KalaTools::toolSetDefaultModulation(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    Scale newScale;
+    double newBaseFreq = 0.0;
+    QString err;
+    if (!resolveModulationTuning(args, sc->getBaseFrequency(), sc->getCurrentScale(),
+                                 &newScale, &newBaseFreq, &err))
+        return error(err);
+
+    sc->getUndoStack()->push(new EditScaleChangeCommand(sc, 0.0,
+        sc->getCurrentScale(), sc->getBaseFrequency(),
+        newScale, newBaseFreq, /*isDefault=*/true));
+
+    return ok(QString("Opening marker set to '%1' (base %2 Hz).")
+              .arg(describeScale(newScale))
+              .arg(newBaseFreq, 0, 'f', 2));
+}
+
+// action "add" — inserts (or replaces) a marker at timeMs > 0.
+QJsonObject KalaTools::toolAddModulation(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+    if (!args.contains("timeMs")) return error("'timeMs' is required.");
+    const double timeMs = args["timeMs"].toDouble();
+    if (timeMs <= 0.0)
+        return error("timeMs must be > 0 — time 0 is the opening marker, set with action 'set'.");
+
+    const Scale oldScale = sc->getScaleAtTime(timeMs);
+    const double oldBase = sc->getBaseFrequencyAtTime(timeMs);
+
+    Scale newScale;
+    double newBaseFreq = 0.0;
+    QString err;
+    if (!resolveModulationTuning(args, oldBase, oldScale, &newScale, &newBaseFreq, &err))
+        return error(err);
+
+    const bool replacing = sc->getScaleChanges().contains(timeMs);
+    if (replacing) {
+        sc->getUndoStack()->push(new EditScaleChangeCommand(sc, timeMs,
+            oldScale, oldBase, newScale, newBaseFreq, /*isDefault=*/false));
+    } else {
+        sc->getUndoStack()->push(new AddScaleChangeCommand(sc, timeMs, newScale, newBaseFreq));
+    }
+
+    QString msg = QString("%1 at %2 ms: '%3'.")
+                  .arg(replacing ? "Marker replaced" : "Marker added")
+                  .arg(timeMs, 0, 'f', 0)
+                  .arg(describeScale(newScale));
+    if (newBaseFreq != oldBase)
+        msg += QString(" Base frequency moved %1 → %2 Hz — notes in this stretch "
+                       "were retuned by scale degree.")
+               .arg(oldBase, 0, 'f', 2).arg(newBaseFreq, 0, 'f', 2);
+    return ok(msg);
+}
+
+// action "remove" — deletes one position marker (the opening marker cannot go).
+QJsonObject KalaTools::toolRemoveModulation(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+    if (!args.contains("timeMs")) return error("'timeMs' is required.");
+    const double timeMs = args["timeMs"].toDouble();
+    if (timeMs <= 0.0) return error("timeMs must be > 0 — the opening marker cannot be removed.");
+
+    if (!sc->getScaleChanges().contains(timeMs))
+        return error(QString("No modulation found at %1 ms. Use modulation(action:\"list\") to see the map.")
+                     .arg(timeMs, 0, 'f', 0));
+
+    sc->getUndoStack()->push(new DeleteScaleChangeCommand(sc, timeMs,
+        sc->getScaleAtTime(timeMs), sc->getBaseFrequencyAtTime(timeMs)));
+    return ok(QString("Removed the modulation at %1 ms.").arg(timeMs, 0, 'f', 0));
+}
+
+// action "clear" — every position marker; the opening marker is untouched.
+QJsonObject KalaTools::toolClearModulations()
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    const auto markers = sc->getScaleChanges();
+    if (markers.isEmpty()) return ok("No modulations to clear.");
+
+    sc->getUndoStack()->beginMacro("Clear scale modulations");
+    for (auto it = markers.constBegin(); it != markers.constEnd(); ++it)
+        sc->getUndoStack()->push(new DeleteScaleChangeCommand(sc, it.key(),
+                                                              it.value().first, it.value().second));
+    sc->getUndoStack()->endMacro();
+
+    return ok(QString("Removed %1 modulation marker(s). The opening marker is unchanged.")
+              .arg(markers.size()));
+}
+
+// action "progression" — lay a whole key progression on the bar grid in one
+// undoable step (the circle of fifths being the obvious use). Every entry is an
+// ET key, so no base frequency moves and no note is retuned.
+QJsonObject KalaTools::toolApplyKeyProgression(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    const QJsonArray keysArr = args["keys"].toArray();
+    if (keysArr.isEmpty())
+        return error("'keys' must be a non-empty array of key names, e.g. [\"C\",\"F\",\"Bb\",\"Eb\"].");
+
+    // Parse every key up front — one bad name fails the call before the map is touched.
+    QVector<int> tonics;
+    tonics.reserve(keysArr.size());
+    for (const QJsonValue &v : keysArr) {
+        QString keyErr;
+        const int tonic = tonicIndexForKeyName(v.toString(), &keyErr);
+        if (tonic < 0)
+            return error(QString("keys[%1] ('%2'): %3").arg(tonics.size()).arg(v.toString(), keyErr));
+        tonics.append(tonic);
+    }
+
+    const double startMs    = args.value("startMs").toDouble(0.0);
+    const int    barsPerKey = args.value("barsPerKey").toInt(1);
+    const bool   repeat     = args.value("repeat").toBool(false);
+    if (startMs < 0.0)   return error("startMs must be >= 0.");
+    if (barsPerKey < 1)  return error("barsPerKey must be >= 1.");
+    if (args.contains("barMs") && args["barMs"].toDouble() <= 0.0)
+        return error("barMs must be > 0.");
+
+    // Bar length: explicit barMs, else derived from the tempo/time signature in
+    // effect at each step — the same formula the canvas bar lines use.
+    auto barMsAt = [&](double t) {
+        if (args.contains("barMs")) return args["barMs"].toDouble();
+        const TempoTimeSignature tts = sc->getTempoTimeSignatureAtTime(t);
+        return (60000.0 / tts.bpm) * tts.timeSigNumerator;
+    };
+
+    // repeat:true cycles the key list until untilMs — the declared piece length
+    // unless told otherwise (THE PIECE IN TIME makes that the real end).
+    double untilMs = 0.0;
+    if (repeat) {
+        untilMs = args.contains("untilMs")
+                      ? args["untilMs"].toDouble()
+                      : (m_scoreCanvasWindow ? m_scoreCanvasWindow->getSettings().lengthMs : 0.0);
+        if (untilMs <= startMs)
+            return error(QString("repeat needs an end past startMs — the declared piece length "
+                                 "is %1 ms. Extend the piece or pass untilMs.")
+                         .arg(untilMs, 0, 'f', 0));
+    }
+
+    // Lay the keys out, walking the bar grid. Safety cap keeps a pathological
+    // repeat (tiny barMs, huge piece) from generating thousands of undo items.
+    QVector<double> times;
+    QVector<int>    keys;
+    double t = startMs;
+    for (int i = 0; times.size() < 1024; ++i) {
+        if (i >= tonics.size() && !repeat) break;
+        if (repeat && i > 0 && t >= untilMs) break;
+        times.append(t);
+        keys.append(tonics[i % tonics.size()]);
+        t += barsPerKey * barMsAt(t);
+    }
+    if (times.isEmpty()) return error("Nothing to place.");
+
+    // A progression starting at 0 opens with its first key: time 0 has no
+    // marker, so that key becomes the opening marker. Markers at or after
+    // startMs are replaced; anything before it is left alone.
+    const bool setsOpening = (startMs == 0.0);
+
+    // Whether this is a pure recolour, captured before anything is pushed: a
+    // key marker changes no frequency, but replacing a NON-ET region (a JI or
+    // maqam opening, say) with an ET key remaps its notes by scale degree.
+    const bool replacedRegionWasET = setsOpening
+        ? (sc->getCurrentScale().getScaleId() == 2)
+        : (sc->getScaleAtTime(startMs).getScaleId() == 2);
+
+    sc->getUndoStack()->beginMacro(QString("Apply key progression (%1 keys)").arg(times.size()));
+
+    int removed = 0;
+    const auto existing = sc->getScaleChanges();
+    for (auto it = existing.constBegin(); it != existing.constEnd(); ++it) {
+        if (it.key() < startMs) continue;
+        sc->getUndoStack()->push(new DeleteScaleChangeCommand(sc, it.key(),
+                                                              it.value().first, it.value().second));
+        ++removed;
+    }
+
+    if (setsOpening) {
+        sc->getUndoStack()->push(new EditScaleChangeCommand(sc, 0.0,
+            sc->getCurrentScale(), sc->getBaseFrequency(),
+            Scale::equalTemperamentWithTonic(keys.first()), sc->getBaseFrequency(),
+            /*isDefault=*/true));
+    }
+
+    // In time order — the order a user would add them, each remap bounded by
+    // the markers already present. Markers in the replaced span are gone by
+    // now, so every one of these is a fresh Add. The key rotation never moves
+    // the base frequency, so each remap is a no-op by construction.
+    const int firstMarker = setsOpening ? 1 : 0;
+    for (int i = firstMarker; i < times.size(); ++i) {
+        const double timeMs = times[i];
+        sc->getUndoStack()->push(new AddScaleChangeCommand(sc, timeMs,
+            Scale::equalTemperamentWithTonic(keys[i]), sc->getBaseFrequencyAtTime(timeMs)));
+    }
+
+    sc->getUndoStack()->endMacro();
+
+    QString keySeq;
+    const int shown = times.size() < 12 ? times.size() : 12;
+    for (int i = 0; i < shown; ++i)
+        keySeq += keyNameForTonicIndex(keys[i]) + " ";
+    keySeq = keySeq.trimmed();
+    if (times.size() > shown) keySeq += " …";
+
+    QString msg = QString("Laid %1 key(s) from %2 to %3 ms (one per %4 bar(s)): %5.%6")
+                  .arg(times.size())
+                  .arg(times.first(), 0, 'f', 0)
+                  .arg(times.last(), 0, 'f', 0)
+                  .arg(barsPerKey)
+                  .arg(keySeq)
+                  .arg(repeat ? " Cycling to the end." : "");
+    msg += replacedRegionWasET
+        ? " Every line stayed where it was and no note was retuned — an Equal-Temperament key change only rotates the colours."
+        : " The line grid was Equal Temperament only in part of this span; notes in the regions that were not ET were remapped by scale degree (they keep their degree and octave).";
+    if (removed > 0)
+        msg += QString(" Replaced %1 existing marker(s).").arg(removed);
+    return ok(msg);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// modulation action "structure" — lay a whole piece structure on the bar grid
+// in one undoable step: a list of segments, each a scale and/or a reference
+// (tonic) move, each a number of bars. Optionally append the retrograde of the
+// list. The natural way to set up "12 bars JI, 12 Hijaz, 24 Homayun, then the
+// retrograde of all that" in one call.
+// ─────────────────────────────────────────────────────────────────────────────
+
+QJsonObject KalaTools::toolApplyScaleStructure(const QJsonObject &args)
+{
+    ScoreCanvas *sc = getScoreCanvas(m_scoreCanvasWindow);
+    if (!sc) return error("Score canvas not available.");
+
+    const QJsonArray inSegments = args["segments"].toArray();
+    if (inSegments.isEmpty())
+        return error("'segments' must be a non-empty array, e.g. "
+                     "[{\"scale\":\"Just Intonation\",\"bars\":12},{\"scale\":\"Homayun\",\"bars\":24}].");
+
+    const double startMs      = args.value("startMs").toDouble(0.0);
+    const bool   retrograde   = args.value("retrograde").toBool(false);
+    const bool   adjustLength = args.value("adjustLength").toBool(true);
+    if (startMs < 0.0) return error("startMs must be >= 0.");
+
+    // The list as written, then — for a retrograde — its mirror. The mirror is
+    // total: an internal move (four bars on the 5th, six on the 2nd) comes back
+    // as six on the 2nd, four on the 5th.
+    QVector<QJsonObject> segments;
+    for (const QJsonValue &v : inSegments) {
+        if (!v.isObject()) return error("Each entry of 'segments' must be an object.");
+        segments.append(v.toObject());
+    }
+    const int forwardCount = segments.size();
+    if (retrograde) {
+        const QVector<QJsonObject> forward = segments;  // appended-to must not alias what it reads
+        for (int i = forwardCount - 1; i >= 0; --i) segments.append(forward[i]);
+    }
+    if (segments.size() > 1024)
+        return error(QString("A structure is capped at 1024 segments (this one has %1).")
+                     .arg(segments.size()));
+
+    // Resolve and lay out everything on the bar grid before a single command is
+    // pushed: a bad segment leaves the map, the piece length and the undo stack
+    // exactly as they were.
+    auto barMsAt = [&](double t) {
+        const TempoTimeSignature tts = sc->getTempoTimeSignatureAtTime(t);
+        return (60000.0 / tts.bpm) * tts.timeSigNumerator;
+    };
+
+    QVector<double> times;
+    QVector<Scale>  scales;
+    QVector<double> bases;
+    int tuningChanges = 0;
+    int totalBars = 0;
+
+    Scale  tunedSoFar = sc->getScaleAtTime(startMs);          // what the structure's
+    double baseSoFar  = sc->getBaseFrequencyAtTime(startMs);  // own segments inherit
+    double t = startMs;
+
+    for (int i = 0; i < segments.size(); ++i) {
+        const QJsonObject &seg = segments[i];
+        if (!seg.contains("bars"))
+            return error(QString("segments[%1]: 'bars' is required (a whole number of bars, 1–10000).").arg(i));
+        const int bars = seg["bars"].toInt();
+        if (bars < 1 || bars > 10000)
+            return error(QString("segments[%1]: bars must be between 1 and 10000.").arg(i));
+
+        const bool namesScale = seg.contains("scaleId") || seg.contains("scale")
+                             || seg.contains("scaleName") || seg.contains("key");
+        if (!namesScale && !seg.contains("tonicDegree") && !seg.contains("baseFreqHz"))
+            return error(QString("segments[%1] changes nothing — give a scale (name or scaleId), "
+                                 "a tonicDegree, or a baseFreqHz.").arg(i));
+
+        Scale  segScale;
+        double segBase = 0.0;
+        QString err;
+        if (!resolveModulationTuning(seg, baseSoFar, tunedSoFar, &segScale, &segBase, &err))
+            return error(QString("segments[%1]: %2").arg(i).arg(err));
+
+        // A segment that changes the tuning or the anchor is a genuine
+        // re-tuning (AddScaleChangeCommand remaps notes by scale degree); a
+        // reference move is not.
+        if (segScale.getScaleId() != tunedSoFar.getScaleId()
+            || segBase != baseSoFar
+            || segScale.getCentOffsets() != tunedSoFar.getCentOffsets())
+            ++tuningChanges;
+
+        times.append(t);
+        scales.append(segScale);
+        bases.append(segBase);
+        tunedSoFar = segScale;
+        baseSoFar  = segBase;
+
+        // Bar by bar, so a tempo or time-signature change inside a segment is
+        // honoured — the same grid the canvas draws.
+        for (int bar = 0; bar < bars; ++bar) {
+            const double barMs = barMsAt(t);
+            if (!(barMs > 0.0) || !std::isfinite(barMs))
+                return error(QString("segments[%1]: the bar length at %2 ms is not positive — "
+                                     "check the tempo map.").arg(i).arg(t, 0, 'f', 0));
+            t += barMs;
+        }
+        totalBars += bars;
+    }
+    const double endMs = t;
+
+    // One undoable step. Markers at or after startMs are replaced; a structure
+    // from 0 opens with its first segment (time 0 has no marker of its own).
+    const bool setsOpening = (startMs == 0.0);
+    sc->getUndoStack()->beginMacro(QString("Apply scale structure (%1 segments)").arg(segments.size()));
+
+    int removed = 0;
+    const auto existing = sc->getScaleChanges();
+    for (auto it = existing.constBegin(); it != existing.constEnd(); ++it) {
+        if (it.key() < startMs) continue;
+        sc->getUndoStack()->push(new DeleteScaleChangeCommand(sc, it.key(),
+                                                              it.value().first, it.value().second));
+        ++removed;
+    }
+
+    if (setsOpening) {
+        sc->getUndoStack()->push(new EditScaleChangeCommand(sc, 0.0,
+            sc->getCurrentScale(), sc->getBaseFrequency(),
+            scales.first(), bases.first(), /*isDefault=*/true));
+    }
+
+    // In time order, like a user adding them one by one. Markers in the
+    // replaced span are gone, so each is a fresh Add.
+    for (int i = setsOpening ? 1 : 0; i < times.size(); ++i) {
+        sc->getUndoStack()->push(new AddScaleChangeCommand(sc, times[i], scales[i], bases[i]));
+    }
+
+    sc->getUndoStack()->endMacro();
+
+    // The declared length is what "the end of the piece" means: a structure
+    // that runs past it extends the piece (never shrinks it).
+    QString lengthNote;
+    if (m_scoreCanvasWindow) {
+        CompositionSettings cs = m_scoreCanvasWindow->getSettings();
+        if (!adjustLength) {
+            if (endMs > cs.lengthMs)
+                lengthNote = QString("adjustLength:false, so the declared length (%1 ms) was left "
+                                     "as it is — the structure runs %2 ms past it.")
+                                 .arg(cs.lengthMs, 0, 'f', 0)
+                                 .arg(endMs - cs.lengthMs, 0, 'f', 0);
+        } else if (endMs > cs.lengthMs) {
+            const double oldMs = cs.lengthMs;
+            cs.lengthMs = endMs;
+            cs.syncLengthFromMs();
+            m_scoreCanvasWindow->updateFromSettings(cs);
+            if (m_kalaMain) m_kalaMain->markProjectDirty();
+            lengthNote = QString("The structure runs past the declared length: the piece was "
+                                 "extended %1 → %2 ms (%3 bars).")
+                             .arg(oldMs, 0, 'f', 0).arg(cs.lengthMs, 0, 'f', 0).arg(cs.lengthBars);
+        } else {
+            lengthNote = QString("Ends at %1 ms, inside the declared length (%2 ms) — unchanged.")
+                             .arg(endMs, 0, 'f', 0).arg(cs.lengthMs, 0, 'f', 0);
+        }
+    }
+
+    // Reply: what was laid, in order (truncated), and what it did to the piece.
+    QStringList seq;
+    const int shown = qMin(segments.size(), 12);
+    for (int i = 0; i < shown; ++i)
+        seq << QString("%1 %2").arg(scales[i].getDisplayName()).arg(segments[i]["bars"].toInt());
+    QString seqText = seq.join(" → ");
+    if (segments.size() > shown) seqText += " → …";
+
+    QString msg = QString("Laid %1 segment(s), %2 bars, %3 → %4 ms: %5.")
+                      .arg(segments.size()).arg(totalBars)
+                      .arg(startMs, 0, 'f', 0).arg(endMs, 0, 'f', 0)
+                      .arg(seqText);
+    if (retrograde)
+        msg += QString(" Segments %1–%2 are the retrograde of the list (its first segment "
+                       "continues the one before it — that marker is the mirror point).")
+                   .arg(forwardCount + 1).arg(segments.size());
+    if (tuningChanges > 0)
+        msg += QString(" %1 segment(s) changed the tuning or the anchor: notes in those "
+                       "stretches were remapped by scale degree (they keep their degree). "
+                       "Reference-only moves retune nothing.")
+                   .arg(tuningChanges);
+    else
+        msg += " Only references moved — no line and no note changed frequency.";
+    if (removed > 0)
+        msg += QString(" Replaced %1 existing marker(s).").arg(removed);
+    if (!lengthNote.isEmpty())
+        msg += " " + lengthNote;
+    return ok(msg);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3949,7 +4626,7 @@ static QJsonArray compositionSchemas()
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "get_composition_state"},
-            {"description", "Returns notes (id,startTime,duration,pitchHz,dynamics,trackIndex), scale, tempo, time sig, contentEndMs (where the notation stops) and compositionLengthMs/lengthBars/timeMode (the piece's declared length — the real end of the piece, Project Settings/Audio Settings/Duration). Optional trackIndex filter (filters the notes only; both end times always cover all tracks)."},
+            {"description", "Returns notes (id,startTime,duration,pitchHz,dynamics,trackIndex), scale, defaultKey (or defaultTonicDegree), scaleChanges (the modulation map: one entry per marker with timeMs/scale/scaleId + key for ET or tonicDegree for other scales + baseFreqHz), tempo, time sig, contentEndMs (where the notation stops) and compositionLengthMs/lengthBars/timeMode (the piece's declared length — the real end of the piece, Project Settings/Audio Settings/Duration). Optional trackIndex filter (filters the notes only; both end times always cover all tracks)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{{"trackIndex", QJsonObject{{"type","integer"},{"description","Track filter"}}}}},
@@ -4005,15 +4682,61 @@ static QJsonArray compositionSchemas()
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "set_scale"},
-            {"description", "Sets tuning scale and optional base freq. IDs: 0=JustIntonation,1=Pythagorean,2=EqualTemperament,3=Meantone,4=MaqamRast,5=MaqamBayati,7=MaqamHijaz,10=RagaBhairav,11=RagaYaman,13=RagaBhairavi,16=ChinesePentatonic,17=Hirajoshi,20=WholeTone,30=PersianShur,49-57=5-limit JI maqams (Rast,Bayati,Saba,Hijaz,Nahawand,Kurd,Sikah,Ajam,AtharKurd)."},
+            {"description", "Sets the OPENING (time 0) tuning scale and optional base freq. IDs: 0=JustIntonation,1=Pythagorean,2=EqualTemperament,3=Meantone,4=MaqamRast,5=MaqamBayati,6=MaqamSaba,7=MaqamHijaz,8=MaqamNahawand,9=MaqamKurd,10=RagaBhairav,11=RagaYaman,16=Pelog,17=Slendro,18=ChinesePentatonic,19=Hirajoshi,20=WholeTone,30=PersianShur,31=PersianMahur,32=PersianSegah,33=PersianChahargah,34=PersianHomayun,49-57=5-limit JI maqams (Rast,Bayati,Saba,Hijaz,Nahawand,Kurd,Sikah,Ajam,AtharKurd) — or pass the name / a unique part of it. For a KEY change or any tonic/reference move use the modulation tool instead — never move baseFreqHz to change key."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{
                     {"scaleId",    QJsonObject{{"type","integer"},{"description","Scale ID"}}},
                     {"scaleName",  strProp("Scale name")},
-                    {"baseFreqHz", numProp("Tonic Hz (default 261.63)")}
+                    {"baseFreqHz", numProp("Grid anchor Hz — degree 1 of the lowest octave (ET: the C the grid is built from). Rarely worth changing; a key change never touches it.")}
                 }},
                 {"required", QJsonArray{}}
+            }}
+        }}
+    });
+    // ── modulation ──
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "modulation"},
+            {"description", "Reference (key/tonic) and tuning markers over time — the score's scale map. list: the opening entry + every marker (timeMs, scale, scaleId, key or tonicDegree, baseFreqHz). set: changes the opening (time 0). add: inserts or replaces the marker at timeMs>0. remove: deletes the marker at timeMs. clear: removes all markers (opening kept). progression: lays a whole KEY progression on the bar grid in ONE undoable step (e.g. the circle of fifths, cycling to the piece length). structure: lays a whole piece STRUCTURE — segments [{scale, bars, tonicDegree?}...] — in ONE undoable step; retrograde:true appends the mirror of the list. A REFERENCE MOVE NEVER MOVES THE BASE FREQUENCY OR ANY LINE: a key (12-TET) or a tonicDegree (any scale — maqam, raga, JI, dastgah) only rotates the tonic/fifth/degree colours, and no note is retuned. Moving baseFreqHz instead retunes every note in that stretch by scale degree — only for genuinely changing the tuning."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"action",     actionProp("Operation", {"list","set","add","remove","clear","progression","structure"})},
+                    {"timeMs",     numProp("Marker position ms (add/remove; must be > 0)")},
+                    {"key",        strProp("Key for a 12-TET key change, e.g. \"F\",\"Bb\",\"Gb\". Colours the MAJOR scale of that key; base frequency untouched.")},
+                    {"scale",      strProp("Tuning name (set/add/structure segments) — exact, or a unique part (\"Homayun\" → \"Persian Homayun\"). An ambiguous part like \"Hijaz\" (24-TET maqam vs 5-limit JI) comes back as an error listing the matches — ask which tuning is meant.")},
+                    {"scaleId",    QJsonObject{{"type","integer"},{"description","Tuning scale ID (set/add/structure segments)"}}},
+                    {"scaleName",  strProp("Alias of 'scale' (set/add)")},
+                    {"tonicDegree", QJsonObject{{"type","integer"},{"description","1-based degree of the scale to make the tonic (set/add/structure segments) — \"tonic on the 5th\". Works for any scale, and on its own moves the reference inside the scale already in effect. Colour/reference only: ratios, lines, base frequency and every note stay exactly where they are. Not together with 'key'."}}},
+                    {"baseFreqHz", numProp("New grid anchor Hz (set/add/segments) — only when genuinely re-tuning; a reference move leaves it alone")},
+                    {"keys",       QJsonObject{{"type","array"},{"description","progression: key names in order, e.g. [\"C\",\"F\",\"Bb\",\"Eb\",\"Ab\",\"Db\",\"Gb\",\"B\",\"E\",\"A\",\"D\",\"G\"]"}}},
+                    {"startMs",    numProp("progression/structure: where the first segment lands (0 = it becomes the opening marker and every existing marker is replaced)")},
+                    {"barsPerKey", QJsonObject{{"type","integer"},{"description","progression: bars per key (default 1)"}}},
+                    {"barMs",      numProp("progression: bar length ms — omit to derive it from the tempo/time signature at each step")},
+                    {"repeat",     QJsonObject{{"type","boolean"},{"description","progression: cycle the key list until untilMs (default false)"}}},
+                    {"untilMs",    numProp("progression+repeat: end of the span — defaults to the declared piece length")},
+                    {"segments",   QJsonObject{
+                        {"type", "array"},
+                        {"description", "structure: the piece's segments in order. Each is one section — {scale/scaleId/key and/or tonicDegree, bars}. A segment with no scale reuses the one in effect (that is how a tonic move inside a stretch is written). Laid bar by bar on the tempo grid."},
+                        {"items", QJsonObject{
+                            {"type", "object"},
+                            {"properties", QJsonObject{
+                                {"scale",       strProp("Scale name or a unique part of it")},
+                                {"scaleId",     QJsonObject{{"type","integer"},{"description","Scale ID"}}},
+                                {"key",         strProp("12-TET key instead of a scale name")},
+                                {"bars",        QJsonObject{{"type","integer"},{"description","Length of this segment in bars (required, 1-10000)"}}},
+                                {"tonicDegree", QJsonObject{{"type","integer"},{"description","1-based degree to make the tonic/reference for this segment (colour only)"}}},
+                                {"baseFreqHz",  numProp("Grid anchor Hz — only for a genuine re-tuning")}
+                            }},
+                            {"required", QJsonArray{"bars"}}
+                        }}
+                    }},
+                    {"retrograde", QJsonObject{{"type","boolean"},{"description","structure: after the list, append the retrograde of the whole list — internal tonic moves included (default false)"}}},
+                    {"adjustLength", QJsonObject{{"type","boolean"},{"description","structure: extend the declared piece length when the structure runs past it (never shrinks; default true)"}}}
+                }},
+                {"required", QJsonArray{"action"}}
             }}
         }}
     });

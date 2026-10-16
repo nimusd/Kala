@@ -63,6 +63,7 @@ private:
     QJsonObject toolVariation          (const QJsonObject &args);  // list|create|create_from_sounit|delete|rename|switch|apply|copy_to_base
     QJsonObject toolEditGraph          (const QJsonObject &args);  // add|remove|connect|disconnect|clear
     QJsonObject toolTimeSig            (const QJsonObject &args);  // get|set|add|remove
+    QJsonObject toolModulation         (const QJsonObject &args);  // list|set|add|remove|clear|progression|structure
     QJsonObject toolEngineSettings     (const QJsonObject &args);  // get|set
     QJsonObject toolInspectNotes       (const QJsonObject &args);  // selection|curves|vibrato
     QJsonObject toolSelectNotes        (const QJsonObject &args);  // range|flat_dynamics|current
@@ -130,6 +131,13 @@ private:
     QJsonObject toolGetTimeSignatureChanges  ();
     QJsonObject toolAddTimeSignatureChange   (const QJsonObject &args);
     QJsonObject toolRemoveTimeSignatureChange(const QJsonObject &args);
+    QJsonObject toolGetModulations           ();
+    QJsonObject toolSetDefaultModulation     (const QJsonObject &args);
+    QJsonObject toolAddModulation            (const QJsonObject &args);
+    QJsonObject toolRemoveModulation         (const QJsonObject &args);
+    QJsonObject toolClearModulations         ();
+    QJsonObject toolApplyKeyProgression      (const QJsonObject &args);
+    QJsonObject toolApplyScaleStructure      (const QJsonObject &args);
     QJsonObject toolGetEngineSettings  ();
     QJsonObject toolSetEngineSettings  (const QJsonObject &args);
     QJsonObject toolGetSelectedNotes   ();

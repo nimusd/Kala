@@ -355,6 +355,8 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     : QDialog(parent)
     , ui(new Ui::ScaleDialog)
     , currentScaleId(currentScale.getScaleId())
+    , loadedScaleId(currentScale.getScaleId())
+    , loadedTonicIndex(currentScale.getTonicIndex())
 {
     ui->setupUi(this);
 
@@ -373,8 +375,10 @@ ScaleDialog::ScaleDialog(const Scale &currentScale, double currentBaseFreq, bool
     // Set current base frequency
     ui->spinBaseFreq->setValue(currentBaseFreq);
 
-    // Get the current tonic index from the scale
-    selectedTonicIndex = currentScale.getTonicIndex();
+    // Get the current tonic index from the scale. Only Equal Temperament has a
+    // chromatic index the Key buttons can express — a non-ET reference degree
+    // (set by Anima) is preserved by getSelectedScale(), not highlighted here.
+    selectedTonicIndex = (currentScale.getScaleId() == 2) ? currentScale.getTonicIndex() : -1;
     if (selectedTonicIndex < 0) selectedTonicIndex = 0;  // Default to C for ET
 
     // Configure delete button
@@ -471,6 +475,12 @@ Scale ScaleDialog::getSelectedScale() const
     int scaleId = ui->comboScale->currentData().toInt();
     Scale scale = Scale::getScaleById(scaleId);
     scale.setCentOffsets(getCurrentCentOffsets());
+    // A marker may carry a reference degree on a non-ET scale (set by Anima —
+    // this dialog has no widget for one). Never drop it silently: keep the
+    // loaded reference while the selection still points at the loaded scale;
+    // choosing a different scale legitimately drops it.
+    if (scaleId == loadedScaleId)
+        scale = scale.withTonic(loadedTonicIndex);
     return scale;
 }
 
@@ -513,17 +523,9 @@ void ScaleDialog::onKeyButtonClicked(int tonicIndex)
     selectedTonicIndex = tonicIndex;
     updateKeyButtonStyles();
 
-    // If ET is selected, update the scale to use this tonic
-    int scaleId = ui->comboScale->currentData().toInt();
-    if (scaleId == 2) {  // Equal Temperament
-        Scale rotatedScale = Scale::equalTemperamentWithTonic(tonicIndex);
-        // Update the dropdown to reflect the rotated scale
-        // For ET, we keep scaleId=2 but use tonicIndex to determine coloring
-    }
-
-    // Base frequency remains as set (C1 = 32.7 Hz gives A1 = 55 Hz)
-
-    // Update degree frequency display for ET tonic change
+    // The tonic is carried by selectedTonicIndex; the caller rebuilds the ET
+    // scale from it on accept (kalamain.cpp). Base frequency is untouched —
+    // a key change is colours only.
     updateDegreeFrequencies();
 }
 
@@ -642,10 +644,11 @@ void ScaleDialog::updateDegreeFrequencies()
     Scale scale = getSelectedScale();
     double refFreq = degreeRefFreqSpin->value();
 
-    // For ET with a non-C tonic, rotate ratios so frequencies start from the tonic
+    // For ET with a non-C tonic, re-stamp the selected key. The ratios — and so
+    // the frequencies below — do not move (a key change is colours only); the
+    // cent offsets are re-applied because the rebuilt scale starts fresh.
     if (scale.getScaleId() == 2 && selectedTonicIndex > 0) {
         scale = Scale::equalTemperamentWithTonic(selectedTonicIndex);
-        // Re-apply cent offsets (the rotated scale starts fresh)
         scale.setCentOffsets(getCurrentCentOffsets());
     }
 

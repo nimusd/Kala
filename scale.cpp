@@ -21,6 +21,22 @@ Scale::Scale(const QString &name, int scaleId, const QVector<double> &ratios, co
     centOffsets = QVector<double>(ratios.size(), 0.0);
 }
 
+QString Scale::getDisplayName() const
+{
+    if (tonicIndex >= 0 && tonicIndex < ratios.size())
+        return QString("%1 (%2)").arg(name, getNoteName(tonicIndex));
+    return name;
+}
+
+Scale Scale::withTonic(int degreeIndex) const
+{
+    if (degreeIndex < 0 || degreeIndex >= ratios.size())
+        return *this;
+    Scale s = *this;
+    s.tonicIndex = degreeIndex;
+    return s;
+}
+
 double Scale::getRatio(int degree) const
 {
     if (degree >= 0 && degree < ratios.size()) {
@@ -148,31 +164,11 @@ Scale Scale::equalTemperament()
 
 Scale Scale::equalTemperamentWithTonic(int tonicIndex)
 {
-    if (tonicIndex < 0 || tonicIndex > 11) {
-        tonicIndex = 0;  // Default to C
-    }
-
-    // Full 12-tone equal temperament - keep original ratios (C=1/1, C#=2^(1/12), etc.)
-    // The tonicIndex only affects which degree gets the "tonic" color
-    // Frequencies stay the same regardless of tonic - only colors change
-    QVector<double> ratios = {
-        1.0,
-        std::pow(2.0, 1.0/12),
-        std::pow(2.0, 2.0/12),
-        std::pow(2.0, 3.0/12),
-        std::pow(2.0, 4.0/12),
-        std::pow(2.0, 5.0/12),
-        std::pow(2.0, 6.0/12),
-        std::pow(2.0, 7.0/12),
-        std::pow(2.0, 8.0/12),
-        std::pow(2.0, 9.0/12),
-        std::pow(2.0, 10.0/12),
-        std::pow(2.0, 11.0/12)
-    };
-    QVector<QString> names = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    QVector<bool> acc = { false, true, false, true, false, false, true, false, true, false, true, false };
-
-    return Scale("Equal Temperament", 2, ratios, names, acc, tonicIndex);
+    // Full 12-tone equal temperament with its reference degree stamped: the
+    // ratios stay C=1/1 … B=2^(11/12), so frequencies never move — only the
+    // tonic/fifth/degree colours. Out-of-range falls back to plain ET (C),
+    // as it always has.
+    return equalTemperament().withTonic(tonicIndex);
 }
 
 Scale Scale::quarterCommaMeantone()
@@ -1375,23 +1371,14 @@ QJsonObject Scale::toJson() const
 Scale Scale::fromJson(const QJsonObject &json)
 {
     int id = json["scaleId"].toInt(0);
-    Scale scale;
+    Scale scale = getScaleById(id);
 
-    // Check if tonicIndex is stored (for ET scales with rotated tonic)
+    // Reference degree (ET key or maqam/raga/JI tonic), when it fits this
+    // scale's own degree table.
     if (json.contains("tonicIndex")) {
         int tonicIdx = json["tonicIndex"].toInt(-1);
-        // Only apply tonic rotation for Equal Temperament (scaleId == 2)
-        if (id == 2) {
-            if (tonicIdx >= 0 && tonicIdx <= 11) {
-                scale = equalTemperamentWithTonic(tonicIdx);
-            } else {
-                scale = getScaleById(id);
-            }
-        } else {
-            scale = getScaleById(id);
-        }
-    } else {
-        scale = getScaleById(id);
+        if (tonicIdx >= 0 && tonicIdx < scale.getDegreeCount())
+            scale = scale.withTonic(tonicIdx);
     }
 
     // Restore cent offsets if present

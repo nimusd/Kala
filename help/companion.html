@@ -130,6 +130,43 @@
     <div class="tip"> <strong>Tip:</strong> Anima works with the track you
       currently have open in the Sounit Builder. Switch to the right track
       before asking her to build or modify a sound. </div>
+    <h3 id="keys-tonics-structure">Keys, Tonics and Piece Structure</h3>
+    <p>The canvas draws the active scale as horizontal lines built from a
+      <strong>base frequency</strong> — an anchor of the grid, not the tonic.
+      A change of <em>key</em> or <em>tonic</em> is a colour rotation: the red
+      tonic line (and the thick fifth) move while every line keeps its
+      frequency, and no note is retuned. Tell Anima where the music should sit
+      and she marks it on the map:</p>
+    <blockquote> "Change to the key of F at bar 9."<br>
+      "Cycle the keys around the circle of fifths, one per bar, all the way to
+      the end of the piece."<br>
+      "Move the tonic to the 5th degree for the next four bars, then to the 2nd
+      for six."<br>
+      "Root this stretch of Raga Bhairav on Pa."<br>
+      "Show me every key and tonic change in the piece." </blockquote>
+    <p>It works in every tuning, not just Equal Temperament — keys for
+      Equal Temperament, degree numbers for maqams, dastgah and ragas. Degrees
+      are counted from the scale's own root (Sa/C), so "tonic on degree 5" means
+      the 5th degree of the scale, whatever the scale is. The Scale panel, the
+      timeline and the canvas labels name the reference alongside the scale —
+      "Equal Temperament (F)", "Just Intonation (G)", "Raga Bhairav (Pa)".</p>
+    <p>For a whole piece plan, describe the structure and Anima lays it out in
+      one undoable step — sections of scales and bars, with tonic moves inside
+      them, and an optional retrograde that mirrors the entire list, internal
+      moves included:</p>
+    <blockquote> "12 bars Just Intonation, then 12 of Hijaz, then 24 of Homayun,
+      then the retrograde of all that."<br>
+      "The first 12 JI bars: tonic on degree 5 for 4 bars, degree 2 for 6 bars,
+      then back to the root for the last 2." </blockquote>
+    <p>A structure that runs past the declared piece length extends the piece to
+      cover it — the structure is never truncated. Nothing retunes unless a
+      section genuinely changes the tuning (a scale or base-frequency change, in
+      which case notes in that stretch keep their scale degree and take the new
+      tuning); moving the tonic alone never moves a note.</p>
+    <div class="tip"> <strong>Two tunings, one name.</strong> Kala holds most
+      maqams in both a 24-tone tempered version and a 5-limit just twin (Hijaz
+      exists as both, for example) — when your wording matches more than one,
+      Anima asks which you mean rather than guessing. </div>
     <h3 id="edit-notes">Edit Notes</h3>
     <p>Anima can modify existing notes in many ways — pitch, duration, timing,
       and more.</p>

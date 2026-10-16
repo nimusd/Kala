@@ -13,13 +13,20 @@ public:
 
     // Getters
     QString getName() const { return name; }
+    // Name for display: the scale's name, plus the reference degree's note
+    // name when one is set — the key of a rotated ET ("Equal Temperament (F)")
+    // or the tonic of a maqam/raga/JI stretch ("Just Intonation (G)",
+    // "Raga Bhairav (Pa)"). Without it the bare name would read identically at
+    // every reference move. For ET the key name is the sharp one — the ET
+    // table is (Bb reads A#).
+    QString getDisplayName() const;
     int getScaleId() const { return scaleId; }
     double getRatio(int degree) const;       // degree is 0 to (degreeCount-1), incorporates cent offset
     double getRawRatio(int degree) const;    // raw ratio without cent offset applied
     int getDegreeCount() const { return ratios.size(); }
     QString getNoteName(int degree) const;  // Get note name for this degree
     bool getIsAccidental(int degree) const; // True for chromatic degrees not in the diatonic core
-    int getTonicIndex() const { return tonicIndex; }  // For ET: which degree is tonic (0-11, -1 = C)
+    int getTonicIndex() const { return tonicIndex; }  // Reference (colour) degree, 0-based into THIS scale's table; -1 = none
     bool is24TETMaqam() const;  // True for the maqam scales tuned to the 24-TET quarter-tone grid
 
     // Per-degree cent offsets for microtonal inflection (±50¢ per degree)
@@ -118,6 +125,13 @@ public:
     // Create an ET scale rotated to a different tonic (base frequency stays A=440Hz, only colors change)
     static Scale equalTemperamentWithTonic(int tonicIndex);  // 0=C, 1=C#, ..., 9=A, 10=A#, 11=B
 
+    // The same scale with its reference degree moved — 0-based index into this
+    // scale's own degree table (ET: 0=C … 11=B; maqam/raga/JI: 0=root … n-1).
+    // Ratios, cent offsets and the base frequency are untouched: a reference
+    // move is a COLOUR change only, nothing retunes. Out of range (including
+    // -1) returns the scale unchanged.
+    Scale withTonic(int degreeIndex) const;
+
     // Serialization
     QJsonObject toJson() const;
     static Scale fromJson(const QJsonObject &json);
@@ -129,7 +143,7 @@ private:
     QVector<QString> noteNames;  // Note names for each degree
     QVector<bool> accidentals;   // True for degrees that are chromatic/accidental (drawn dark grey)
     QVector<double> centOffsets; // Per-degree cent offsets (-50 to +50, default 0)
-    int tonicIndex;             // For ET: which degree is the tonic (0-11, -1 = C)
+    int tonicIndex;             // Reference (colour) degree, 0-based into this scale's own table; -1 = none
 
     // Private constructor for setting custom ratios and names
     Scale(const QString &name, int scaleId, const QVector<double> &ratios, const QVector<QString> &noteNames,

@@ -126,7 +126,7 @@ truncates long tool-call batches, which is what Anima hits first.
 System prompt (`buildSystemPrompt()`):
 - One static string (no `/no_think` prefix any more).
 - Sections: Kala overview → Container types → Connection functions → Behaviour rules →
-  **The piece in time** → Variation workflow → Synthesis rules → DNA presets.
+  **The piece in time** → **The grid and the key** → Variation workflow → Synthesis rules → DNA presets.
 
 **The piece in time** (added 2026-10-15) teaches the one thing the agent could not infer:
 "the end of the piece" is the **declared length** (Project Settings → Audio Settings →
@@ -350,11 +350,17 @@ All note mutations go through the `QUndoStack` and are fully undoable with Ctrl+
 #### `get_composition_state`
 Parameters: `trackIndex` (optional, filter to one track).
 
-Returns all notes + current scale + tempo + time signature + **both end times**:
+Returns all notes + current scale + tempo + time signature + the **modulation map** + **both end times**:
 `contentEndMs` (where the notation stops, across all tracks — the `trackIndex` filter
 does not narrow it) and `compositionLengthMs` / `lengthBars` / `timeMode` (the declared
 piece length — the real end of the piece). This is the one call the agent needs to
 answer "how long is the piece" or to place anything at the end.
+
+The map: `defaultKey` (the opening key, present only for Equal Temperament) or
+`defaultTonicDegree` (opening reference for any other scale), and `scaleChanges` — one entry
+per modulation marker (`timeMs`, `scale`, `scaleId`, and `key` when ET or `tonicDegree` when
+another scale carries a reference, `baseFreqHz`). Together they answer "what key is this bar"
+without a second call.
 
 Response:
 ```json
@@ -367,6 +373,11 @@ Response:
     ],
     "scale": "Just Intonation",
     "baseFreqHz": 261.63,
+    "defaultKey": "C",
+    "scaleChanges": [
+      { "timeMs": 2000, "key": "F", "scale": "Equal Temperament", "scaleId": 2, "baseFreqHz": 25.0 },
+      { "timeMs": 6000, "scale": "Just Intonation", "scaleId": 0, "tonicDegree": 5, "baseFreqHz": 25.0 }
+    ],
     "tempo": 120,
     "timeSigNum": 4,
     "timeSigDenom": 4,
@@ -412,17 +423,114 @@ With `trackIndex`: clears only notes on that track.
 #### `set_scale`
 Parameters: `scaleId` OR `scaleName` (one required), `baseFreqHz` (optional).
 
-Sets the tuning scale and regenerates scale lines. Does **not** transpose existing notes.
+Sets the **opening** (time 0) tuning scale and regenerates scale lines. Does **not** transpose
+existing notes (it is a plain setter — no undo command, unlike the modulation markers).
+For a key change or any tonic/reference move use `modulation` — never move `baseFreqHz` to
+change key or reference.
 
 Key scale IDs:
 ```
  0  Just Intonation       1  Pythagorean        2  Equal Temperament
  3  Quarter-Comma Meantone
- 4  Maqam Rast            5  Maqam Bayati       7  Maqam Hijaz
+ 4  Maqam Rast            5  Maqam Bayati       6  Maqam Saba        7  Maqam Hijaz
+ 8  Maqam Nahawand        9  Maqam Kurd
 10  Raga Bhairav         11  Raga Yaman        13  Raga Bhairavi
-16  Chinese Pentatonic   17  Hirajoshi         20  Whole Tone
+16  Pelog                17  Slendro           18  Chinese Pentatonic  19  Hirajoshi
+20  Whole Tone
 30  Persian Shur         31  Persian Mahur     32  Persian Segah
+33  Persian Chahargah    34  Persian Homayun
+49–57  Maqams in 5-limit just intonation (Rast, Bayati, Saba, Hijaz, Nahawand,
+       Kurd, Sikah, Ajam, Athar Kurd) — the pre-24-TET twins of 4–29
 ```
+
+---
+
+#### `modulation`
+Consolidated tool (`list|set|add|remove|clear|progression|structure`) over the score's
+modulation map — the `ScoreCanvas::scaleChanges` markers the Scale panel and timeline show.
+
+**The invariant it exists to protect.** The canvas draws the active scale from a *base
+frequency* (the grid anchor), and a **reference move is a tonic rotation**:
+`Scale::withTonic(degreeIndex)` — which `equalTemperamentWithTonic` now wraps — keeps every
+ratio *and* the base frequency, so the lines do not move at all and only the tonic/fifth/degree
+colours rotate. This holds for **every** scale, not just ET: a `key` is the ET spelling of a
+reference move, and `tonicDegree` is the general form ("this stretch is rooted on the 5th
+degree of Just Intonation"). Expressing a reference by moving `baseFreqHz` instead would make
+`AddScaleChangeCommand` retune every discrete note in that stretch by scale degree (the app's
+note-remapping policy for a genuine re-tuning) and mislabel the lines. So: **reference moves
+never touch the base frequency; base-frequency moves are for changing the tuning itself**
+(maqam/raga/JI modulations, where the new anchor is the point — and there notes do keep their
+degree and take the new tuning).
+
+`Scale::withTonic(k)` stores `tonicIndex = k`, a 0-based index into the scale's own degree table
+(ET: 0=C…11=B; a 7-degree maqam/raga/dastgah: 0=root…6). Nothing else about the scale changes, so
+`remapPitchAcrossScales` is a no-op for such a move — **no note is ever retuned by a reference
+move**. It serializes (`toJson`/`fromJson`) for every scale, drives the canvas colouring (cyclic
+rank from the reference: rank 1 red and thick, rank 5 thick) and `getDisplayName()`.
+
+Parameters (all optional except `action`):
+- `action` — `list` | `set` | `add` | `remove` | `clear` | `progression` | `structure`
+- `timeMs` — marker position (add/remove; must be > 0 — time 0 is the opening marker)
+- `key` — a 12-TET key, e.g. `"F"`, `"Bb"`, `"Gb"`, `"F#"` (sharps and flats both parse;
+  ♯/♭ accepted; optional "major" suffix). Rejected for minor names with an explanatory error —
+  the rotation colours the **major** scale of the tonic and Kala has no minor-key colouring.
+- `tonicDegree` — 1-based degree to make the reference (set/add/structure segments), e.g. 5 for
+  "tonic on the 5th". Works for any scale; on its own it moves the reference inside the scale
+  already in effect. Error together with `key` (a key already names the tonic).
+- `scale` / `scaleId` / `scaleName` — a different *tuning* (use instead of `key`; giving both is
+  an error). `scale` is the exact name or a unique part of it ("Homayun" → "Persian Homayun");
+  an ambiguous part comes back as an error listing the candidates ("Hijaz" — 24-TET id 7 vs
+  5-limit JI id 52; "JI" — the 5-limit maqams), so the agent asks which tuning is meant.
+- `baseFreqHz` — new grid anchor (set/add/segments; only when genuinely re-tuning)
+- `keys` / `startMs` / `barsPerKey` / `barMs` / `repeat` / `untilMs` — the `progression` action
+- `segments` / `retrograde` / `adjustLength` — the `structure` action
+
+Actions:
+- `list` → `{ count, changes:[{timeMs, scale, scaleId, key?, tonicDegree?, baseFreqHz, isDefault}] }`
+  — the opening entry first (timeMs 0, `isDefault: true`), then every marker in time order.
+  `key` appears only for ET; any other scale reports `tonicDegree` (1-based) when it carries one.
+- `set` / `add` → push `EditScaleChangeCommand` (default marker) or `AddScaleChangeCommand`
+  (marker at timeMs, insert *or* replace — an existing marker becomes an `EditScaleChangeCommand`).
+  Undoable. `add` reports when the base frequency actually moved, because that is the case
+  where notes were retuned.
+- `remove` → `DeleteScaleChangeCommand` (errors when nothing sits at `timeMs`; the opening marker
+  cannot be removed).
+- `clear` → deletes every position marker inside one undo macro; the opening marker is untouched.
+- `progression` → lays a whole key list on the bar grid in **one undo macro**, which is how a
+  modulated piece (circle of fifths, one key per bar, repeated to the end) gets set up without
+  dozens of round trips. Bar length = `barMs`, else derived at each step from the tempo/time
+  signature — the formula the bar lines use (`60000/bpm × timeSigNumerator`). `startMs: 0` makes
+  the first key the opening marker; markers at/after `startMs` are replaced, earlier ones are
+  left alone. `repeat:true` cycles the list until `untilMs` (default: the declared piece length).
+  Every entry is an ET key, so no base frequency moves and *no note is retuned* — the returned
+  message says so. Capped at 1024 markers.
+- `structure` → lays a whole piece structure in **one undo macro**:
+  `segments:[{scale|scaleId|key, bars, tonicDegree?, baseFreqHz?}]`, each segment a section.
+  Bar by bar (`60000/bpm × timeSigNumerator` evaluated per bar, so a tempo/time-signature change
+  inside a segment is honoured). A segment with no scale reuses the one in effect — that is how
+  an internal tonic move is written:
+  `[{scale:"Just Intonation",bars:4,tonicDegree:5},{bars:6,tonicDegree:2},{bars:2,tonicDegree:1},
+  {scale:"Maqam Hijaz (5-Limit JI)",bars:12},{scale:"Persian Homayun",bars:24}]`.
+  Everything is resolved and the whole bar walk validated **before** a single command is pushed —
+  a bad segment leaves the map, the piece length and the undo stack untouched. `retrograde:true`
+  appends the mirror of the whole list, internal moves included (the mirror's first segment
+  repeats the last forward one; that marker sits at the palindrome's pivot). `startMs:0` (the
+  default) replaces every marker ≥ startMs. `adjustLength` (default true) extends the declared
+  length when the structure runs past it — never shrinks — via
+  `lengthMs` → `syncLengthFromMs()` → `updateFromSettings()` → `markProjectDirty()`. Capped at
+  1024 segments. The reply reports the bars/ms span, how many segments genuinely retuned,
+  replaced markers and the length decision.
+
+Read path: `get_composition_state` returns `defaultKey` (ET) or `defaultTonicDegree`, plus
+`scaleChanges` (see above); `modulation(action:"list")` is the dedicated read.
+
+UI: `Scale::getDisplayName()` appends the reference degree's note name for **any** scale carrying
+one — a rotated ET ("Equal Temperament (F)", sharp-only like the ET table: Bb reads A#) or a
+JI/maqam/raga/dastgah reference ("Just Intonation (G)", "Raga Bhairav (Pa)", "Persian Homayun
+(G)") — and is what the Scale panel readout, the timeline markers and the canvas region labels
+show. The Scale dialog has no widget for a non-ET reference: `getSelectedScale()` preserves the
+loaded one while the scale selection is unchanged, so pressing OK on such a marker never
+silently drops it (the green Key highlight stays on C for non-ET — the buttons remain ET-only).
 
 ---
 

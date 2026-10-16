@@ -44,6 +44,8 @@ private:
     bool deleteRequested = false;
     int selectedTonicIndex = -1;  // -1 = default (C for non-ET, or use scale's default)
     int currentScaleId = -1;
+    int loadedScaleId = -1;       // scale the marker carried when the dialog opened
+    int loadedTonicIndex = -1;    // its reference degree, if any (no widget here can set one)
     QVector<QPushButton*> keyButtons;
 
     // Inflection UI

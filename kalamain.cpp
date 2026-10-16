@@ -5644,7 +5644,7 @@ bool KalaMain::loadProject(const QString &filePath)
         QMap<double, QPair<Scale, double>> scaleChangesMap = scoreCanvasWindow->getScoreCanvas()->getScaleChanges();
         QMap<double, QString> scaleNamesForTimeline;
         for (auto it = scaleChangesMap.constBegin(); it != scaleChangesMap.constEnd(); ++it) {
-            scaleNamesForTimeline[it.key()] = it.value().first.getName();
+            scaleNamesForTimeline[it.key()] = it.value().first.getDisplayName();
         }
         timeline->setScaleChanges(scaleNamesForTimeline);
 
@@ -7437,7 +7437,7 @@ void KalaMain::updateScaleDisplay()
     // Update timeline visual indicators
     QMap<double, QString> scaleNamesForTimeline;
     for (auto it = changes.constBegin(); it != changes.constEnd(); ++it) {
-        scaleNamesForTimeline[it.key()] = it.value().first.getName();
+        scaleNamesForTimeline[it.key()] = it.value().first.getDisplayName();
     }
     timeline->setScaleChanges(scaleNamesForTimeline);
 
@@ -7486,7 +7486,7 @@ void KalaMain::onScaleMarkerChanged(int markerIndex)
     // Build display string: timestamp | scale name | base frequency
     QString displayStr = QString("%1 | %2 | %3 Hz")
                              .arg(timestamp)
-                             .arg(scale.getName())
+                             .arg(scale.getDisplayName())
                              .arg(baseFreq, 0, 'f', 2);
 
     ui->labelScaleDisplay->setText(displayStr);

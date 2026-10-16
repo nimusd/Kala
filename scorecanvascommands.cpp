@@ -3661,7 +3661,11 @@ RetrogradeNotesCommand::RetrogradeNotesCommand(Phrase *phrase, const QVector<Not
     auto samePair = [](const QPair<Scale, double> &a, const QPair<Scale, double> &b) {
         return a.first.getScaleId() == b.first.getScaleId()
             && a.second == b.second
-            && a.first.getCentOffsets() == b.first.getCentOffsets();
+            && a.first.getCentOffsets() == b.first.getCentOffsets()
+            // The reference degree (ET key / maqam tonic) is part of a marker's
+            // identity: without it a mirror that only moves the tonic would be
+            // mistaken for "already in effect" and silently dropped.
+            && a.first.getTonicIndex() == b.first.getTonicIndex();
     };
     // Pair in effect at time t: the latest marker at or before t.
     auto pairAt = [&defaultPair](const QMap<double, QPair<Scale, double>> &map, double t) {

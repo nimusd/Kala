@@ -92,18 +92,27 @@ Each entry shows the scale name and stores the scale ID as user data.</td>
 <tr>
 <td>Base Frequency</td>
 <td>QDoubleSpinBox</td>
-<td>Sets the reference (tonic) frequency for the lowest octave. Range:
-10.00–1000.00 Hz. Default: 25.00 Hz.</td>
+<td>Sets the grid anchor: the frequency of the scale's first degree in the
+lowest octave (for Equal Temperament, the C the chromatic grid is built
+from). It is not the key — use the Key buttons for that. Range:
+10.00–1000.00 Hz. Default: 25.00 Hz. (32.703 Hz places the whole grid at
+concert pitch, A = 440 Hz.)</td>
 </tr>
 <tr>
-<td>Key&nbsp;(A&nbsp;=&nbsp;440&nbsp;Hz)</td>
+<td>Key (Equal Temperament)</td>
 <td>12 QPushButtons</td>
 <td>One button per chromatic note: <strong>C C# D D# E F F# G G# A A#
-B</strong>. Clicking a button sets the Base Frequency to the standard
-concert-pitch value for that note (C = 32.703 Hz, …, A = 55.000 Hz,
-…, B = 61.735 Hz), placing A at 440 Hz across all octaves. Accidental
-buttons (C# D# F# G# A#) are styled dark to match the chromatic lines
-on the canvas. Hovering shows the exact Hz value as a tooltip.</td>
+B</strong>. For Equal Temperament, clicking a button chooses the tonic —
+the tonic/fifth/degree colours rotate to that key while every line, and
+every note, stays exactly where it is. It is a colour change only: the
+base frequency is never touched, so the written music does not move.
+Accidental buttons (C# D# F# G# A#) are styled dark to match the
+chromatic lines on the canvas, the selected key is highlighted green,
+and hovering shows "Set X as tonic (colour change only)". The buttons
+have no effect on non-Equal-Temperament scales, whose colouring follows
+their own degrees — a maqam, raga or dastgah stretch's reference degree
+(set by Anima, <code>modulation</code> with <code>tonicDegree</code>)
+is preserved by this dialog but not chosen in it.</td>
 </tr>
 <tr>
 <td>Scale Information</td>
@@ -140,10 +149,11 @@ immediately to describe the selected scale.</li>
   <ul>
     <li>Type or spin a value directly into the <strong>Base
     Frequency</strong> spinbox.</li>
-    <li>Click a <strong>Key</strong> button to snap to standard concert
-    pitch (A&nbsp;=&nbsp;440&nbsp;Hz) for that note. For example,
-    clicking <strong>A</strong> sets 55.000 Hz so that A appears at 55,
-    110, 220, 440&nbsp;Hz across the canvas octaves.</li>
+    <li>Set it once to 32.703&nbsp;Hz for standard concert pitch
+    (A&nbsp;=&nbsp;440&nbsp;Hz) — every octave lines up from that anchor.
+    The <strong>Key</strong> buttons never move the base frequency;
+    in Equal Temperament they rotate the colouring to the chosen key
+    instead (the grid stays put).</li>
   </ul>
 </li>
 <li>Clicking <strong>OK</strong> applies the new scale and base
@@ -160,8 +170,12 @@ ratios.</li>
 <code>setBaseFrequency()</code>, which regenerate the coloured horizontal
 scale lines across octaves 0–9.</li>
 <li>For Equal Temperament specifically, the Key buttons are the primary
-way to set the key: click the desired tonic note and the chromatic grid
-snaps to concert pitch for that key.</li>
+way to set a key: the tonic/fifth/degree colours rotate (tonic line red,
+fifth thick) while the chromatic grid and every note keep their
+frequencies. The Scale panel, the timeline markers and the canvas region
+labels name the reference alongside the scale — "Equal Temperament (F)",
+and likewise for a maqam/raga/JI tonic move ("Just Intonation (G)", "Raga
+Bhairav (Pa)").</li>
 </ul>
 <hr />
 <h2 id="composition-settings-dialog">3. Composition Settings Dialog</h2>
