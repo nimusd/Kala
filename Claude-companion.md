@@ -51,27 +51,38 @@ Modified files: `kalamain.h`, `kalamain.cpp`, `sounitbuilder.h`, `sounitbuilder.
 ## llmconfig.h
 
 ```cpp
-enum class LLMProvider { OpenAICompatible, Anthropic };
+enum class LLMProvider {
+    OpenAICompatible,   // OpenAI, Groq, OpenRouter, DeepSeek — /chat/completions
+    Anthropic,          // api.anthropic.com — different headers and body shape
+    Ollama              // localhost Ollama native /api/chat with think:false support
+};
 
 struct LLMConfig {
     LLMProvider provider  = LLMProvider::OpenAICompatible;
     QString     baseUrl   = "http://localhost:11434/v1";  // Ollama default
     QString     apiKey    = "ollama";
-    QString     model     = "qwen3-coder:30b";
-    int         maxTokens = 4096;
+    QString     model     = "qwen3:14b";
+    int         maxTokens = 16384;  // output cap, not context window
     double      temperature = 0.7;
+    bool        thinking  = true;   // DeepSeek only — see below
 };
 ```
 
 Persisted to QSettings under keys: `llm/provider`, `llm/baseUrl`, `llm/apiKey`,
 `llm/model`, `llm/maxTokens`, `llm/temperature`.
 
-Provider auto-fill URLs (set by the Preferences UI combobox):
-- Ollama: `http://localhost:11434/v1`
-- OpenAI: `https://api.openai.com/v1`
-- Groq: `https://api.groq.com/openai/v1`
-- OpenRouter: `https://openrouter.ai/api/v1`
-- Anthropic: `https://api.anthropic.com/v1` (uses `LLMProvider::Anthropic`)
+Provider auto-fill URLs and combo indices (set by the Preferences UI combobox):
+- 0 Ollama (local): `http://localhost:11434/v1` (uses `LLMProvider::Ollama`)
+- 1 OpenAI: `https://api.openai.com/v1`
+- 2 Groq: `https://api.groq.com/openai/v1`
+- 3 OpenRouter: `https://openrouter.ai/api/v1`
+- 4 Anthropic: `https://api.anthropic.com` (uses `LLMProvider::Anthropic`)
+- 5 DeepSeek: `https://api.deepseek.com/v1` (suggests model `deepseek-flash`)
+- 6 Custom: no auto-fill
+
+The combo index is restored at populate time by substring-matching the saved base URL; anything
+unmatched lands on Custom. **Adding/removing a provider shifts these indices** — the `case N:`
+presets and `if (idx == N)` provider mapping in `populateSettingsTab()` must move together.
 
 ---
 
@@ -92,23 +103,37 @@ Always speaks **OpenAI format** to callers. Anthropic adaptation is entirely int
 - `adaptResponseFromAnthropic()` — normalises `content[]` array back to
   `choices[0].message` shape.
 
+`/no_think` is appended to the last user message **only when the model name contains
+"qwen"** (`isQwenModel()`) — it is a Qwen3-only soft switch and was previously polluting
+DeepSeek/Claude/GPT prompts. Ollama's native API path uses `think: false` instead.
+
+Outbound requests carry `max_tokens` from `LLMConfig::maxTokens` (see Preferences → Max
+Tokens). Too high for the configured provider and the API rejects the request — but too low
+truncates long tool-call batches, which is what Anima hits first.
+
 ---
 
 ## KalaAgent
 
 - Holds `QJsonArray m_messages` — conversation history (system prompt NOT stored here,
   prepended fresh on each request by `buildRequestMessages()`).
-- `sendUserMessage(text)` → appends user message → `continueConversation(40)`.
+- `sendUserMessage(text)` → appends user message → `continueConversation(kMaxToolRounds)`.
 - Tool call loop: appends assistant message → executes tools → appends tool results →
-  calls `continueConversation(roundsLeft - 1)`. Capped at **12 rounds**.
+  calls `continueConversation(roundsLeft - 1)`. Capped at **250 rounds** (`kMaxToolRounds` in `kalaagent.h`).
 - Signals: `messageReady(text, role)`, `thinkingStarted()`, `thinkingFinished()`.
 - `role` values: `"assistant"`, `"tool_info"`, `"error"`.
 
 System prompt (`buildSystemPrompt()`):
-- Starts with `/no_think` (suppresses Qwen3 chain-of-thought for faster responses).
-- Sections: Kala overview → Container types (all 25) → Connection functions →
-  Typical signal chains → Key rules & gotchas → DNA presets →
-  File library tools → Composition tools (notes, scale, tempo).
+- One static string (no `/no_think` prefix any more).
+- Sections: Kala overview → Container types → Connection functions → Behaviour rules →
+  **The piece in time** → Variation workflow → Synthesis rules → DNA presets.
+
+**The piece in time** (added 2026-10-15) teaches the one thing the agent could not infer:
+"the end of the piece" is the **declared length** (Project Settings → Audio Settings →
+Duration = `CompositionSettings::lengthMs`), *not* the last note. It states that notation may
+run past the declared length (the piece extends — export length is `max` of the two) or stop
+before it (the remainder is real silence), and that the length is changed with
+`engine_settings` `project.lengthMs` / `lengthBars`.
 
 ---
 
@@ -325,7 +350,11 @@ All note mutations go through the `QUndoStack` and are fully undoable with Ctrl+
 #### `get_composition_state`
 Parameters: `trackIndex` (optional, filter to one track).
 
-Returns all notes + current scale + tempo + time signature.
+Returns all notes + current scale + tempo + time signature + **both end times**:
+`contentEndMs` (where the notation stops, across all tracks — the `trackIndex` filter
+does not narrow it) and `compositionLengthMs` / `lengthBars` / `timeMode` (the declared
+piece length — the real end of the piece). This is the one call the agent needs to
+answer "how long is the piece" or to place anything at the end.
 
 Response:
 ```json
@@ -340,7 +369,11 @@ Response:
     "baseFreqHz": 261.63,
     "tempo": 120,
     "timeSigNum": 4,
-    "timeSigDenom": 4
+    "timeSigDenom": 4,
+    "contentEndMs": 4200,
+    "compositionLengthMs": 180000,
+    "lengthBars": 20,
+    "timeMode": "Musical"
   }
 }
 ```
@@ -462,12 +495,16 @@ there. The default marker at time 0 cannot be removed. Supports undo.
 
 ### Engine / project settings tools
 
+Both tools live in `coreSchemas()` in `kalatools.cpp`, so `engine_settings` is available in
+**every** tool mode (Sounit, Composition, Full) — the agent can read or change the piece's
+declared length from the score window too.
+
 #### `get_engine_settings`
 No parameters.
 
 Returns the full Sound Engine Settings as a JSON object with two top-level keys:
 - `containerSettings` — all container slider ranges, nested by group name (see below)
-- `project` — `{ compositionName, sampleRate, bitDepth, lengthMs }`
+- `project` — `{ compositionName, sampleRate, bitDepth, lengthMs, lengthBars, timeMode }`
 
 Call this first to see current values and exact key names before calling `set_engine_settings`.
 
@@ -482,6 +519,19 @@ only changes `amountMax` without touching `amountMin`.
 
 Changes are saved immediately to QSettings. Inspector slider ranges reflect the new values the next
 time a panel opens.
+
+`project.lengthMs` and `project.lengthBars` set the piece's declared length. **`lengthMs` is the
+authority; `lengthBars` is a derived view** — they are kept in agreement at every entry point:
+the constructor derives bars from the 5:00 default (`syncLengthFromMs`, so a fresh project is
+300000 ms *and* 120 bars, not the 20 that used to contradict it), `fromJson` derives them only
+when the key is absent (a saved disagreement is the project's own state), and both setters
+re-derive. Keep that invariant when touching either field — the agent reports both numbers to
+the user, so a contradiction is visible immediately. Giving `lengthMs` re-derives the bar count
+(`syncLengthFromMs`), giving `lengthBars` re-derives the milliseconds (`syncLengthFromBars`). Either one calls
+`ScoreCanvasWindow::updateFromSettings()` (canvas/timeline resize) and marks the project dirty, so
+the change is saved with the project and prompts on quit. The Preferences → Audio Settings →
+Duration field itself refreshes on the next `populateSettingsTab()` (project load / settings
+import), not instantly.
 
 `containerSettings` groups and their fields:
 ```
@@ -522,7 +572,8 @@ easing             overshootDefault/Min/Max, amplitudeDefault/Min/Max, periodDef
 ```
 
 `project` fields: `compositionName` (string), `sampleRate` (int: 44100/48000/96000/192000),
-`bitDepth` (int: 16/24/32), `lengthMs` (number).
+`bitDepth` (int: 16/24/32), `lengthMs` (number, declared piece length in ms),
+`lengthBars` (int, same length in bars — `timeMode` says which one the UI is showing).
 
 **Note**: `settingsChanged()` is not emitted — the in-memory singleton and QSettings are updated,
 but open inspector panels do not hot-reload their slider ranges. The user must reopen the inspector.
@@ -1010,8 +1061,36 @@ so the agent always operates on the track the user is looking at.
 ### Preferences tab
 
 "AI Companion" section with: provider combo (auto-fills URL), base URL field,
-API key field (masked), model field, Apply button.
-Apply saves to QSettings, calls `m_kalaAgent->setConfig()` and `clearHistory()`.
+API key field (masked), model field, Max Tokens spin box (256–384000, default 16384,
+step 1024), Thinking-mode checkbox, Apply button.
+Apply saves to QSettings (`llm/provider`, `llm/baseUrl`, `llm/apiKey`, `llm/model`,
+`llm/maxTokens`, `llm/thinking`), calls `m_kalaAgent->setConfig()` and `clearHistory()`.
+
+**Thinking mode** (DeepSeek only — other providers ignore it). DeepSeek's thinking is ON by
+default; unchecking sends `reasoning_effort: "none"` in the request body. The field is only
+sent when the model name contains "deepseek" (`isDeepSeekModel()`), because sending
+`reasoning_effort` to OpenAI/Groq would be rejected.
+
+Two DeepSeek behaviours worth knowing when touching this path:
+
+1. Reasoning mode ignores `temperature`.
+2. **With `tools` present, the previous turn's `reasoning_content` must be echoed back**, or the
+   API answers HTTP 400 — *"The `reasoning_content` in the thinking mode must be passed back to
+   the API"* (verified against the live API 2026-10-15). `KalaAgent::onResponseReceived()`
+   appends the assistant message object **verbatim**, which carries `reasoning_content` and
+   `tool_calls` through untouched — that verbatim append is load-bearing, not laziness. Any
+   refactor that rebuilds the message from selected fields breaks Anima on DeepSeek thinking
+   mode. The append site carries a comment saying so.
+
+Max Tokens is the **output** cap, not the context window, and it is per-request — raising it
+costs nothing until the model actually emits the tokens. Suggested values: DeepSeek 384000,
+Claude 64000, small local models 8192. Load order: `KalaMain` reads `llm/maxTokens` with a
+16384 fallback (raise that fallback if a future provider needs more).
+
+Provider model names are **free text and passed verbatim** — no allow-list anywhere. A name
+the provider doesn't recognise comes back as the API's own error (e.g. `deepseek-flash[1m]`
+fails: the `[1m]` suffix is a Claude Code client-side convention that Claude Code strips
+before sending, not part of any provider's model-ID space).
 
 ### View menu
 
@@ -1059,6 +1138,19 @@ Apply saves to QSettings, calls `m_kalaAgent->setConfig()` and `clearHistory()`.
 ---
 
 ## Known Limitations / Future Work
+
+- **Playback ignores the declared length** (app behavior, not an agent bug). Playback end is
+  the rendered content end (`AudioEngine::playFromTracks` → `Track::getRenderedEndTimeMs`),
+  so a 3:00 piece whose notation stops at 1:30 *plays* only 1:30, while export writes the
+  full 3:00 (`kalamain.cpp` uses `max(lengthMs, renderedEndMs)`). The agent is told the
+  declared length is the real end; the transport does not agree yet.
+
+- **The agent cannot export audio.** There is no `export_audio` tool: `KalaMain::onExportAudio`
+  is dialog-bound (`dialog.exec()`, a re-render `QMessageBox`, then the mix/write loop inline,
+  ~220 lines) with no headless entry point. Giving the agent export would mean splitting it into
+  an `exportAudio(mode, path, errorOut)` core plus the existing dialog wrapper.
+  Meanwhile `ExportAudioDialog` shows the resulting **Length** (declared vs notation end, and
+  which one wins) — the rule the agent is taught in THE PIECE IN TIME.
 
 - **Score canvas redraw**: `set_scale` now emits `scaleSettingsChanged` so the inspector
   label and frequency labels update immediately. `set_tempo` was already correct
