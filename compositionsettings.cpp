@@ -8,13 +8,17 @@ CompositionSettings::CompositionSettings()
     , referenceTempo(120)  // Initially matches tempo
     , timeSigTop(5)
     , timeSigBottom(0)
-    , lengthMs(300000.0)
-    , lengthBars(20)
+    , lengthMs(300000.0)   // 5:00 — the authority; lengthBars is derived from it
+    , lengthBars(0)        // set by syncLengthFromMs() below
     , sampleRate(48000)
     , bitDepth(24)
     , preRenderDelayMs(400)
     , autoRender(true)
 {
+    // Keep both views of the length in agreement. A bare 20 bars would be 50 s
+    // at the default 120 BPM / 5-4, contradicting the 5:00 above — and the
+    // mismatch was visible to the agent, which reports both numbers.
+    syncLengthFromMs();
 }
 
 CompositionSettings CompositionSettings::defaults()
@@ -73,7 +77,14 @@ CompositionSettings CompositionSettings::fromJson(const QJsonObject &json)
     s.timeSigTop = json["timeSigTop"].toInt(5);
     s.timeSigBottom = json["timeSigBottom"].toInt(4);
     s.lengthMs = json["lengthMs"].toDouble(300000.0);
-    s.lengthBars = json["lengthBars"].toInt(20);
+    // Files saved before lengthBars existed get it derived from their own
+    // lengthMs and tempo — inventing 20 here contradicted lengthMs. When the
+    // key IS present it is honoured as saved, even if the two disagree: that
+    // disagreement is the project's own state, not ours to silently rewrite.
+    if (json.contains("lengthBars"))
+        s.lengthBars = json["lengthBars"].toInt();
+    else
+        s.syncLengthFromMs();
     s.sampleRate = json["sampleRate"].toInt(48000);
     s.bitDepth = json["bitDepth"].toInt(24);
     s.preRenderDelayMs = json["preRenderDelayMs"].toInt(400);
