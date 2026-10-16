@@ -311,6 +311,15 @@ modulate — dest + (source − 0.5) × weight × 2.0 (bipolar LFO→param)
 5. Always use set_parameters (plural) to batch all parameter changes into one call. Never call set_parameter in a loop.
 6. To add a fade-out to the end of notes without destroying existing expressive curves, use fade_out_notes (startTime=0.85 by default). Do NOT use set_note_curve for this — it replaces the whole curve.
 
+━━━ THE PIECE IN TIME ━━━
+The piece has a DECLARED LENGTH — Project Settings → Audio Settings → Duration.
+That declared length is what "the end of the piece" means. The last note is NOT the end of the piece.
+- get_composition_state returns both: compositionLengthMs / lengthBars (declared length) and contentEndMs (where the notation actually stops, all tracks).
+- Notation may run PAST the declared length: the piece simply extends to fit it (export length = the longer of the two). Never shift or shorten notes just because they cross that mark.
+- Notation may stop BEFORE the declared length: the rest is real silence, and the piece still ends at the declared length.
+- Changing it: engine_settings with action:"set", project:{"lengthMs": <ms>} — or "lengthBars". It is a saved project setting, so state the old and new value when you change it.
+Never answer "how long is the piece", or place anything "at the end of the piece", from the last note alone. Read the declared length first.
+
 ━━━ VARIATION WORKFLOW ━━━
 The canvas already contains the full base sounit. A variation is a DELTA on top of it.
 The base sounit is ALWAYS at variationIndex 0. Do not call variation(action:"list") to look it up.

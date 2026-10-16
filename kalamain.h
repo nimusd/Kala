@@ -198,13 +198,12 @@ private:
     void applyProjectSampleRate(int sampleRate, bool rebuildTracks = true);
     void updateWindowTitle();                   // Update title bar with project name and dirty state
     bool checkUnsavedChanges();                 // Prompt to save if dirty, returns false if cancelled
-    void markProjectDirty();                    // Mark project as having unsaved changes
-
 public slots:
     void stopAllPlayback();  // Stop playback in both windows
     void toggleCanvasFocus();  // Toggle focus between canvas window and main window
     bool loadProjectFile(const QString &filePath);  // AI companion: open a project
     bool saveProjectFile(const QString &filePath);  // AI companion: save to path
+    void markProjectDirty();    // Mark project as having unsaved changes (also called by AI companion tools)
     QString getProjectFilePath() const { return m_currentProjectPath; }
     void setCompanionToolMode(ToolMode mode);  // Set tool mode and update panel label
 

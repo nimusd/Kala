@@ -27,6 +27,7 @@
 #include <QSettings>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <algorithm>
 #include <cmath>
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1116,6 +1117,12 @@ QJsonObject KalaTools::toolGetCompositionState(const QJsonObject &args)
         noteArr.append(obj);
     }
 
+    // Notation end across ALL tracks — deliberately not filtered by trackIndex,
+    // so the agent always sees where the written music stops as a whole.
+    double contentEndMs = 0.0;
+    for (const Note &n : notes)
+        contentEndMs = std::max(contentEndMs, n.getStartTime() + n.getDuration());
+
     QJsonObject result;
     result["noteCount"]   = noteArr.size();
     result["notes"]       = noteArr;
@@ -1124,6 +1131,17 @@ QJsonObject KalaTools::toolGetCompositionState(const QJsonObject &args)
     result["tempo"]       = sc->getDefaultTempo();
     result["timeSigNum"]  = sc->getDefaultTimeSigNum();
     result["timeSigDenom"]= sc->getDefaultTimeSigDenom();
+    result["contentEndMs"]= contentEndMs;
+
+    // Declared composition length (Project Settings → Audio Settings → Duration).
+    // This — not the last note — is the end of the piece.
+    if (m_scoreCanvasWindow) {
+        const CompositionSettings cs = m_scoreCanvasWindow->getSettings();
+        result["compositionLengthMs"] = cs.lengthMs;
+        result["lengthBars"]          = cs.lengthBars;
+        result["timeMode"]            = (cs.timeMode == CompositionSettings::Musical)
+                                        ? "Musical" : "Absolute";
+    }
     return QJsonObject{ {"result", result} };
 }
 
@@ -3520,6 +3538,9 @@ QJsonObject KalaTools::toolGetEngineSettings()
         proj["sampleRate"]      = ps.sampleRate;
         proj["bitDepth"]        = ps.bitDepth;
         proj["lengthMs"]        = ps.lengthMs;
+        proj["lengthBars"]      = ps.lengthBars;
+        proj["timeMode"]        = (ps.timeMode == CompositionSettings::Musical)
+                                  ? "Musical" : "Absolute";
         result["project"] = proj;
     }
 
@@ -3568,9 +3589,13 @@ QJsonObject KalaTools::toolSetEngineSettings(const QJsonObject &args)
             settings.bitDepth = proj["bitDepth"].toInt();
         if (proj.contains("lengthMs")) {
             settings.lengthMs = proj["lengthMs"].toDouble();
-            settings.syncLengthFromMs();
+            settings.syncLengthFromMs();   // re-derive bars at the current tempo
+        } else if (proj.contains("lengthBars")) {
+            settings.lengthBars = proj["lengthBars"].toInt();
+            settings.syncLengthFromBars(); // re-derive ms at the current tempo
         }
         m_scoreCanvasWindow->updateFromSettings(settings);
+        if (m_kalaMain) m_kalaMain->markProjectDirty();
         ++count;
     }
 
@@ -3686,6 +3711,24 @@ static QJsonArray coreSchemas()
                 {"type", "object"},
                 {"properties", QJsonObject{{"path", strProp("Absolute path to library root")}}},
                 {"required", QJsonArray{"path"}}
+            }}
+        }}
+    });
+    // ── engine_settings ──
+    schemas.append(QJsonObject{
+        {"type", "function"},
+        {"function", QJsonObject{
+            {"name", "engine_settings"},
+            {"description", "Get or set engine settings. get: returns containerSettings (per-container parameter min/max) + project (compositionName, sampleRate, bitDepth, lengthMs, lengthBars, timeMode). "
+                            "project.lengthMs is the piece's DECLARED LENGTH in ms — Project Settings/Audio Settings/Duration — i.e. the end of the piece; lengthBars is the same length in bars (Musical mode). set: partial update."},
+            {"parameters", QJsonObject{
+                {"type", "object"},
+                {"properties", QJsonObject{
+                    {"action",            actionProp("Operation", {"get","set"})},
+                    {"containerSettings", QJsonObject{{"type","object"},{"description","By group name (set)."}}},
+                    {"project",           QJsonObject{{"type","object"},{"description","Project fields (set): compositionName, sampleRate, bitDepth, lengthMs (declared piece length, ms), lengthBars (declared piece length, bars)."}}}
+                }},
+                {"required", QJsonArray{"action"}}
             }}
         }}
     });
@@ -3895,23 +3938,6 @@ static QJsonArray sounitSchemas()
             }}
         }}
     });
-    // ── engine_settings ──
-    schemas.append(QJsonObject{
-        {"type", "function"},
-        {"function", QJsonObject{
-            {"name", "engine_settings"},
-            {"description", "Get or set engine settings. get: returns containerSettings (min/max) + project settings. set: partial update."},
-            {"parameters", QJsonObject{
-                {"type", "object"},
-                {"properties", QJsonObject{
-                    {"action",            actionProp("Operation", {"get","set"})},
-                    {"containerSettings", QJsonObject{{"type","object"},{"description","By group name (set)."}}},
-                    {"project",           QJsonObject{{"type","object"},{"description","Project fields (set)."}}}
-                }},
-                {"required", QJsonArray{"action"}}
-            }}
-        }}
-    });
     return schemas;
 }
 
@@ -3923,7 +3949,7 @@ static QJsonArray compositionSchemas()
         {"type", "function"},
         {"function", QJsonObject{
             {"name", "get_composition_state"},
-            {"description", "Returns notes (id,startTime,duration,pitchHz,dynamics,trackIndex), scale, tempo, time sig. Optional trackIndex filter."},
+            {"description", "Returns notes (id,startTime,duration,pitchHz,dynamics,trackIndex), scale, tempo, time sig, contentEndMs (where the notation stops) and compositionLengthMs/lengthBars/timeMode (the piece's declared length — the real end of the piece, Project Settings/Audio Settings/Duration). Optional trackIndex filter (filters the notes only; both end times always cover all tracks)."},
             {"parameters", QJsonObject{
                 {"type", "object"},
                 {"properties", QJsonObject{{"trackIndex", QJsonObject{{"type","integer"},{"description","Track filter"}}}}},
