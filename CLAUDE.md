@@ -42,6 +42,9 @@ After build, the user can launch directly from Qt Creator — no rebuild needed.
   settled decisions, per-phase test criteria, phase status in "Right now". Read
   before any MIDI/hardware work. Companion references: `VL70mE2.md` (module
   manual + MIDI data format), `VL-Wizard Manual (draft).md` (voice editor).
+- **`Claude-kala-file-format.md`** — `.kala` project JSON specification: top-level
+  structure, tracks, notes, curves, scale/tempo maps, and how the optional `.sounit`
+  graph attaches. Read before writing a tool that emits Kala projects.
 - **`Claude-companion.md`** — Anima (AI agent) architecture and full tool reference.
   Read this before adding/modifying agent tools.
 - **`anima-templates.md`** — Anima conversation templates (number-pattern, etc.).
